@@ -1,9 +1,14 @@
 package tui
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	chromastyles "github.com/alecthomas/chroma/v2/styles"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -11,12 +16,19 @@ import (
 	gmtext "github.com/yuin/goldmark/text"
 )
 
+type markdownRenderOptions struct {
+	Width           int
+	SyntaxHighlight bool
+	CodeStyle       string
+}
+
 type markdownPreviewRenderer struct {
 	source []byte
 	width  int
+	opts   markdownRenderOptions
 }
 
-func renderMarkdownTerminal(raw string, width int) string {
+func renderMarkdownTerminal(raw string, opts markdownRenderOptions) string {
 	if strings.TrimSpace(raw) == "" {
 		return ""
 	}
@@ -32,7 +44,8 @@ func renderMarkdownTerminal(raw string, width int) string {
 
 	r := markdownPreviewRenderer{
 		source: source,
-		width:  max(20, width),
+		width:  max(20, opts.Width),
+		opts:   opts,
 	}
 
 	out := r.renderBlocks(doc, 0)
@@ -95,7 +108,6 @@ func (r markdownPreviewRenderer) renderBlock(node ast.Node, indent int) string {
 		return r.renderList(n, indent)
 
 	case *ast.ListItem:
-		// Usually handled by renderList, but keep a fallback.
 		return r.renderListItem(n, 0, false, indent)
 
 	case *ast.ThematicBreak:
@@ -244,7 +256,78 @@ func (r markdownPreviewRenderer) renderCodeBlock(n *ast.FencedCodeBlock, indent 
 		}
 	}
 
+	if r.opts.SyntaxHighlight {
+		if highlighted, ok := r.highlightCode(code, lang); ok {
+			return r.renderHighlightedCode(highlighted, lang, indent)
+		}
+	}
+
 	return r.renderPlainCode(code, lang, indent)
+}
+
+func (r markdownPreviewRenderer) highlightCode(code, lang string) (string, bool) {
+	var lexer chroma.Lexer
+	if lang != "" {
+		lexer = lexers.Get(lang)
+	}
+	if lexer == nil {
+		lexer = lexers.Analyse(code)
+	}
+	if lexer == nil {
+		lexer = lexers.Fallback
+	}
+	lexer = chroma.Coalesce(lexer)
+
+	styleName := strings.TrimSpace(r.opts.CodeStyle)
+	if styleName == "" {
+		styleName = "monokai"
+	}
+	style := chromastyles.Get(styleName)
+	if style == nil {
+		style = chromastyles.Get("monokai")
+	}
+	if style == nil {
+		return "", false
+	}
+
+	iterator, err := lexer.Tokenise(nil, code)
+	if err != nil {
+		return "", false
+	}
+
+	formatter := formatters.TTY16m
+	var buf bytes.Buffer
+	if err := formatter.Format(&buf, style, iterator); err != nil {
+		return "", false
+	}
+
+	return strings.TrimRight(buf.String(), "\n"), true
+}
+
+func (r markdownPreviewRenderer) renderHighlightedCode(code, lang string, indent int) string {
+	width := max(10, r.width-indent)
+
+	var header string
+	if lang != "" {
+		header = lipgloss.NewStyle().
+			Foreground(accentSoftColor).
+			Render("[" + lang + "]")
+	}
+
+	blockParts := []string{}
+	if header != "" {
+		blockParts = append(blockParts, header)
+	}
+	blockParts = append(blockParts, code)
+
+	block := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder()).
+		BorderForeground(borderColor).
+		Padding(0, 1).
+		Width(width).
+		Render(lipgloss.JoinVertical(lipgloss.Left, blockParts...))
+
+	return prefixLines(block, strings.Repeat(" ", indent))
 }
 
 func (r markdownPreviewRenderer) renderPlainCode(code, lang string, indent int) string {

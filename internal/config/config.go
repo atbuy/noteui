@@ -71,9 +71,11 @@ type ModalConfig struct {
 }
 
 type PreviewConfig struct {
-	RenderMarkdown bool     `toml:"render_markdown"`
-	DisablePaths   []string `toml:"disable_paths"`
-	Style          string   `toml:"style"`
+	RenderMarkdown  bool     `toml:"render_markdown"`
+	DisablePaths    []string `toml:"disable_paths"`
+	Style           string   `toml:"style"`
+	SyntaxHighlight bool     `toml:"syntax_highlight"`
+	CodeStyle       string   `toml:"code_style"`
 }
 
 func Default() Config {
@@ -105,9 +107,11 @@ func Default() Config {
 			PaddingY:    1,
 		},
 		Preview: PreviewConfig{
-			RenderMarkdown: true,
-			DisablePaths:   nil,
-			Style:          "dark",
+			RenderMarkdown:  true,
+			DisablePaths:    nil,
+			Style:           "dark",
+			SyntaxHighlight: true,
+			CodeStyle:       "monokai",
 		},
 	}
 }
@@ -175,6 +179,13 @@ func Validate(cfg Config) error {
 		)
 	}
 
+	if cfg.Preview.CodeStyle != "" && !isValidCodeStyle(cfg.Preview.CodeStyle) {
+		return fmt.Errorf(
+			"invalid preview.code_style %q (valid examples: monokai, github, dracula, swapoff, onesenterprise)",
+			cfg.Preview.CodeStyle,
+		)
+	}
+
 	return nil
 }
 
@@ -215,6 +226,23 @@ func isValidBorderStyle(name string) bool {
 func isValidPreviewStyle(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", "dark", "light", "auto", "notty":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidCodeStyle(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "",
+		"monokai",
+		"github",
+		"dracula",
+		"swapoff",
+		"onesenterprise",
+		"native",
+		"paraiso-dark",
+		"paraiso-light":
 		return true
 	default:
 		return false

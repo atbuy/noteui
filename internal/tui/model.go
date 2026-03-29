@@ -1727,7 +1727,13 @@ func (m Model) renderPreviewMarkdown(relPath, raw string) string {
 		width = max(20, m.previewWidth-8)
 	}
 
-	return renderMarkdownTerminal(raw, width)
+	opts := markdownRenderOptions{
+		Width:           width,
+		SyntaxHighlight: m.cfg.Preview.SyntaxHighlight,
+		CodeStyle:       m.cfg.Preview.CodeStyle,
+	}
+
+	return renderMarkdownTerminal(raw, opts)
 }
 
 func (m Model) previewMarkdownDisabledFor(relPath string) bool {
