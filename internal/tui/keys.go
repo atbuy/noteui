@@ -17,6 +17,7 @@ type keyMap struct {
 	Delete         key.Binding
 	Move           key.Binding
 	Rename         key.Binding
+	Pin            key.Binding
 }
 
 var keys = keyMap{
@@ -67,5 +68,9 @@ var keys = keyMap{
 	Rename: key.NewBinding(
 		key.WithKeys("R"),
 		key.WithHelp("R", "Rename note"),
+	),
+	Pin: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "Pin"),
 	),
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -16,6 +17,7 @@ import (
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/editor"
 	"atbuy/noteui/internal/notes"
+	"atbuy/noteui/internal/state"
 )
 
 type (
@@ -144,6 +146,10 @@ type Model struct {
 	previewPath    string
 	previewContent string
 
+	state       state.State
+	pinnedNotes map[string]bool
+	pinnedCats  map[string]bool
+
 	showHelp bool
 
 	showCreateCategory bool
@@ -208,6 +214,18 @@ func New(root, startupError string, cfg config.Config) Model {
 
 	vp := viewport.New(0, 0)
 
+	st, _ := state.Load()
+
+	pinnedNotes := make(map[string]bool, len(st.PinnedNotes))
+	for _, p := range st.PinnedNotes {
+		pinnedNotes[p] = true
+	}
+
+	pinnedCats := make(map[string]bool, len(st.PinnedCategories))
+	for _, p := range st.PinnedCategories {
+		pinnedCats[p] = true
+	}
+
 	return Model{
 		rootDir:        root,
 		status:         "loading notes...",
@@ -220,6 +238,9 @@ func New(root, startupError string, cfg config.Config) Model {
 		startupError:   startupError,
 		cfg:            cfg,
 		preview:        vp,
+		state:          st,
+		pinnedNotes:    pinnedNotes,
+		pinnedCats:     pinnedCats,
 	}
 }
 
@@ -529,6 +550,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if key.Matches(msg, keys.Pin) {
+			if err := m.togglePinCurrent(); err != nil {
+				m.status = "pin failed: " + err.Error()
+			}
+			return m, nil
+		}
+
 		// Search mode
 		if m.searchMode {
 			switch msg.String() {
@@ -730,8 +758,14 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		} else {
 			icon = iconCategoryLeaf
 		}
+		if m.isPinnedCategory(item.RelPath) {
+			icon = "★ " + icon
+		}
 	case treeNote:
 		icon = iconNote
+		if item.Note != nil && m.isPinnedNote(item.Note.RelPath) {
+			icon = "★ " + icon
+		}
 	}
 
 	indent := strings.Repeat("  ", item.Depth)
@@ -862,6 +896,16 @@ func (m Model) directChildCategories(parent string) []notes.Category {
 			out = append(out, c)
 		}
 	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		pi := m.isPinnedCategory(out[i].RelPath)
+		pj := m.isPinnedCategory(out[j].RelPath)
+		if pi != pj {
+			return pi
+		}
+		return out[i].RelPath < out[j].RelPath
+	})
+
 	return out
 }
 
@@ -876,6 +920,16 @@ func (m Model) directChildNotes(parent string) []notes.Note {
 			out = append(out, n)
 		}
 	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		pi := m.isPinnedNote(out[i].RelPath)
+		pj := m.isPinnedNote(out[j].RelPath)
+		if pi != pj {
+			return pi
+		}
+		return out[i].RelPath < out[j].RelPath
+	})
+
 	return out
 }
 
@@ -1185,6 +1239,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("esc/q/?", "Close help", innerWidth),
 		m.renderHelpLine("m", "Move note/category", innerWidth),
 		m.renderHelpLine("R", "Rename note/category", innerWidth),
+		m.renderHelpLine("p", "Pin note/category", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -1717,4 +1772,68 @@ func (m Model) previewMarkdownDisabledFor(relPath string) bool {
 		}
 	}
 	return false
+}
+
+func (m *Model) togglePinCurrent() error {
+	item := m.currentTreeItem()
+	if item == nil {
+		return nil
+	}
+
+	switch item.Kind {
+	case treeCategory:
+		if item.RelPath == "" {
+			m.status = "cannot pin root category"
+			return nil
+		}
+		if m.pinnedCats[item.RelPath] {
+			delete(m.pinnedCats, item.RelPath)
+			m.status = "unpinned category: " + item.Name
+		} else {
+			m.pinnedCats[item.RelPath] = true
+			m.status = "pinned category: " + item.Name
+		}
+
+	case treeNote:
+		if item.Note == nil {
+			return nil
+		}
+		if m.pinnedNotes[item.Note.RelPath] {
+			delete(m.pinnedNotes, item.Note.RelPath)
+			m.status = "unpinned note: " + item.Note.Title()
+		} else {
+			m.pinnedNotes[item.Note.RelPath] = true
+			m.status = "pinned note: " + item.Note.Title()
+		}
+	}
+
+	m.syncStateFromPins()
+	if err := state.Save(m.state); err != nil {
+		return err
+	}
+
+	m.rebuildTree()
+	return nil
+}
+
+func (m *Model) syncStateFromPins() {
+	m.state.PinnedNotes = m.state.PinnedNotes[:0]
+	for p := range m.pinnedNotes {
+		m.state.PinnedNotes = append(m.state.PinnedNotes, p)
+	}
+	sort.Strings(m.state.PinnedNotes)
+
+	m.state.PinnedCategories = m.state.PinnedCategories[:0]
+	for p := range m.pinnedCats {
+		m.state.PinnedCategories = append(m.state.PinnedCategories, p)
+	}
+	sort.Strings(m.state.PinnedCategories)
+}
+
+func (m Model) isPinnedCategory(relPath string) bool {
+	return m.pinnedCats[relPath]
+}
+
+func (m Model) isPinnedNote(relPath string) bool {
+	return m.pinnedNotes[relPath]
 }
