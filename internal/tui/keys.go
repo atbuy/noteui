@@ -5,12 +5,13 @@ import (
 )
 
 type keyMap struct {
-	Open    key.Binding
-	Refresh key.Binding
-	Quit    key.Binding
-	Focus   key.Binding
-	NewNote key.Binding
-	Search  key.Binding
+	Open     key.Binding
+	Refresh  key.Binding
+	Quit     key.Binding
+	Focus    key.Binding
+	NewNote  key.Binding
+	Search   key.Binding
+	ShowHelp key.Binding
 }
 
 var keys = keyMap{
@@ -37,5 +38,9 @@ var keys = keyMap{
 	NewNote: key.NewBinding(
 		key.WithKeys("n"),
 		key.WithHelp("n", "new note"),
+	),
+	ShowHelp: key.NewBinding(
+		key.WithKeys("?"),
+		key.WithHelp("?", "help"),
 	),
 }

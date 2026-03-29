@@ -24,8 +24,8 @@ type Model struct {
 	previewWidth int
 	status       string
 	searchFocus  bool
+	showHelp     bool
 }
-
 type notesLoadedMsg struct {
 	notes []notes.Note
 	err   error
@@ -64,10 +64,18 @@ func New(root string) Model {
 	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(accentColor)
 
 	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{keys.Open, keys.NewNote, keys.Refresh}
+		return []key.Binding{keys.ShowHelp, keys.Open, keys.NewNote, keys.Refresh}
 	}
 	l.AdditionalFullHelpKeys = func() []key.Binding {
-		return []key.Binding{keys.Open, keys.NewNote, keys.Refresh, keys.Focus, keys.Quit}
+		return []key.Binding{
+			keys.ShowHelp,
+			keys.Search,
+			keys.Open,
+			keys.NewNote,
+			keys.Refresh,
+			keys.Focus,
+			keys.Quit,
+		}
 	}
 
 	return Model{
@@ -140,11 +148,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, loadNotesCmd(m.rootDir)
 
 	case tea.KeyMsg:
+		// Help modal captures input while open.
+		if m.showHelp {
+			switch msg.String() {
+			case "esc", "q", "?":
+				m.showHelp = false
+				m.status = "help closed"
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
+
 		filtering := m.list.FilterState() == list.Filtering
 
 		// Global quit always works.
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
+		}
+
+		// Global help toggle.
+		if key.Matches(msg, keys.ShowHelp) {
+			m.showHelp = true
+			m.status = "help"
+			return m, nil
 		}
 
 		// While filtering, the list owns almost all keys.
@@ -245,11 +272,11 @@ func (m Model) View() string {
 
 	footer := footerStyle.
 		Width(usableWidth).
-		Render(m.renderStatus() + "   •   / search   tab focus   enter open   n new   r refresh   q quit")
+		Render(m.renderStatus())
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, gap, right)
 
-	return appStyle.Render(
+	base := appStyle.Render(
 		lipgloss.JoinVertical(
 			lipgloss.Left,
 			title,
@@ -257,6 +284,20 @@ func (m Model) View() string {
 			footer,
 		),
 	)
+
+	if m.showHelp {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderHelpModal(),
+			lipgloss.WithWhitespaceChars(" "),
+			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
+		)
+	}
+
+	return base
 }
 
 func (m Model) previewView() string {
@@ -323,4 +364,53 @@ func (m Model) renderStatus() string {
 	default:
 		return statusOKStyle.Render(m.status)
 	}
+}
+
+func (m Model) renderHelpModal() string {
+	modalWidth := min(72, max(48, m.width-10))
+
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(textColor).
+		Render("Help")
+
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderHelpLine("/", "Search notes"),
+		m.renderHelpLine("tab", "Focus search"),
+		m.renderHelpLine("enter / o", "Open selected note in nvim"),
+		m.renderHelpLine("n", "Create new inbox note"),
+		m.renderHelpLine("r", "Refresh note list"),
+		m.renderHelpLine("q", "Quit"),
+		m.renderHelpLine("esc / q / ?", "Close this help"),
+	)
+
+	footer := lipgloss.NewStyle().
+		Foreground(mutedColor).
+		Render("Press esc, q, or ? to close")
+
+	card := lipgloss.NewStyle().
+		Width(modalWidth).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accentColor).
+		Padding(1, 2).
+		Render(lipgloss.JoinVertical(lipgloss.Left, title, "", body, "", footer))
+
+	return card
+}
+
+func (m Model) renderHelpLine(k, desc string) string {
+	keyStyle := lipgloss.NewStyle().
+		Width(12).
+		Bold(true).
+		Foreground(accentSoftColor)
+
+	descStyle := lipgloss.NewStyle().
+		Foreground(textColor)
+
+	return lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		keyStyle.Render(k),
+		descStyle.Render(desc),
+	)
 }
