@@ -8,7 +8,10 @@ import (
 )
 
 func Command(path string) *exec.Cmd {
-	bin := os.Getenv("EDITOR")
+	bin := os.Getenv("NOTEUI_EDITOR")
+	if bin == "" {
+		bin = os.Getenv("EDITOR")
+	}
 	if bin == "" {
 		bin = "nvim"
 	}
