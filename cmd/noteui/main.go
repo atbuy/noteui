@@ -22,13 +22,16 @@ func main() {
 		root = filepath.Join(home, "notes")
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to load config: %v\n", err)
+	cfg, cfgErr := config.Load()
+	startupError := ""
+	if cfgErr != nil {
+		startupError = cfgErr.Error()
+		fmt.Fprintf(os.Stderr, "config warning: %v\n", cfgErr)
 	}
+
 	tui.ApplyTheme(cfg)
 
-	m := tui.New(root)
+	m := tui.New(root, startupError)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

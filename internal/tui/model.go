@@ -92,8 +92,9 @@ type Model struct {
 
 	deletePending  *deletePending
 	preserveCursor int
-}
 
+	startupError string
+}
 type dataLoadedMsg struct {
 	notes      []notes.Note
 	categories []notes.Category
@@ -110,7 +111,7 @@ type categoryCreatedMsg struct {
 	err     error
 }
 
-func New(root string) Model {
+func New(root, startupError string) Model {
 	categoryInput := textinput.New()
 	categoryInput.Placeholder = "work/project-a"
 	categoryInput.Prompt = "Category: "
@@ -130,6 +131,7 @@ func New(root string) Model {
 		categoryInput:  categoryInput,
 		searchInput:    searchInput,
 		preserveCursor: -1,
+		startupError:   startupError,
 	}
 }
 
@@ -473,15 +475,15 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	case treeCategory:
 		if m.categoryHasChildren(item.RelPath) {
 			if item.Expanded {
-				icon = "▾"
+				icon = iconCategoryExpanded
 			} else {
-				icon = "▸"
+				icon = iconCategoryCollapsed
 			}
 		} else {
-			icon = "•"
+			icon = iconCategoryLeaf
 		}
 	case treeNote:
-		icon = "·"
+		icon = iconNote
 	}
 
 	indent := strings.Repeat("  ", item.Depth)
@@ -492,7 +494,7 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		style = style.
 			Foreground(selectedFgColor).
 			Background(selectedBgColor).
-			Bold(true)
+			Bold(boldSelected)
 	} else {
 		switch item.Kind {
 		case treeCategory:
@@ -943,6 +945,10 @@ func (m Model) renderStatus() string {
 		return statusErrStyle.Render("Delete pending: press d to confirm • esc to cancel")
 	}
 
+	if m.startupError != "" {
+		return statusErrStyle.Render("Config error: " + m.startupError)
+	}
+
 	search := strings.TrimSpace(m.searchInput.Value())
 	if search != "" && !m.searchMode {
 		return statusOKStyle.Render(m.status + " • filter: " + search)
@@ -964,10 +970,7 @@ func (m Model) renderStatus() string {
 func (m Model) renderHelpModal() string {
 	modalWidth := min(76, max(50, m.width-10))
 
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(textColor).
-		Render("Help")
+	title := modalTitleStyle.Render("Help")
 
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -978,35 +981,23 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("esc", "leave search, then clear on second press"),
 		m.renderHelpLine("n", "new note in current category"),
 		m.renderHelpLine("c", "create category"),
-		m.renderHelpLine("dd", "delete note/category"),
+		m.renderHelpLine("d d", "delete note/category"),
 		m.renderHelpLine("r", "refresh"),
 		m.renderHelpLine("q", "quit"),
 		m.renderHelpLine("esc / q / ?", "close help"),
 	)
 
-	footer := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Render("Press esc, q, or ? to close")
+	footer := modalFooterStyle.Render("Press esc, q, or ? to close")
 
-	card := lipgloss.NewStyle().
-		Width(modalWidth).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accentColor).
-		Padding(1, 2).
-		Render(lipgloss.JoinVertical(lipgloss.Left, title, "", body, "", footer))
-
-	return card
+	return modalCardStyle(modalWidth).Render(
+		lipgloss.JoinVertical(lipgloss.Left, title, "", body, "", footer),
+	)
 }
 
 func (m Model) renderCreateCategoryModal() string {
-	title := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(textColor).
-		Render("Create category")
+	title := modalTitleStyle.Render("Create category")
 
-	hint := lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Render("Use / to create nested categories, e.g. work/project-a")
+	hint := modalMutedStyle.Render("Use / to create nested categories, e.g. work/project-a")
 
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -1016,29 +1007,18 @@ func (m Model) renderCreateCategoryModal() string {
 		"",
 		m.categoryInput.View(),
 		"",
-		lipgloss.NewStyle().Foreground(mutedColor).Render("Enter to create • Esc to cancel"),
+		modalFooterStyle.Render("Enter to create • Esc to cancel"),
 	)
 
-	return lipgloss.NewStyle().
-		Width(min(76, max(48, m.width-10))).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accentColor).
-		Padding(1, 2).
-		Render(body)
+	return modalCardStyle(min(76, max(48, m.width-10))).Render(body)
 }
 
 func (m Model) renderHelpLine(k, desc string) string {
-	keyStyle := lipgloss.NewStyle().
-		Width(14).
-		Bold(true).
-		Foreground(accentSoftColor)
-
-	descStyle := lipgloss.NewStyle().
-		Foreground(textColor)
+	descStyle := modalTextStyle
 
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		keyStyle.Render(k),
+		modalKeyStyle.Render(k),
 		descStyle.Render(desc),
 	)
 }
