@@ -49,6 +49,17 @@ type noteMovedMsg struct {
 	err        error
 }
 
+type renamePending struct {
+	path     string
+	oldTitle string
+}
+
+type noteRenamedMsg struct {
+	oldPath string
+	newPath string
+	err     error
+}
+
 type categoryMovedMsg struct {
 	oldRelPath string
 	newRelPath string
@@ -117,6 +128,10 @@ type Model struct {
 	moveInput   textinput.Model
 	movePending *movePending
 
+	showRename    bool
+	renameInput   textinput.Model
+	renamePending *renamePending
+
 	searchInput textinput.Model
 	searchMode  bool
 
@@ -160,6 +175,12 @@ func New(root, startupError string) Model {
 	moveInput.CharLimit = 300
 	moveInput.Width = 48
 
+	renameInput := textinput.New()
+	renameInput.Placeholder = "New title"
+	renameInput.Prompt = "Title: "
+	renameInput.CharLimit = 300
+	renameInput.Width = 48
+
 	return Model{
 		rootDir:        root,
 		status:         "loading notes...",
@@ -167,6 +188,7 @@ func New(root, startupError string) Model {
 		categoryInput:  categoryInput,
 		searchInput:    searchInput,
 		moveInput:      moveInput,
+		renameInput:    renameInput,
 		preserveCursor: -1,
 		startupError:   startupError,
 	}
@@ -191,6 +213,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.searchInput.Width = max(16, leftWidth-8)
 		m.categoryInput.Width = max(24, min(50, m.width-16))
 		m.moveInput.Width = max(24, min(60, m.width-16))
+		m.renameInput.Width = max(24, min(60, m.width-16))
 		return m, nil
 
 	case noteMovedMsg:
@@ -204,6 +227,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.moveInput.SetValue("")
 		m.preserveCursor = m.treeCursor
 		m.status = "moved note: " + msg.newRelPath
+		return m, refreshAllCmd(m.rootDir)
+
+	case noteRenamedMsg:
+		if msg.err != nil {
+			m.status = "rename failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showRename = false
+		m.renamePending = nil
+		m.renameInput.Blur()
+		m.renameInput.SetValue("")
+		m.preserveCursor = m.treeCursor
+		m.status = "renamed note: " + filepath.Base(msg.newPath)
 		return m, refreshAllCmd(m.rootDir)
 
 	case categoryMovedMsg:
@@ -331,6 +367,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.moveInput, cmd = m.moveInput.Update(msg)
 			return m, cmd
 		}
+
+		if m.showRename {
+			switch msg.String() {
+			case "esc":
+				m.showRename = false
+				m.renamePending = nil
+				m.renameInput.Blur()
+				m.renameInput.SetValue("")
+				m.status = "rename cancelled"
+				return m, nil
+			case "enter":
+				value := strings.TrimSpace(m.renameInput.Value())
+				if value == "" {
+					m.showRename = false
+					m.renamePending = nil
+					m.renameInput.Blur()
+					m.status = "rename cancelled"
+					return m, nil
+				}
+				return m, renameNoteCmd(m.renamePending.path, value)
+			}
+
+			var cmd tea.Cmd
+			m.renameInput, cmd = m.renameInput.Update(msg)
+			return m, cmd
+		}
+
 		if m.deletePending != nil {
 			switch msg.String() {
 			case "esc":
@@ -391,6 +454,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.Move) {
 			m.armMoveCurrent()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Rename) {
+			m.armRenameCurrent()
 			return m, nil
 		}
 
@@ -538,6 +606,16 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderMoveModal(),
+		)
+	}
+
+	if m.showRename {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderRenameModal(),
 		)
 	}
 
@@ -1082,18 +1160,19 @@ func (m Model) renderHelpModal() string {
 		Render(modalTitleStyle.Render("Help"))
 
 	lines := []string{
-		m.renderHelpLine("j / k", "move up and down", innerWidth),
-		m.renderHelpLine("enter / o", "open note or toggle category", innerWidth),
-		m.renderHelpLine("h / l", "collapse / expand category", innerWidth),
-		m.renderHelpLine("/", "search tree", innerWidth),
-		m.renderHelpLine("esc", "leave search, then clear on second press", innerWidth),
-		m.renderHelpLine("n", "new note in current category", innerWidth),
-		m.renderHelpLine("c", "create category", innerWidth),
-		m.renderHelpLine("d d", "delete note/category", innerWidth),
-		m.renderHelpLine("r", "refresh", innerWidth),
-		m.renderHelpLine("q", "quit", innerWidth),
-		m.renderHelpLine("esc / q / ?", "close help", innerWidth),
-		m.renderHelpLine("m", "move note/category", innerWidth),
+		m.renderHelpLine("j/k", "Move up and down", innerWidth),
+		m.renderHelpLine("enter/o", "Open note or toggle category", innerWidth),
+		m.renderHelpLine("h/l", "Collapse/Expand category", innerWidth),
+		m.renderHelpLine("/", "Search", innerWidth),
+		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
+		m.renderHelpLine("n", "New note in current category", innerWidth),
+		m.renderHelpLine("C", "Create category", innerWidth),
+		m.renderHelpLine("dd", "Delete note/category", innerWidth),
+		m.renderHelpLine("r", "Refresh", innerWidth),
+		m.renderHelpLine("q", "Quit", innerWidth),
+		m.renderHelpLine("esc/q/?", "Close help", innerWidth),
+		m.renderHelpLine("m", "Move note/category", innerWidth),
+		m.renderHelpLine("R", "Rename note", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -1140,6 +1219,59 @@ func (m Model) renderMoveModal() string {
 	)
 
 	return modalCardStyle(min(76, max(48, m.width-10))).Render(body)
+}
+
+func (m Model) renderRenameModal() string {
+	modalWidth := min(76, max(48, m.width-10))
+	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
+
+	title := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(modalTitleStyle.Render("Rename note"))
+
+	hint := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(modalMutedStyle.Render("Change the note title. The file name will update automatically."))
+
+	inputRow := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(
+			lipgloss.NewStyle().
+				Width(innerWidth).
+				Background(modalBgColor).
+				Render(m.renameInput.View()),
+		)
+
+	footer := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(modalFooterStyle.Render("Enter to rename • Esc to cancel"))
+
+	blank := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render("")
+
+	content := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(
+			lipgloss.JoinVertical(
+				lipgloss.Left,
+				title,
+				blank,
+				hint,
+				blank,
+				inputRow,
+				blank,
+				footer,
+			),
+		)
+
+	return modalCardStyle(modalWidth).Render(content)
 }
 
 func (m Model) renderCreateCategoryModal() string {
@@ -1383,5 +1515,34 @@ func deleteCategoryCmd(root, relPath string) tea.Cmd {
 	return func() tea.Msg {
 		err := notes.DeleteCategory(root, relPath)
 		return categoryDeletedMsg{relPath: relPath, err: err}
+	}
+}
+
+func (m *Model) armRenameCurrent() {
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeNote || item.Note == nil {
+		m.status = "rename only works on notes"
+		return
+	}
+
+	m.showRename = true
+	m.renamePending = &renamePending{
+		path:     item.Note.Path,
+		oldTitle: item.Note.Title(),
+	}
+	m.renameInput.SetValue(item.Note.Title())
+	m.renameInput.Focus()
+	m.renameInput.CursorEnd()
+	m.status = "rename note"
+}
+
+func renameNoteCmd(path, newTitle string) tea.Cmd {
+	return func() tea.Msg {
+		newPath, _, err := notes.RenameNoteTitle(path, newTitle)
+		return noteRenamedMsg{
+			oldPath: path,
+			newPath: newPath,
+			err:     err,
+		}
 	}
 }

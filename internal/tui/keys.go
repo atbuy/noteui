@@ -16,51 +16,56 @@ type keyMap struct {
 	ToggleCategory key.Binding
 	Delete         key.Binding
 	Move           key.Binding
+	Rename         key.Binding
 }
 
 var keys = keyMap{
 	Search: key.NewBinding(
 		key.WithKeys("/"),
-		key.WithHelp("/", "search"),
+		key.WithHelp("/", "Search"),
 	),
 	Open: key.NewBinding(
 		key.WithKeys("enter", "o"),
-		key.WithHelp("enter/o", "open in nvim"),
+		key.WithHelp("enter/o", "Open in editor"),
 	),
 	Refresh: key.NewBinding(
 		key.WithKeys("r"),
-		key.WithHelp("r", "refresh"),
+		key.WithHelp("r", "Refresh"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q", "quit"),
+		key.WithHelp("q", "Quit"),
 	),
 	Focus: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "search"),
+		key.WithHelp("tab", "Search"),
 	),
 	NewNote: key.NewBinding(
 		key.WithKeys("n"),
-		key.WithHelp("n", "new note"),
+		key.WithHelp("n", "New note"),
 	),
 	ShowHelp: key.NewBinding(
 		key.WithKeys("?"),
-		key.WithHelp("?", "help"),
+		key.WithHelp("?", "Help"),
 	),
 	CreateCategory: key.NewBinding(
-		key.WithKeys("c"),
-		key.WithHelp("c", "new category"),
+		key.WithKeys("C"),
+		key.WithHelp("C", "New category"),
 	),
 	ToggleCategory: key.NewBinding(
 		key.WithKeys(" "),
-		key.WithHelp("space", "toggle category"),
+		key.WithHelp("space", "Toggle category"),
 	),
 	Delete: key.NewBinding(
 		key.WithKeys("d"),
-		key.WithHelp("d", "delete"),
+		key.WithHelp("d", "Delete"),
 	),
 	Move: key.NewBinding(
 		key.WithKeys("m"),
-		key.WithHelp("m", "move"),
+		key.WithHelp("m", "Move"),
+	),
+	Rename: key.NewBinding(
+		key.WithKeys("R"),
+		key.WithHelp("R", "Rename note"),
 	),
 }

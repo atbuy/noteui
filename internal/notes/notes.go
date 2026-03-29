@@ -262,6 +262,25 @@ func RenameFromTitle(path string) (string, bool, error) {
 	return target, true, nil
 }
 
+func RenameNoteTitle(path, newTitle string) (string, bool, error) {
+	newTitle = strings.TrimSpace(newTitle)
+	if newTitle == "" {
+		return path, false, errors.New("title cannot be empty")
+	}
+
+	content, err := ReadAll(path)
+	if err != nil {
+		return "", false, err
+	}
+
+	updated := replaceOrInsertRootTitle(content, newTitle)
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		return "", false, err
+	}
+
+	return RenameFromTitle(path)
+}
+
 func Slugify(s string) string {
 	s = strings.TrimSpace(strings.ToLower(s))
 	if s == "" {
@@ -328,4 +347,22 @@ func cleanRelativePath(rel string, keepExt bool) string {
 		rel += ".md"
 	}
 	return rel
+}
+
+func replaceOrInsertRootTitle(content, title string) string {
+	lines := strings.Split(content, "\n")
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# ") {
+			lines[i] = "# " + title
+			return strings.Join(lines, "\n")
+		}
+	}
+
+	// No root heading found, prepend one.
+	if strings.TrimSpace(content) == "" {
+		return "# " + title + "\n\n"
+	}
+	return "# " + title + "\n\n" + content
 }
