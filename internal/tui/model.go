@@ -852,25 +852,22 @@ func (m Model) categoryHasChildren(relPath string) bool {
 func (m Model) currentTargetDir() string {
 	item := m.currentTreeItem()
 	if item == nil {
-		return "inbox"
+		return ""
 	}
 
 	if item.Kind == treeCategory {
-		if item.RelPath == "" {
-			return "inbox"
-		}
 		return item.RelPath
 	}
 
 	if item.Note != nil {
 		dir := filepath.Dir(item.Note.RelPath)
-		if dir == "." || dir == "" {
-			return "inbox"
+		if dir == "." {
+			return ""
 		}
 		return dir
 	}
 
-	return "inbox"
+	return ""
 }
 
 func (m Model) countNotesUnder(relPath string) int {

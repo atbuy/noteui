@@ -150,10 +150,6 @@ func IsNoteFile(path string) bool {
 	}
 }
 
-func CreateInboxNote(root string) (string, error) {
-	return CreateNote(root, "inbox")
-}
-
 func CreateNote(root, relDir string) (string, error) {
 	relDir = strings.TrimSpace(relDir)
 	if relDir == "." {
