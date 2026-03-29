@@ -160,7 +160,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		filtering := m.list.FilterState() == list.Filtering
+		editingFilter := m.list.SettingFilter()
+		filterApplied := m.list.FilterState() == list.FilterApplied
 
 		// Global quit always works.
 		if key.Matches(msg, keys.Quit) {
@@ -174,18 +175,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// While filtering, the list owns almost all keys.
-		if filtering {
+		// While actively editing the filter input, let the list own almost all keys.
+		if editingFilter {
 			switch msg.String() {
 			case "esc":
-				m.list.ResetFilter()
 				m.list.FilterInput.Blur()
+				m.list.SetFilterState(list.FilterApplied)
 				m.searchFocus = false
-				m.status = "list focused"
+				m.status = "filter applied"
+				if n := m.currentNote(); n != nil {
+					m.selected = n
+				}
 				return m, nil
 
 			case "enter":
 				m.list.FilterInput.Blur()
+				m.list.SetFilterState(list.FilterApplied)
 				m.searchFocus = false
 				m.status = "filter applied"
 				if n := m.currentNote(); n != nil {
@@ -202,7 +207,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// Not filtering.
+		// Not actively editing the filter.
 		switch {
 		case key.Matches(msg, keys.Search), key.Matches(msg, keys.Focus):
 			m.searchFocus = true
@@ -210,11 +215,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.list, cmd = m.list.Update(msg)
 			return m, cmd
 
-		case msg.String() == "esc":
+		case msg.String() == "esc" && filterApplied:
 			m.list.ResetFilter()
 			m.list.FilterInput.Blur()
 			m.searchFocus = false
+			m.status = "filter cleared"
+			if n := m.currentNote(); n != nil {
+				m.selected = n
+			}
+			return m, nil
+
+		case msg.String() == "esc":
+			m.list.FilterInput.Blur()
+			m.searchFocus = false
 			m.status = "list focused"
+			if n := m.currentNote(); n != nil {
+				m.selected = n
+			}
 			return m, nil
 
 		case key.Matches(msg, keys.Refresh):
