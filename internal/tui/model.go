@@ -11,7 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
 	"atbuy/noteui/internal/config"
@@ -972,10 +971,7 @@ func (m *Model) moveTreeCursor(delta int) {
 	if len(m.treeItems) == 0 {
 		return
 	}
-	next := m.treeCursor + delta
-	if next < 0 {
-		next = 0
-	}
+	next := max(m.treeCursor+delta, 0)
 	if next >= len(m.treeItems) {
 		next = len(m.treeItems) - 1
 	}
@@ -1726,30 +1722,12 @@ func (m Model) renderPreviewMarkdown(relPath, raw string) string {
 		return raw
 	}
 
-	style := strings.TrimSpace(m.cfg.Preview.Style)
-	if style == "" {
-		style = "dark"
-	}
-
 	width := m.preview.Width
 	if width <= 0 {
 		width = max(20, m.previewWidth-8)
 	}
 
-	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(style),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return raw
-	}
-
-	out, err := r.Render(raw)
-	if err != nil {
-		return raw
-	}
-
-	return strings.TrimSpace(out)
+	return renderMarkdownTerminal(raw, width)
 }
 
 func (m Model) previewMarkdownDisabledFor(relPath string) bool {
