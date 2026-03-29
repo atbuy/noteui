@@ -14,6 +14,7 @@ type keyMap struct {
 	ShowHelp       key.Binding
 	CreateCategory key.Binding
 	ToggleCategory key.Binding
+	Delete         key.Binding
 }
 
 var keys = keyMap{
@@ -35,7 +36,7 @@ var keys = keyMap{
 	),
 	Focus: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "switch pane"),
+		key.WithHelp("tab", "search"),
 	),
 	NewNote: key.NewBinding(
 		key.WithKeys("n"),
@@ -52,5 +53,9 @@ var keys = keyMap{
 	ToggleCategory: key.NewBinding(
 		key.WithKeys(" "),
 		key.WithHelp("space", "toggle category"),
+	),
+	Delete: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "delete"),
 	),
 }

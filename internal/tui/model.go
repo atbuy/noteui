@@ -16,10 +16,34 @@ import (
 
 type treeItemKind int
 
+type deleteTargetKind int
+
 const (
 	treeCategory treeItemKind = iota
 	treeNote
 )
+
+const (
+	deleteNone deleteTargetKind = iota
+	deleteTargetCategory
+	deleteTargetNote
+)
+
+type deletePending struct {
+	kind    deleteTargetKind
+	relPath string
+	name    string
+}
+
+type noteDeletedMsg struct {
+	path string
+	err  error
+}
+
+type categoryDeletedMsg struct {
+	relPath string
+	err     error
+}
 
 type treeItem struct {
 	Kind      treeItemKind
@@ -65,14 +89,13 @@ type Model struct {
 
 	searchInput textinput.Model
 	searchMode  bool
+
+	deletePending  *deletePending
+	preserveCursor int
 }
 
-type notesLoadedMsg struct {
-	notes []notes.Note
-	err   error
-}
-
-type categoriesLoadedMsg struct {
+type dataLoadedMsg struct {
+	notes      []notes.Note
 	categories []notes.Category
 	err        error
 }
@@ -101,11 +124,12 @@ func New(root string) Model {
 	searchInput.Width = 32
 
 	return Model{
-		rootDir:       root,
-		status:        "loading notes...",
-		expanded:      map[string]bool{},
-		categoryInput: categoryInput,
-		searchInput:   searchInput,
+		rootDir:        root,
+		status:         "loading notes...",
+		expanded:       map[string]bool{},
+		categoryInput:  categoryInput,
+		searchInput:    searchInput,
+		preserveCursor: -1,
 	}
 }
 
@@ -129,27 +153,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.categoryInput.Width = max(24, min(50, m.width-16))
 		return m, nil
 
-	case notesLoadedMsg:
+	case noteDeletedMsg:
+		if msg.err != nil {
+			m.status = "delete failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.deletePending = nil
+		m.preserveCursor = m.treeCursor
+		m.status = "deleted note: " + msg.path
+		return m, refreshAllCmd(m.rootDir)
+
+	case categoryDeletedMsg:
+		if msg.err != nil {
+			m.status = "delete failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.deletePending = nil
+		m.preserveCursor = m.treeCursor
+		m.status = "deleted category: " + msg.relPath
+		return m, refreshAllCmd(m.rootDir)
+
+	case dataLoadedMsg:
 		if msg.err != nil {
 			m.status = "error: " + msg.err.Error()
 			return m, nil
 		}
+
 		m.notes = msg.notes
-		m.rebuildTree()
-		if len(msg.notes) > 0 {
-			m.status = fmt.Sprintf("loaded %d notes", len(msg.notes))
-		} else {
-			m.status = "no notes found"
-		}
-		return m, nil
-
-	case categoriesLoadedMsg:
-		if msg.err != nil {
-			m.status = "error: " + msg.err.Error()
-			return m, nil
-		}
-
 		m.categories = msg.categories
+
 		for _, c := range m.categories {
 			if c.RelPath == "" {
 				continue
@@ -158,7 +190,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.expanded[c.RelPath] = true
 			}
 		}
+
 		m.rebuildTree()
+
+		if len(msg.notes) > 0 {
+			m.status = fmt.Sprintf("loaded %d notes", len(msg.notes))
+		} else {
+			m.status = "no notes found"
+		}
 		return m, nil
 
 	case noteCreatedMsg:
@@ -189,6 +228,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, refreshAllCmd(m.rootDir)
 
 	case tea.KeyMsg:
+		if m.deletePending != nil {
+			switch msg.String() {
+			case "esc":
+				m.deletePending = nil
+				m.status = "delete cancelled"
+				return m, nil
+			case "d":
+				return m, m.confirmDeleteCurrent()
+			default:
+				m.deletePending = nil
+			}
+		}
+
 		if m.showHelp {
 			switch msg.String() {
 			case "esc", "q", "?":
@@ -231,6 +283,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, keys.ShowHelp) {
 			m.showHelp = true
 			m.status = "help"
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Delete) {
+			m.armDeleteCurrent()
 			return m, nil
 		}
 
@@ -507,10 +564,12 @@ func (m *Model) rebuildTree() {
 	if len(m.treeItems) == 0 {
 		m.treeCursor = 0
 		m.selected = nil
+		m.preserveCursor = -1
 		return
 	}
 
-	restore := 0
+	restore := -1
+
 	if selectedKey != "" {
 		for i, item := range m.treeItems {
 			if item.key() == selectedKey {
@@ -519,10 +578,20 @@ func (m *Model) rebuildTree() {
 			}
 		}
 	}
-	if restore >= len(m.treeItems) {
-		restore = len(m.treeItems) - 1
+
+	if restore == -1 && m.preserveCursor >= 0 {
+		restore = m.preserveCursor
+		if restore >= len(m.treeItems) {
+			restore = len(m.treeItems) - 1
+		}
 	}
+
+	if restore == -1 {
+		restore = 0
+	}
+
 	m.treeCursor = restore
+	m.preserveCursor = -1
 	m.syncSelectedNote()
 }
 
@@ -827,20 +896,21 @@ func (m Model) countChildCategories(relPath string) int {
 }
 
 func refreshAllCmd(root string) tea.Cmd {
-	return tea.Batch(loadNotesCmd(root), loadCategoriesCmd(root))
-}
-
-func loadNotesCmd(root string) tea.Cmd {
 	return func() tea.Msg {
 		n, err := notes.Discover(root)
-		return notesLoadedMsg{notes: n, err: err}
-	}
-}
+		if err != nil {
+			return dataLoadedMsg{err: err}
+		}
 
-func loadCategoriesCmd(root string) tea.Cmd {
-	return func() tea.Msg {
 		cats, err := notes.DiscoverCategories(root)
-		return categoriesLoadedMsg{categories: cats, err: err}
+		if err != nil {
+			return dataLoadedMsg{err: err}
+		}
+
+		return dataLoadedMsg{
+			notes:      n,
+			categories: cats,
+		}
 	}
 }
 
@@ -859,6 +929,10 @@ func createCategoryCmd(root, relPath string) tea.Cmd {
 }
 
 func (m Model) renderStatus() string {
+	if m.deletePending != nil {
+		return statusErrStyle.Render("Delete pending: press d to confirm • esc to cancel")
+	}
+
 	search := strings.TrimSpace(m.searchInput.Value())
 	if search != "" && !m.searchMode {
 		return statusOKStyle.Render(m.status + " • filter: " + search)
@@ -868,7 +942,8 @@ func (m Model) renderStatus() string {
 	case strings.HasPrefix(m.status, "error:"),
 		strings.HasPrefix(m.status, "editor error:"),
 		strings.HasPrefix(m.status, "create failed:"),
-		strings.HasPrefix(m.status, "category create failed:"):
+		strings.HasPrefix(m.status, "category create failed:"),
+		strings.HasPrefix(m.status, "delete failed:"):
 		return statusErrStyle.Render(m.status)
 	default:
 		return statusOKStyle.Render(m.status)
@@ -892,6 +967,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("esc", "leave search, then clear on second press"),
 		m.renderHelpLine("n", "new note in current category"),
 		m.renderHelpLine("c", "create category"),
+		m.renderHelpLine("dd", "delete note/category"),
 		m.renderHelpLine("r", "refresh"),
 		m.renderHelpLine("q", "quit"),
 		m.renderHelpLine("esc / q / ?", "close help"),
@@ -978,4 +1054,65 @@ func (m Model) currentCategoryPrefix() string {
 	}
 
 	return ""
+}
+
+func (m *Model) armDeleteCurrent() {
+	item := m.currentTreeItem()
+	if item == nil {
+		return
+	}
+
+	switch item.Kind {
+	case treeCategory:
+		if item.RelPath == "" {
+			m.status = "cannot delete root category"
+			return
+		}
+		m.deletePending = &deletePending{
+			kind:    deleteTargetCategory,
+			relPath: item.RelPath,
+			name:    item.Name,
+		}
+		m.status = "press d again to delete category: " + item.Name
+
+	case treeNote:
+		if item.Note == nil {
+			return
+		}
+		m.deletePending = &deletePending{
+			kind:    deleteTargetNote,
+			relPath: item.Note.Path,
+			name:    item.Note.Name,
+		}
+		m.status = "press d again to delete note: " + item.Note.Name
+	}
+}
+
+func (m Model) confirmDeleteCurrent() tea.Cmd {
+	if m.deletePending == nil {
+		return nil
+	}
+
+	switch m.deletePending.kind {
+	case deleteTargetNote:
+		return deleteNoteCmd(m.deletePending.relPath)
+	case deleteTargetCategory:
+		return deleteCategoryCmd(m.rootDir, m.deletePending.relPath)
+	default:
+		return nil
+	}
+}
+
+func deleteNoteCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.DeleteNote(path)
+		return noteDeletedMsg{path: path, err: err}
+	}
+}
+
+func deleteCategoryCmd(root, relPath string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.DeleteCategory(root, relPath)
+		return categoryDeletedMsg{relPath: relPath, err: err}
+	}
 }
