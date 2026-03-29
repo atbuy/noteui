@@ -5,10 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	tea "github.com/charmbracelet/bubbletea"
-
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/tui"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func main() {
@@ -31,7 +30,7 @@ func main() {
 
 	tui.ApplyTheme(cfg)
 
-	m := tui.New(root, startupError)
+	m := tui.New(root, startupError, cfg)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
 	if _, err := p.Run(); err != nil {

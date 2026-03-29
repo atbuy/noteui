@@ -2,14 +2,18 @@ package tui
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
+	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/editor"
 	"atbuy/noteui/internal/notes"
 )
@@ -119,6 +123,11 @@ type Model struct {
 	previewWidth int
 	status       string
 
+	cfg            config.Config
+	preview        viewport.Model
+	previewPath    string
+	previewContent string
+
 	showHelp bool
 
 	showCreateCategory bool
@@ -156,7 +165,7 @@ type categoryCreatedMsg struct {
 	err     error
 }
 
-func New(root, startupError string) Model {
+func New(root, startupError string, cfg config.Config) Model {
 	categoryInput := textinput.New()
 	categoryInput.Placeholder = "work/project-a"
 	categoryInput.Prompt = "Category: "
@@ -181,6 +190,8 @@ func New(root, startupError string) Model {
 	renameInput.CharLimit = 300
 	renameInput.Width = 48
 
+	vp := viewport.New(0, 0)
+
 	return Model{
 		rootDir:        root,
 		status:         "loading notes...",
@@ -191,6 +202,8 @@ func New(root, startupError string) Model {
 		renameInput:    renameInput,
 		preserveCursor: -1,
 		startupError:   startupError,
+		cfg:            cfg,
+		preview:        vp,
 	}
 }
 
@@ -214,6 +227,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.categoryInput.Width = max(24, min(50, m.width-16))
 		m.moveInput.Width = max(24, min(60, m.width-16))
 		m.renameInput.Width = max(24, min(60, m.width-16))
+
+		previewInnerWidth := max(20, rightWidth-8)
+		previewInnerHeight := max(5, msg.Height-14)
+		m.preview.Width = previewInnerWidth
+		m.preview.Height = previewInnerHeight
+		m.refreshPreview()
 		return m, nil
 
 	case noteMovedMsg:
@@ -344,6 +363,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.showMove {
 			switch msg.String() {
+			case "pgdown", "ctrl+f":
+				m.preview.PageDown()
+				return m, nil
+			case "pgup", "ctrl+b":
+				m.preview.PageUp()
+				return m, nil
 			case "esc":
 				m.showMove = false
 				m.movePending = nil
@@ -544,6 +569,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	var cmd tea.Cmd
+	m.preview, cmd = m.preview.Update(msg)
+	_ = cmd
+
 	return m, nil
 }
 
@@ -689,63 +718,7 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 }
 
 func (m Model) previewView() string {
-	item := m.currentTreeItem()
-	if item == nil {
-		return emptyStyle.Render("Nothing selected")
-	}
-
-	if item.Kind == treeCategory {
-		path := item.Name
-		if item.RelPath == "" {
-			path = "~/notes"
-		} else {
-			path = filepath.Join("~/notes", item.RelPath)
-		}
-
-		count := m.countNotesUnder(item.RelPath)
-		children := m.countChildCategories(item.RelPath)
-
-		meta := lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			chipStyle.Render(fmt.Sprintf("Subcategories: %d", children)),
-			chipStyle.Render(fmt.Sprintf("Notes: %d", count)),
-		)
-
-		return lipgloss.JoinVertical(
-			lipgloss.Left,
-			headerStyle.Render(path),
-			meta,
-			"",
-			mutedStyle.Render("Category selected. Press enter or space to expand/collapse."),
-		)
-	}
-
-	if item.Note == nil {
-		return emptyStyle.Render("No note selected")
-	}
-
-	content := item.Note.Preview
-	if strings.TrimSpace(content) == "" {
-		content = "(empty file)"
-	}
-
-	metaRow := lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		chipStyle.Render("Category: "+item.Note.Category),
-		chipStyle.Render("Modified: "+item.Note.ModTime.Format("2006-01-02 15:04")),
-	)
-
-	contentStyle := lipgloss.NewStyle().
-		Width(max(20, m.previewWidth-8))
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		headerStyle.Render(item.Note.Title()),
-		metaStyle.Render(item.Note.RelPath),
-		metaRow,
-		"",
-		contentStyle.Render(content),
-	)
+	return m.preview.View()
 }
 
 func (m *Model) rebuildTree() {
@@ -923,9 +896,11 @@ func (m *Model) syncSelectedNote() {
 	item := m.currentTreeItem()
 	if item == nil || item.Kind != treeNote || item.Note == nil {
 		m.selected = nil
+		m.refreshPreview()
 		return
 	}
 	m.selected = item.Note
+	m.refreshPreview()
 }
 
 func (m Model) currentTreeItem() *treeItem {
@@ -1545,4 +1520,123 @@ func renameNoteCmd(path, newTitle string) tea.Cmd {
 			err:     err,
 		}
 	}
+}
+
+func (m *Model) refreshPreview() {
+	item := m.currentTreeItem()
+	if item == nil {
+		m.previewPath = ""
+		m.previewContent = "Nothing selected"
+		m.preview.SetContent(m.previewContent)
+		m.preview.GotoTop()
+		return
+	}
+
+	if item.Kind == treeCategory {
+		pathText := item.Name
+		if item.RelPath == "" {
+			pathText = "~/notes"
+		} else {
+			pathText = filepath.Join("~/notes", item.RelPath)
+		}
+
+		count := m.countNotesUnder(item.RelPath)
+		children := m.countChildCategories(item.RelPath)
+
+		content := strings.Join([]string{
+			"# " + pathText,
+			"",
+			fmt.Sprintf("- Subcategories: %d", children),
+			fmt.Sprintf("- Notes: %d", count),
+			"",
+			"Category selected. Press enter or space to expand/collapse.",
+		}, "\n")
+
+		rendered := m.renderPreviewMarkdown(pathText, content)
+		m.previewPath = "category:" + item.RelPath
+		m.previewContent = rendered
+		m.preview.SetContent(rendered)
+		m.preview.GotoTop()
+		return
+	}
+
+	if item.Note == nil {
+		m.previewPath = ""
+		m.previewContent = "No note selected"
+		m.preview.SetContent(m.previewContent)
+		m.preview.GotoTop()
+		return
+	}
+
+	if m.previewPath == item.Note.Path && m.previewContent != "" {
+		return
+	}
+
+	raw, err := notes.ReadAll(item.Note.Path)
+	if err != nil {
+		m.previewPath = item.Note.Path
+		m.previewContent = "Failed to read note: " + err.Error()
+		m.preview.SetContent(m.previewContent)
+		m.preview.GotoTop()
+		return
+	}
+
+	rendered := m.renderPreviewMarkdown(item.Note.RelPath, raw)
+	m.previewPath = item.Note.Path
+	m.previewContent = rendered
+	m.preview.SetContent(rendered)
+	m.preview.GotoTop()
+}
+
+func (m Model) renderPreviewMarkdown(relPath, raw string) string {
+	if !m.cfg.Preview.RenderMarkdown || m.previewMarkdownDisabledFor(relPath) {
+		return raw
+	}
+
+	style := strings.TrimSpace(m.cfg.Preview.Style)
+	if style == "" {
+		style = "dark"
+	}
+
+	width := m.preview.Width
+	if width <= 0 {
+		width = max(20, m.previewWidth-8)
+	}
+
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(style),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return raw
+	}
+
+	out, err := r.Render(raw)
+	if err != nil {
+		return raw
+	}
+
+	return strings.TrimSpace(out)
+}
+
+func (m Model) previewMarkdownDisabledFor(relPath string) bool {
+	relPath = filepath.ToSlash(relPath)
+	for _, pattern := range m.cfg.Preview.DisablePaths {
+		pattern = strings.TrimSpace(pattern)
+		if pattern == "" {
+			continue
+		}
+		pattern = filepath.ToSlash(pattern)
+
+		if ok, err := path.Match(pattern, relPath); err == nil && ok {
+			return true
+		}
+		if relPath == pattern {
+			return true
+		}
+		if strings.HasPrefix(relPath, strings.TrimSuffix(pattern, "/")+"/") {
+			return true
+		}
+	}
+	return false
 }

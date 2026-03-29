@@ -16,6 +16,7 @@ type Config struct {
 	Typography TypographyConfig `toml:"typography"`
 	Icons      IconsConfig      `toml:"icons"`
 	Modal      ModalConfig      `toml:"modal"`
+	Preview    PreviewConfig    `toml:"preview"`
 }
 
 type ThemeConfig struct {
@@ -69,6 +70,12 @@ type ModalConfig struct {
 	PaddingY    int    `toml:"padding_y"`
 }
 
+type PreviewConfig struct {
+	RenderMarkdown bool     `toml:"render_markdown"`
+	DisablePaths   []string `toml:"disable_paths"`
+	Style          string   `toml:"style"`
+}
+
 func Default() Config {
 	return Config{
 		Theme: ThemeConfig{
@@ -96,6 +103,11 @@ func Default() Config {
 			BorderStyle: "rounded",
 			PaddingX:    2,
 			PaddingY:    1,
+		},
+		Preview: PreviewConfig{
+			RenderMarkdown: true,
+			DisablePaths:   nil,
+			Style:          "dark",
 		},
 	}
 }
@@ -156,6 +168,13 @@ func Validate(cfg Config) error {
 		return fmt.Errorf("invalid modal.border_style %q", cfg.Modal.BorderStyle)
 	}
 
+	if cfg.Preview.Style != "" && !isValidPreviewStyle(cfg.Preview.Style) {
+		return fmt.Errorf(
+			"invalid preview.style %q (valid: dark, light, auto, notty)",
+			cfg.Preview.Style,
+		)
+	}
+
 	return nil
 }
 
@@ -187,6 +206,15 @@ func IsValidThemeName(name string) bool {
 func isValidBorderStyle(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", "rounded", "normal", "double", "thick", "hidden":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidPreviewStyle(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "", "dark", "light", "auto", "notty":
 		return true
 	default:
 		return false
