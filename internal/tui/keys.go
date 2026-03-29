@@ -34,4 +34,3 @@ var keys = keyMap{
 		key.WithHelp("n", "new note"),
 	),
 }
-
