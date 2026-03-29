@@ -140,24 +140,59 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, loadNotesCmd(m.rootDir)
 
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, keys.Quit):
+		filtering := m.list.FilterState() == list.Filtering
+
+		// Global quit always works.
+		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
+		}
+
+		// While filtering, the list owns almost all keys.
+		if filtering {
+			switch msg.String() {
+			case "esc":
+				m.list.ResetFilter()
+				m.list.FilterInput.Blur()
+				m.searchFocus = false
+				m.status = "list focused"
+				return m, nil
+
+			case "enter":
+				m.list.FilterInput.Blur()
+				m.searchFocus = false
+				m.status = "filter applied"
+				if n := m.currentNote(); n != nil {
+					m.selected = n
+				}
+				return m, nil
+			}
+
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			if n := m.currentNote(); n != nil {
+				m.selected = n
+			}
+			return m, cmd
+		}
+
+		// Not filtering.
+		switch {
+		case key.Matches(msg, keys.Search), key.Matches(msg, keys.Focus):
+			m.searchFocus = true
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			return m, cmd
+
+		case msg.String() == "esc":
+			m.list.ResetFilter()
+			m.list.FilterInput.Blur()
+			m.searchFocus = false
+			m.status = "list focused"
+			return m, nil
 
 		case key.Matches(msg, keys.Refresh):
 			m.status = "refreshing..."
 			return m, loadNotesCmd(m.rootDir)
-
-		case key.Matches(msg, keys.Focus):
-			m.searchFocus = !m.searchFocus
-			if m.searchFocus {
-				m.list.FilterInput.Focus()
-				m.status = "search focused"
-			} else {
-				m.list.FilterInput.Blur()
-				m.status = "list focused"
-			}
-			return m, nil
 
 		case key.Matches(msg, keys.NewNote):
 			return m, createNoteCmd(m.rootDir)
@@ -167,12 +202,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.status = "opening in nvim: " + n.RelPath
 				return m, editor.Open(n.Path)
 			}
+			return m, nil
 		}
 	}
 
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
-
 	if n := m.currentNote(); n != nil {
 		m.selected = n
 	}

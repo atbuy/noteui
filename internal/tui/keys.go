@@ -10,9 +10,14 @@ type keyMap struct {
 	Quit    key.Binding
 	Focus   key.Binding
 	NewNote key.Binding
+	Search  key.Binding
 }
 
 var keys = keyMap{
+	Search: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "search"),
+	),
 	Open: key.NewBinding(
 		key.WithKeys("enter", "o"),
 		key.WithHelp("enter/o", "open in nvim"),
@@ -27,7 +32,7 @@ var keys = keyMap{
 	),
 	Focus: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "toggle search/list"),
+		key.WithHelp("tab", "focus search"),
 	),
 	NewNote: key.NewBinding(
 		key.WithKeys("n"),

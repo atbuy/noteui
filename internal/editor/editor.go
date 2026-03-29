@@ -24,4 +24,3 @@ func Open(path string) tea.Cmd {
 type FinishedMsg struct {
 	Err error
 }
-
