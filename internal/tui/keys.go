@@ -5,13 +5,15 @@ import (
 )
 
 type keyMap struct {
-	Open     key.Binding
-	Refresh  key.Binding
-	Quit     key.Binding
-	Focus    key.Binding
-	NewNote  key.Binding
-	Search   key.Binding
-	ShowHelp key.Binding
+	Open           key.Binding
+	Refresh        key.Binding
+	Quit           key.Binding
+	Focus          key.Binding
+	NewNote        key.Binding
+	Search         key.Binding
+	ShowHelp       key.Binding
+	CreateCategory key.Binding
+	ToggleCategory key.Binding
 }
 
 var keys = keyMap{
@@ -33,7 +35,7 @@ var keys = keyMap{
 	),
 	Focus: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "focus search"),
+		key.WithHelp("tab", "switch pane"),
 	),
 	NewNote: key.NewBinding(
 		key.WithKeys("n"),
@@ -42,5 +44,13 @@ var keys = keyMap{
 	ShowHelp: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "help"),
+	),
+	CreateCategory: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "new category"),
+	),
+	ToggleCategory: key.NewBinding(
+		key.WithKeys(" "),
+		key.WithHelp("space", "toggle category"),
 	),
 }

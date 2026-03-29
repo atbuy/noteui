@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -14,21 +14,67 @@ import (
 	"atbuy/noteui/internal/notes"
 )
 
+type treeItemKind int
+
+const (
+	treeCategory treeItemKind = iota
+	treeNote
+)
+
+type treeItem struct {
+	Kind      treeItemKind
+	Name      string
+	RelPath   string
+	Depth     int
+	Expanded  bool
+	Note      *notes.Note
+	Category  *notes.Category
+	MatchHint string
+}
+
+func (t treeItem) key() string {
+	switch t.Kind {
+	case treeCategory:
+		return "c:" + t.RelPath
+	case treeNote:
+		return "n:" + t.RelPath
+	default:
+		return t.RelPath
+	}
+}
+
 type Model struct {
-	rootDir      string
-	list         list.Model
-	notes        []notes.Note
+	rootDir string
+
+	notes      []notes.Note
+	categories []notes.Category
+	expanded   map[string]bool
+
+	treeItems    []treeItem
+	treeCursor   int
 	selected     *notes.Note
 	width        int
 	height       int
 	previewWidth int
 	status       string
-	searchFocus  bool
-	showHelp     bool
+
+	showHelp bool
+
+	showCreateCategory bool
+	categoryInput      textinput.Model
+
+	searchInput textinput.Model
+	searchMode  bool
 }
+
 type notesLoadedMsg struct {
 	notes []notes.Note
 	err   error
+}
+
+type categoriesLoadedMsg struct {
+	categories []notes.Category
+	err        error
 }
 
 type noteCreatedMsg struct {
@@ -36,57 +82,35 @@ type noteCreatedMsg struct {
 	err  error
 }
 
+type categoryCreatedMsg struct {
+	relPath string
+	err     error
+}
+
 func New(root string) Model {
-	delegate := list.NewDefaultDelegate()
-	delegate.ShowDescription = true
-	delegate.SetHeight(2)
-	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
-		Foreground(lipgloss.Color("230")).
-		Background(lipgloss.Color("62")).
-		Bold(true)
+	categoryInput := textinput.New()
+	categoryInput.Placeholder = "work/project-a"
+	categoryInput.Prompt = "Category: "
+	categoryInput.CharLimit = 200
+	categoryInput.Width = 40
 
-	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
-		Foreground(lipgloss.Color("252")).
-		Background(lipgloss.Color("62"))
-
-	l := list.New([]list.Item{}, delegate, 30, 20)
-	l.Title = fmt.Sprintf("Notes (%s)", filepath.Clean(root))
-	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(true)
-	l.SetShowHelp(false)
-	l.Styles.Title = lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("230")).
-		Padding(0, 1)
-
-	l.Styles.NoItems = emptyStyle
-	l.Styles.FilterPrompt = lipgloss.NewStyle().Foreground(accentSoftColor)
-	l.Styles.FilterCursor = lipgloss.NewStyle().Foreground(accentColor)
-
-	l.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{keys.ShowHelp, keys.Open, keys.NewNote, keys.Refresh}
-	}
-	l.AdditionalFullHelpKeys = func() []key.Binding {
-		return []key.Binding{
-			keys.ShowHelp,
-			keys.Search,
-			keys.Open,
-			keys.NewNote,
-			keys.Refresh,
-			keys.Focus,
-			keys.Quit,
-		}
-	}
+	searchInput := textinput.New()
+	searchInput.Placeholder = "Search notes..."
+	searchInput.Prompt = "/ "
+	searchInput.CharLimit = 200
+	searchInput.Width = 32
 
 	return Model{
-		rootDir: root,
-		list:    l,
-		status:  "loading notes...",
+		rootDir:       root,
+		status:        "loading notes...",
+		expanded:      map[string]bool{},
+		categoryInput: categoryInput,
+		searchInput:   searchInput,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return loadNotesCmd(m.rootDir)
+	return refreshAllCmd(m.rootDir)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -101,11 +125,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rightWidth := max(30, usableWidth-leftWidth-gap)
 
 		m.previewWidth = rightWidth
-		m.list.SetSize(
-			max(16, leftWidth-4),
-			max(8, msg.Height-10),
-		)
-
+		m.searchInput.Width = max(16, leftWidth-8)
+		m.categoryInput.Width = max(24, min(50, m.width-16))
 		return m, nil
 
 	case notesLoadedMsg:
@@ -113,22 +134,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "error: " + msg.err.Error()
 			return m, nil
 		}
-
 		m.notes = msg.notes
-		items := make([]list.Item, 0, len(msg.notes))
-		for _, n := range msg.notes {
-			items = append(items, n)
-		}
-		m.list.SetItems(items)
-
+		m.rebuildTree()
 		if len(msg.notes) > 0 {
-			m.selected = &msg.notes[0]
 			m.status = fmt.Sprintf("loaded %d notes", len(msg.notes))
 		} else {
-			m.selected = nil
 			m.status = "no notes found"
 		}
+		return m, nil
 
+	case categoriesLoadedMsg:
+		if msg.err != nil {
+			m.status = "error: " + msg.err.Error()
+			return m, nil
+		}
+
+		m.categories = msg.categories
+		for _, c := range m.categories {
+			if c.RelPath == "" {
+				continue
+			}
+			if _, ok := m.expanded[c.RelPath]; !ok {
+				m.expanded[c.RelPath] = true
+			}
+		}
+		m.rebuildTree()
 		return m, nil
 
 	case noteCreatedMsg:
@@ -137,7 +167,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = "created: " + msg.path
-		return m, tea.Batch(loadNotesCmd(m.rootDir), editor.Open(msg.path))
+		return m, tea.Batch(refreshAllCmd(m.rootDir), editor.Open(msg.path))
+
+	case categoryCreatedMsg:
+		if msg.err != nil {
+			m.status = "category create failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showCreateCategory = false
+		m.categoryInput.Blur()
+		m.categoryInput.SetValue("")
+		m.status = "created category: " + msg.relPath
+		return m, refreshAllCmd(m.rootDir)
 
 	case editor.FinishedMsg:
 		if msg.Err != nil {
@@ -145,10 +186,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = "editor closed"
-		return m, loadNotesCmd(m.rootDir)
+		return m, refreshAllCmd(m.rootDir)
 
 	case tea.KeyMsg:
-		// Help modal captures input while open.
 		if m.showHelp {
 			switch msg.String() {
 			case "esc", "q", "?":
@@ -160,103 +200,118 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		editingFilter := m.list.SettingFilter()
-		filterApplied := m.list.FilterState() == list.FilterApplied
+		if m.showCreateCategory {
+			switch msg.String() {
+			case "esc":
+				m.showCreateCategory = false
+				m.categoryInput.Blur()
+				m.categoryInput.SetValue("")
+				m.status = "category creation cancelled"
+				return m, nil
+			case "enter":
+				value := strings.TrimSpace(m.categoryInput.Value())
+				if value == "" {
+					m.showCreateCategory = false
+					m.categoryInput.Blur()
+					m.status = "category creation cancelled"
+					return m, nil
+				}
+				return m, createCategoryCmd(m.rootDir, value)
+			}
 
-		// Global quit always works.
+			var cmd tea.Cmd
+			m.categoryInput, cmd = m.categoryInput.Update(msg)
+			return m, cmd
+		}
+
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
 
-		// Global help toggle.
 		if key.Matches(msg, keys.ShowHelp) {
 			m.showHelp = true
 			m.status = "help"
 			return m, nil
 		}
 
-		// While actively editing the filter input, let the list own almost all keys.
-		if editingFilter {
+		// Search mode
+		if m.searchMode {
 			switch msg.String() {
 			case "esc":
-				m.list.FilterInput.Blur()
-				m.list.SetFilterState(list.FilterApplied)
-				m.searchFocus = false
-				m.status = "filter applied"
-				if n := m.currentNote(); n != nil {
-					m.selected = n
-				}
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
 				return m, nil
-
 			case "enter":
-				m.list.FilterInput.Blur()
-				m.list.SetFilterState(list.FilterApplied)
-				m.searchFocus = false
-				m.status = "filter applied"
-				if n := m.currentNote(); n != nil {
-					m.selected = n
-				}
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
 				return m, nil
 			}
 
 			var cmd tea.Cmd
-			m.list, cmd = m.list.Update(msg)
-			if n := m.currentNote(); n != nil {
-				m.selected = n
-			}
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.rebuildTree()
 			return m, cmd
 		}
 
-		// Not actively editing the filter.
-		switch {
-		case key.Matches(msg, keys.Search), key.Matches(msg, keys.Focus):
-			m.searchFocus = true
-			var cmd tea.Cmd
-			m.list, cmd = m.list.Update(msg)
-			return m, cmd
-
-		case msg.String() == "esc" && filterApplied:
-			m.list.ResetFilter()
-			m.list.FilterInput.Blur()
-			m.searchFocus = false
-			m.status = "filter cleared"
-			if n := m.currentNote(); n != nil {
-				m.selected = n
-			}
+		// Start search
+		if key.Matches(msg, keys.Search) || key.Matches(msg, keys.Focus) {
+			m.searchMode = true
+			m.searchInput.Focus()
+			m.status = "search"
 			return m, nil
+		}
 
-		case msg.String() == "esc":
-			m.list.FilterInput.Blur()
-			m.searchFocus = false
-			m.status = "list focused"
-			if n := m.currentNote(); n != nil {
-				m.selected = n
-			}
+		// Clear applied search on second esc
+		if msg.String() == "esc" && strings.TrimSpace(m.searchInput.Value()) != "" {
+			m.searchInput.SetValue("")
+			m.searchInput.Blur()
+			m.searchMode = false
+			m.rebuildTree()
+			m.status = "search cleared"
 			return m, nil
+		}
 
-		case key.Matches(msg, keys.Refresh):
+		if key.Matches(msg, keys.CreateCategory) {
+			m.showCreateCategory = true
+			m.categoryInput.SetValue(m.currentCategoryPrefix())
+			m.categoryInput.Focus()
+			m.categoryInput.CursorEnd()
+			m.status = "new category"
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Refresh) {
 			m.status = "refreshing..."
-			return m, loadNotesCmd(m.rootDir)
+			return m, refreshAllCmd(m.rootDir)
+		}
 
-		case key.Matches(msg, keys.NewNote):
-			return m, createNoteCmd(m.rootDir)
+		if key.Matches(msg, keys.NewNote) {
+			return m, createNoteCmd(m.rootDir, m.currentTargetDir())
+		}
 
-		case key.Matches(msg, keys.Open):
-			if n := m.currentNote(); n != nil {
-				m.status = "opening in nvim: " + n.RelPath
-				return m, editor.Open(n.Path)
-			}
+		switch msg.String() {
+		case "up", "k":
+			m.moveTreeCursor(-1)
 			return m, nil
+		case "down", "j":
+			m.moveTreeCursor(1)
+			return m, nil
+		case "right", "l":
+			m.expandCurrentCategory()
+			return m, nil
+		case "left", "h":
+			m.collapseCurrentCategory()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Open) || key.Matches(msg, keys.ToggleCategory) {
+			return m, m.activateCurrentItem()
 		}
 	}
 
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	if n := m.currentNote(); n != nil {
-		m.selected = n
-	}
-
-	return m, cmd
+	return m, nil
 }
 
 func (m Model) View() string {
@@ -267,8 +322,10 @@ func (m Model) View() string {
 
 	leftBody := lipgloss.JoinVertical(
 		lipgloss.Left,
-		panelTitleStyle.Render("Notes"),
-		m.list.View(),
+		panelTitleStyle.Render("Tree"),
+		m.renderSearchBar(),
+		"",
+		m.renderTreeView(),
 	)
 
 	rightBody := lipgloss.JoinVertical(
@@ -277,15 +334,12 @@ func (m Model) View() string {
 		m.previewView(),
 	)
 
-	leftFocused := !m.searchFocus
-	rightFocused := m.searchFocus
-
-	left := panelStyle(leftWidth, m.height, leftFocused).Render(leftBody)
-	right := panelStyle(rightWidth, m.height, rightFocused).Render(rightBody)
+	left := panelStyle(leftWidth, m.height, true).Render(leftBody)
+	right := panelStyle(rightWidth, m.height, false).Render(rightBody)
 
 	title := titleBarStyle.
 		Width(usableWidth).
-		Render(" notetui ")
+		Render(" noteui ")
 
 	footer := footerStyle.
 		Width(usableWidth).
@@ -302,6 +356,16 @@ func (m Model) View() string {
 		),
 	)
 
+	if m.showCreateCategory {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderCreateCategoryModal(),
+		)
+	}
+
 	if m.showHelp {
 		return lipgloss.Place(
 			m.width,
@@ -309,28 +373,113 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderHelpModal(),
-			lipgloss.WithWhitespaceChars(" "),
-			lipgloss.WithWhitespaceForeground(lipgloss.Color("0")),
 		)
 	}
 
 	return base
 }
 
+func (m Model) renderSearchBar() string {
+	if m.searchMode || strings.TrimSpace(m.searchInput.Value()) != "" {
+		return m.searchInput.View()
+	}
+	return mutedStyle.Render("Press / to search")
+}
+
+func (m Model) renderTreeView() string {
+	if len(m.treeItems) == 0 {
+		return emptyStyle.Render("(empty)")
+	}
+
+	lines := make([]string, 0, len(m.treeItems))
+	for i, item := range m.treeItems {
+		lines = append(lines, m.renderTreeLine(item, i == m.treeCursor))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func (m Model) renderTreeLine(item treeItem, selected bool) string {
+	var icon string
+	switch item.Kind {
+	case treeCategory:
+		if m.categoryHasChildren(item.RelPath) {
+			if item.Expanded {
+				icon = "▾"
+			} else {
+				icon = "▸"
+			}
+		} else {
+			icon = "•"
+		}
+	case treeNote:
+		icon = "·"
+	}
+
+	indent := strings.Repeat("  ", item.Depth)
+	label := indent + icon + " " + item.Name
+
+	style := lipgloss.NewStyle()
+	if selected {
+		style = style.
+			Foreground(lipgloss.Color("230")).
+			Background(lipgloss.Color("62")).
+			Bold(true)
+	} else {
+		switch item.Kind {
+		case treeCategory:
+			style = style.Foreground(accentSoftColor)
+		case treeNote:
+			style = style.Foreground(textColor)
+		}
+	}
+	return style.Render(label)
+}
+
 func (m Model) previewView() string {
-	if m.selected == nil {
+	item := m.currentTreeItem()
+	if item == nil {
+		return emptyStyle.Render("Nothing selected")
+	}
+
+	if item.Kind == treeCategory {
+		path := item.Name
+		if item.RelPath == "" {
+			path = "~/notes"
+		} else {
+			path = filepath.Join("~/notes", item.RelPath)
+		}
+
+		count := m.countNotesUnder(item.RelPath)
+		children := m.countChildCategories(item.RelPath)
+
+		meta := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			chipStyle.Render(fmt.Sprintf("Subcategories: %d", children)),
+			chipStyle.Render(fmt.Sprintf("Notes: %d", count)),
+		)
+
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			headerStyle.Render(path),
+			meta,
+			"",
+			mutedStyle.Render("Category selected. Press enter or space to expand/collapse."),
+		)
+	}
+
+	if item.Note == nil {
 		return emptyStyle.Render("No note selected")
 	}
 
-	content := m.selected.Preview
+	content := item.Note.Preview
 	if strings.TrimSpace(content) == "" {
 		content = "(empty file)"
 	}
 
 	metaRow := lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		chipStyle.Render("Category: "+m.selected.Category),
-		chipStyle.Render("Modified: "+m.selected.ModTime.Format("2006-01-02 15:04")),
+		chipStyle.Render("Category: "+item.Note.Category),
+		chipStyle.Render("Modified: "+item.Note.ModTime.Format("2006-01-02 15:04")),
 	)
 
 	contentStyle := lipgloss.NewStyle().
@@ -338,24 +487,347 @@ func (m Model) previewView() string {
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		headerStyle.Render(m.selected.RelPath),
+		headerStyle.Render(item.Note.RelPath),
 		metaRow,
 		"",
 		contentStyle.Render(content),
 	)
 }
 
-func (m Model) currentNote() *notes.Note {
-	item := m.list.SelectedItem()
+func (m *Model) rebuildTree() {
+	var selectedKey string
+	if current := m.currentTreeItem(); current != nil {
+		selectedKey = current.key()
+	}
+
+	var out []treeItem
+	m.buildTree("", 0, &out)
+	m.treeItems = out
+
+	if len(m.treeItems) == 0 {
+		m.treeCursor = 0
+		m.selected = nil
+		return
+	}
+
+	restore := 0
+	if selectedKey != "" {
+		for i, item := range m.treeItems {
+			if item.key() == selectedKey {
+				restore = i
+				break
+			}
+		}
+	}
+	if restore >= len(m.treeItems) {
+		restore = len(m.treeItems) - 1
+	}
+	m.treeCursor = restore
+	m.syncSelectedNote()
+}
+
+func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
+	query := strings.TrimSpace(strings.ToLower(m.searchInput.Value()))
+	effectiveExpanded := func(rel string) bool {
+		if query != "" {
+			return true
+		}
+		return m.expanded[rel]
+	}
+
+	for _, cat := range m.directChildCategories(parent) {
+		include := query == "" || m.categoryMatches(cat, query) ||
+			m.categorySubtreeMatches(cat.RelPath, query)
+		if !include {
+			continue
+		}
+
+		item := treeItem{
+			Kind:     treeCategory,
+			Name:     cat.Name,
+			RelPath:  cat.RelPath,
+			Depth:    depth,
+			Expanded: effectiveExpanded(cat.RelPath),
+			Category: &cat,
+		}
+		*out = append(*out, item)
+
+		if item.Expanded {
+			m.buildTree(cat.RelPath, depth+1, out)
+		}
+	}
+
+	for _, n := range m.directChildNotes(parent) {
+		if query != "" && !m.noteMatches(n, query) {
+			continue
+		}
+		noteCopy := n
+		*out = append(*out, treeItem{
+			Kind:    treeNote,
+			Name:    n.Name,
+			RelPath: n.RelPath,
+			Depth:   depth,
+			Note:    &noteCopy,
+		})
+	}
+}
+
+func (m Model) directChildCategories(parent string) []notes.Category {
+	out := make([]notes.Category, 0)
+	for _, c := range m.categories {
+		if c.RelPath == "" {
+			continue
+		}
+		dir := filepath.Dir(c.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == parent {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (m Model) directChildNotes(parent string) []notes.Note {
+	out := make([]notes.Note, 0)
+	for _, n := range m.notes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == parent {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func (m Model) noteMatches(n notes.Note, query string) bool {
+	q := strings.ToLower(query)
+	return strings.Contains(strings.ToLower(n.Name), q) ||
+		strings.Contains(strings.ToLower(n.RelPath), q) ||
+		strings.Contains(strings.ToLower(n.Preview), q)
+}
+
+func (m Model) categoryMatches(c notes.Category, query string) bool {
+	return strings.Contains(strings.ToLower(c.Name), query) ||
+		strings.Contains(strings.ToLower(c.RelPath), query)
+}
+
+func (m Model) categorySubtreeMatches(relPath, query string) bool {
+	prefix := relPath + string(filepath.Separator)
+
+	for _, c := range m.categories {
+		if c.RelPath != relPath && strings.HasPrefix(c.RelPath, prefix) &&
+			m.categoryMatches(c, query) {
+			return true
+		}
+	}
+	for _, n := range m.notes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == relPath || strings.HasPrefix(dir, prefix) {
+			if m.noteMatches(n, query) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (m *Model) moveTreeCursor(delta int) {
+	if len(m.treeItems) == 0 {
+		return
+	}
+	next := m.treeCursor + delta
+	if next < 0 {
+		next = 0
+	}
+	if next >= len(m.treeItems) {
+		next = len(m.treeItems) - 1
+	}
+	m.treeCursor = next
+	m.syncSelectedNote()
+}
+
+func (m *Model) syncSelectedNote() {
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeNote || item.Note == nil {
+		m.selected = nil
+		return
+	}
+	m.selected = item.Note
+}
+
+func (m Model) currentTreeItem() *treeItem {
+	if len(m.treeItems) == 0 || m.treeCursor < 0 || m.treeCursor >= len(m.treeItems) {
+		return nil
+	}
+	item := m.treeItems[m.treeCursor]
+	return &item
+}
+
+func (m *Model) activateCurrentItem() tea.Cmd {
+	item := m.currentTreeItem()
 	if item == nil {
 		return nil
 	}
 
-	n, ok := item.(notes.Note)
-	if !ok {
+	if item.Kind == treeCategory {
+		m.toggleCurrentCategory()
 		return nil
 	}
-	return &n
+
+	if item.Note != nil {
+		m.status = "opening in nvim: " + item.Note.RelPath
+		return editor.Open(item.Note.Path)
+	}
+
+	return nil
+}
+
+func (m *Model) toggleCurrentCategory() {
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeCategory {
+		return
+	}
+	if !m.categoryHasChildren(item.RelPath) {
+		m.status = "category: " + item.Name
+		return
+	}
+	m.expanded[item.RelPath] = !m.expanded[item.RelPath]
+	if m.expanded[item.RelPath] {
+		m.status = "expanded: " + item.Name
+	} else {
+		m.status = "collapsed: " + item.Name
+	}
+	m.rebuildTree()
+}
+
+func (m *Model) expandCurrentCategory() {
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeCategory {
+		return
+	}
+	if m.categoryHasChildren(item.RelPath) {
+		m.expanded[item.RelPath] = true
+		m.status = "expanded: " + item.Name
+		m.rebuildTree()
+	}
+}
+
+func (m *Model) collapseCurrentCategory() {
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeCategory {
+		return
+	}
+
+	if m.categoryHasChildren(item.RelPath) && m.expanded[item.RelPath] {
+		m.expanded[item.RelPath] = false
+		m.status = "collapsed: " + item.Name
+		m.rebuildTree()
+		return
+	}
+
+	parent := filepath.Dir(item.RelPath)
+	if parent == "." {
+		parent = ""
+	}
+	for i, t := range m.treeItems {
+		if t.Kind == treeCategory && t.RelPath == parent {
+			m.treeCursor = i
+			m.syncSelectedNote()
+			return
+		}
+	}
+}
+
+func (m Model) categoryHasChildren(relPath string) bool {
+	if relPath == "" {
+		return len(m.directChildCategories("")) > 0 || len(m.directChildNotes("")) > 0
+	}
+	prefix := relPath + string(filepath.Separator)
+	for _, c := range m.categories {
+		if c.RelPath != relPath && strings.HasPrefix(c.RelPath, prefix) {
+			return true
+		}
+	}
+	for _, n := range m.notes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == relPath {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) currentTargetDir() string {
+	item := m.currentTreeItem()
+	if item == nil {
+		return "inbox"
+	}
+
+	if item.Kind == treeCategory {
+		if item.RelPath == "" {
+			return "inbox"
+		}
+		return item.RelPath
+	}
+
+	if item.Note != nil {
+		dir := filepath.Dir(item.Note.RelPath)
+		if dir == "." || dir == "" {
+			return "inbox"
+		}
+		return dir
+	}
+
+	return "inbox"
+}
+
+func (m Model) countNotesUnder(relPath string) int {
+	if relPath == "" {
+		return len(m.notes)
+	}
+	prefix := relPath + string(filepath.Separator)
+	count := 0
+	for _, n := range m.notes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == relPath || strings.HasPrefix(dir, prefix) {
+			count++
+		}
+	}
+	return count
+}
+
+func (m Model) countChildCategories(relPath string) int {
+	count := 0
+	for _, c := range m.categories {
+		if c.RelPath == "" {
+			continue
+		}
+		dir := filepath.Dir(c.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == relPath {
+			count++
+		}
+	}
+	return count
+}
+
+func refreshAllCmd(root string) tea.Cmd {
+	return tea.Batch(loadNotesCmd(root), loadCategoriesCmd(root))
 }
 
 func loadNotesCmd(root string) tea.Cmd {
@@ -365,18 +837,38 @@ func loadNotesCmd(root string) tea.Cmd {
 	}
 }
 
-func createNoteCmd(root string) tea.Cmd {
+func loadCategoriesCmd(root string) tea.Cmd {
 	return func() tea.Msg {
-		path, err := notes.CreateInboxNote(root)
+		cats, err := notes.DiscoverCategories(root)
+		return categoriesLoadedMsg{categories: cats, err: err}
+	}
+}
+
+func createNoteCmd(root, relDir string) tea.Cmd {
+	return func() tea.Msg {
+		path, err := notes.CreateNote(root, relDir)
 		return noteCreatedMsg{path: path, err: err}
 	}
 }
 
+func createCategoryCmd(root, relPath string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.CreateCategory(root, relPath)
+		return categoryCreatedMsg{relPath: relPath, err: err}
+	}
+}
+
 func (m Model) renderStatus() string {
+	search := strings.TrimSpace(m.searchInput.Value())
+	if search != "" && !m.searchMode {
+		return statusOKStyle.Render(m.status + " • filter: " + search)
+	}
+
 	switch {
 	case strings.HasPrefix(m.status, "error:"),
 		strings.HasPrefix(m.status, "editor error:"),
-		strings.HasPrefix(m.status, "create failed:"):
+		strings.HasPrefix(m.status, "create failed:"),
+		strings.HasPrefix(m.status, "category create failed:"):
 		return statusErrStyle.Render(m.status)
 	default:
 		return statusOKStyle.Render(m.status)
@@ -384,7 +876,7 @@ func (m Model) renderStatus() string {
 }
 
 func (m Model) renderHelpModal() string {
-	modalWidth := min(72, max(48, m.width-10))
+	modalWidth := min(76, max(50, m.width-10))
 
 	title := lipgloss.NewStyle().
 		Bold(true).
@@ -393,13 +885,16 @@ func (m Model) renderHelpModal() string {
 
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
-		m.renderHelpLine("/", "Search notes"),
-		m.renderHelpLine("tab", "Focus search"),
-		m.renderHelpLine("enter / o", "Open selected note in nvim"),
-		m.renderHelpLine("n", "Create new inbox note"),
-		m.renderHelpLine("r", "Refresh note list"),
-		m.renderHelpLine("q", "Quit"),
-		m.renderHelpLine("esc / q / ?", "Close this help"),
+		m.renderHelpLine("j / k", "move up and down"),
+		m.renderHelpLine("enter / o", "open note or toggle category"),
+		m.renderHelpLine("h / l", "collapse / expand category"),
+		m.renderHelpLine("/", "search tree"),
+		m.renderHelpLine("esc", "leave search, then clear on second press"),
+		m.renderHelpLine("n", "new note in current category"),
+		m.renderHelpLine("c", "create category"),
+		m.renderHelpLine("r", "refresh"),
+		m.renderHelpLine("q", "quit"),
+		m.renderHelpLine("esc / q / ?", "close help"),
 	)
 
 	footer := lipgloss.NewStyle().
@@ -416,9 +911,38 @@ func (m Model) renderHelpModal() string {
 	return card
 }
 
+func (m Model) renderCreateCategoryModal() string {
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(textColor).
+		Render("Create category")
+
+	hint := lipgloss.NewStyle().
+		Foreground(mutedColor).
+		Render("Use / to create nested categories, e.g. work/project-a")
+
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		"",
+		hint,
+		"",
+		m.categoryInput.View(),
+		"",
+		lipgloss.NewStyle().Foreground(mutedColor).Render("Enter to create • Esc to cancel"),
+	)
+
+	return lipgloss.NewStyle().
+		Width(min(76, max(48, m.width-10))).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accentColor).
+		Padding(1, 2).
+		Render(body)
+}
+
 func (m Model) renderHelpLine(k, desc string) string {
 	keyStyle := lipgloss.NewStyle().
-		Width(12).
+		Width(14).
 		Bold(true).
 		Foreground(accentSoftColor)
 
@@ -430,4 +954,28 @@ func (m Model) renderHelpLine(k, desc string) string {
 		keyStyle.Render(k),
 		descStyle.Render(desc),
 	)
+}
+
+func (m Model) currentCategoryPrefix() string {
+	item := m.currentTreeItem()
+	if item == nil {
+		return ""
+	}
+
+	if item.Kind == treeCategory {
+		if item.RelPath == "" {
+			return ""
+		}
+		return item.RelPath + string(filepath.Separator)
+	}
+
+	if item.Note != nil {
+		dir := filepath.Dir(item.Note.RelPath)
+		if dir == "." || dir == "" {
+			return ""
+		}
+		return dir + string(filepath.Separator)
+	}
+
+	return ""
 }

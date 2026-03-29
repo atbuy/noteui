@@ -94,10 +94,7 @@ func Discover(root string) ([]Note, error) {
 	}
 
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Category == out[j].Category {
-			return out[i].RelPath < out[j].RelPath
-		}
-		return out[i].Category < out[j].Category
+		return out[i].RelPath < out[j].RelPath
 	})
 
 	return out, nil
@@ -131,13 +128,25 @@ func IsNoteFile(path string) bool {
 }
 
 func CreateInboxNote(root string) (string, error) {
-	inboxDir := filepath.Join(root, "inbox")
-	if err := os.MkdirAll(inboxDir, 0o755); err != nil {
+	return CreateNote(root, "inbox")
+}
+
+func CreateNote(root, relDir string) (string, error) {
+	relDir = strings.TrimSpace(relDir)
+	if relDir == "." {
+		relDir = ""
+	}
+
+	targetDir := root
+	if relDir != "" {
+		targetDir = filepath.Join(root, relDir)
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return "", err
 	}
 
 	name := time.Now().Format("2006-01-02-150405") + ".md"
-	path := filepath.Join(inboxDir, name)
+	path := filepath.Join(targetDir, name)
 
 	content := "# New note\n\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

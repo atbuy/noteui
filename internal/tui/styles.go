@@ -32,6 +32,9 @@ var (
 	metaStyle = lipgloss.NewStyle().
 			Foreground(mutedColor)
 
+	mutedStyle = lipgloss.NewStyle().
+			Foreground(mutedColor)
+
 	chipStyle = lipgloss.NewStyle().
 			Foreground(textColor).
 			Background(bgSoftColor).
