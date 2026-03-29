@@ -177,7 +177,7 @@ func CreateNote(root, relDir string) (string, error) {
 }
 
 func DeleteNote(path string) error {
-	return os.Remove(path)
+	return TrashPath(path)
 }
 
 func MoveNote(root, oldRelPath, newRelPath string) error {

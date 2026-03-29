@@ -87,7 +87,7 @@ func DeleteCategory(root, relPath string) error {
 		return errors.New("category must stay inside notes root")
 	}
 
-	return os.RemoveAll(filepath.Join(root, relPath))
+	return TrashPath(filepath.Join(root, relPath))
 }
 
 func MoveCategory(root, oldRelPath, newRelPath string) error {

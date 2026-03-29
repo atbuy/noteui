@@ -1179,7 +1179,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
 		m.renderHelpLine("n", "New note in current category", innerWidth),
 		m.renderHelpLine("C", "Create category", innerWidth),
-		m.renderHelpLine("dd", "Delete note/category", innerWidth),
+		m.renderHelpLine("dd", "Trash note/category", innerWidth),
 		m.renderHelpLine("r", "Refresh", innerWidth),
 		m.renderHelpLine("q", "Quit", innerWidth),
 		m.renderHelpLine("esc/q/?", "Close help", innerWidth),
@@ -1494,7 +1494,7 @@ func (m *Model) armDeleteCurrent() {
 			relPath: item.RelPath,
 			name:    item.Name,
 		}
-		m.status = "press d again to delete category: " + item.Name
+		m.status = "press d again to trash category: " + item.Name
 
 	case treeNote:
 		if item.Note == nil {
@@ -1505,7 +1505,7 @@ func (m *Model) armDeleteCurrent() {
 			relPath: item.Note.Path,
 			name:    item.Note.Name,
 		}
-		m.status = "press d again to delete note: " + item.Note.Name
+		m.status = "press d again to trash note: " + item.Note.Name
 	}
 }
 
