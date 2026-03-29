@@ -22,6 +22,7 @@ type (
 	treeItemKind     int
 	deleteTargetKind int
 	moveTargetKind   int
+	renameTargetKind int
 )
 
 const (
@@ -41,6 +42,12 @@ const (
 	moveTargetNote
 )
 
+const (
+	renameTargetNone renameTargetKind = iota
+	renameTargetNote
+	renameTargetCategory
+)
+
 type movePending struct {
 	kind       moveTargetKind
 	oldRelPath string
@@ -53,11 +60,6 @@ type noteMovedMsg struct {
 	err        error
 }
 
-type renamePending struct {
-	path     string
-	oldTitle string
-}
-
 type noteRenamedMsg struct {
 	oldPath string
 	newPath string
@@ -65,6 +67,20 @@ type noteRenamedMsg struct {
 }
 
 type categoryMovedMsg struct {
+	oldRelPath string
+	newRelPath string
+	err        error
+}
+
+type renamePending struct {
+	kind     renameTargetKind
+	path     string
+	relPath  string
+	oldTitle string
+	oldName  string
+}
+
+type categoryRenamedMsg struct {
 	oldRelPath string
 	newRelPath string
 	err        error
@@ -261,6 +277,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = "renamed note: " + filepath.Base(msg.newPath)
 		return m, refreshAllCmd(m.rootDir)
 
+	case categoryRenamedMsg:
+		if msg.err != nil {
+			m.status = "rename failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showRename = false
+		m.renamePending = nil
+		m.renameInput.Blur()
+		m.renameInput.SetValue("")
+		m.preserveCursor = m.treeCursor
+		m.status = "renamed category: " + msg.newRelPath
+		return m, refreshAllCmd(m.rootDir)
+
 	case categoryMovedMsg:
 		if msg.err != nil {
 			m.status = "move failed: " + msg.err.Error()
@@ -411,7 +440,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.status = "rename cancelled"
 					return m, nil
 				}
-				return m, renameNoteCmd(m.renamePending.path, value)
+
+				switch m.renamePending.kind {
+				case renameTargetNote:
+					return m, renameNoteCmd(m.renamePending.path, value)
+				case renameTargetCategory:
+					return m, renameCategoryCmd(m.rootDir, m.renamePending.relPath, value)
+				default:
+					return m, nil
+				}
 			}
 
 			var cmd tea.Cmd
@@ -1147,7 +1184,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("q", "Quit", innerWidth),
 		m.renderHelpLine("esc/q/?", "Close help", innerWidth),
 		m.renderHelpLine("m", "Move note/category", innerWidth),
-		m.renderHelpLine("R", "Rename note", innerWidth),
+		m.renderHelpLine("R", "Rename note/category", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -1200,15 +1237,23 @@ func (m Model) renderRenameModal() string {
 	modalWidth := min(76, max(48, m.width-10))
 	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
 
+	titleText := "Rename note"
+	hintText := "Change the note title. The file name will update automatically."
+
+	if m.renamePending != nil && m.renamePending.kind == renameTargetCategory {
+		titleText = "Rename category"
+		hintText = "Change the category path under ~/notes."
+	}
+
 	title := lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
-		Render(modalTitleStyle.Render("Rename note"))
+		Render(modalTitleStyle.Render(titleText))
 
 	hint := lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
-		Render(modalMutedStyle.Render("Change the note title. The file name will update automatically."))
+		Render(modalMutedStyle.Render(hintText))
 
 	inputRow := lipgloss.NewStyle().
 		Width(innerWidth).
@@ -1495,20 +1540,42 @@ func deleteCategoryCmd(root, relPath string) tea.Cmd {
 
 func (m *Model) armRenameCurrent() {
 	item := m.currentTreeItem()
-	if item == nil || item.Kind != treeNote || item.Note == nil {
-		m.status = "rename only works on notes"
+	if item == nil {
 		return
 	}
 
-	m.showRename = true
-	m.renamePending = &renamePending{
-		path:     item.Note.Path,
-		oldTitle: item.Note.Title(),
+	switch item.Kind {
+	case treeNote:
+		if item.Note == nil {
+			return
+		}
+		m.showRename = true
+		m.renamePending = &renamePending{
+			kind:     renameTargetNote,
+			path:     item.Note.Path,
+			oldTitle: item.Note.Title(),
+		}
+		m.renameInput.SetValue(item.Note.Title())
+		m.renameInput.Focus()
+		m.renameInput.CursorEnd()
+		m.status = "rename note"
+
+	case treeCategory:
+		if item.RelPath == "" {
+			m.status = "cannot rename root category"
+			return
+		}
+		m.showRename = true
+		m.renamePending = &renamePending{
+			kind:    renameTargetCategory,
+			relPath: item.RelPath,
+			oldName: item.Name,
+		}
+		m.renameInput.SetValue(item.RelPath)
+		m.renameInput.Focus()
+		m.renameInput.CursorEnd()
+		m.status = "rename category"
 	}
-	m.renameInput.SetValue(item.Note.Title())
-	m.renameInput.Focus()
-	m.renameInput.CursorEnd()
-	m.status = "rename note"
 }
 
 func renameNoteCmd(path, newTitle string) tea.Cmd {
@@ -1518,6 +1585,17 @@ func renameNoteCmd(path, newTitle string) tea.Cmd {
 			oldPath: path,
 			newPath: newPath,
 			err:     err,
+		}
+	}
+}
+
+func renameCategoryCmd(root, oldRelPath, newRelPath string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.MoveCategory(root, oldRelPath, newRelPath)
+		return categoryRenamedMsg{
+			oldRelPath: oldRelPath,
+			newRelPath: newRelPath,
+			err:        err,
 		}
 	}
 }
