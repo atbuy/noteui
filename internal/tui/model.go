@@ -490,8 +490,8 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	style := lipgloss.NewStyle()
 	if selected {
 		style = style.
-			Foreground(lipgloss.Color("230")).
-			Background(lipgloss.Color("62")).
+			Foreground(selectedFgColor).
+			Background(selectedBgColor).
 			Bold(true)
 	} else {
 		switch item.Kind {

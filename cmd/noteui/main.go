@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/tui"
 )
 
@@ -20,6 +21,12 @@ func main() {
 		}
 		root = filepath.Join(home, "notes")
 	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to load config: %v\n", err)
+	}
+	tui.ApplyTheme(cfg)
 
 	m := tui.New(root)
 	p := tea.NewProgram(m, tea.WithAltScreen())
