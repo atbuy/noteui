@@ -969,29 +969,52 @@ func (m Model) renderStatus() string {
 
 func (m Model) renderHelpModal() string {
 	modalWidth := min(76, max(50, m.width-10))
+	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
 
-	title := modalTitleStyle.Render("Help")
+	title := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(modalTitleStyle.Render("Help"))
 
-	body := lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderHelpLine("j / k", "move up and down"),
-		m.renderHelpLine("enter / o", "open note or toggle category"),
-		m.renderHelpLine("h / l", "collapse / expand category"),
-		m.renderHelpLine("/", "search tree"),
-		m.renderHelpLine("esc", "leave search, then clear on second press"),
-		m.renderHelpLine("n", "new note in current category"),
-		m.renderHelpLine("c", "create category"),
-		m.renderHelpLine("d d", "delete note/category"),
-		m.renderHelpLine("r", "refresh"),
-		m.renderHelpLine("q", "quit"),
-		m.renderHelpLine("esc / q / ?", "close help"),
-	)
+	lines := []string{
+		m.renderHelpLine("j / k", "move up and down", innerWidth),
+		m.renderHelpLine("enter / o", "open note or toggle category", innerWidth),
+		m.renderHelpLine("h / l", "collapse / expand category", innerWidth),
+		m.renderHelpLine("/", "search tree", innerWidth),
+		m.renderHelpLine("esc", "leave search, then clear on second press", innerWidth),
+		m.renderHelpLine("n", "new note in current category", innerWidth),
+		m.renderHelpLine("c", "create category", innerWidth),
+		m.renderHelpLine("d d", "delete note/category", innerWidth),
+		m.renderHelpLine("r", "refresh", innerWidth),
+		m.renderHelpLine("q", "quit", innerWidth),
+		m.renderHelpLine("esc / q / ?", "close help", innerWidth),
+	}
 
-	footer := modalFooterStyle.Render("Press esc, q, or ? to close")
+	body := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
 
-	return modalCardStyle(modalWidth).Render(
-		lipgloss.JoinVertical(lipgloss.Left, title, "", body, "", footer),
-	)
+	footer := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(modalFooterStyle.Render("Press esc, q, or ? to close"))
+
+	content := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(
+			lipgloss.JoinVertical(
+				lipgloss.Left,
+				title,
+				lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(""),
+				body,
+				lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(""),
+				footer,
+			),
+		)
+
+	return modalCardStyle(modalWidth).Render(content)
 }
 
 func (m Model) renderCreateCategoryModal() string {
@@ -1013,14 +1036,32 @@ func (m Model) renderCreateCategoryModal() string {
 	return modalCardStyle(min(76, max(48, m.width-10))).Render(body)
 }
 
-func (m Model) renderHelpLine(k, desc string) string {
-	descStyle := modalTextStyle
+func (m Model) renderHelpLine(k, desc string, width int) string {
+	keyWidth := 14
+	descWidth := max(10, width-keyWidth)
 
-	return lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		modalKeyStyle.Render(k),
-		descStyle.Render(desc),
-	)
+	keyPart := lipgloss.NewStyle().
+		Width(keyWidth).
+		Background(modalBgColor).
+		Render(
+			modalKeyStyle.
+				Width(keyWidth).
+				Render(k),
+		)
+
+	descPart := lipgloss.NewStyle().
+		Width(descWidth).
+		Background(modalBgColor).
+		Render(
+			modalTextStyle.
+				Width(descWidth).
+				Render(desc),
+		)
+
+	return lipgloss.NewStyle().
+		Width(width).
+		Background(modalBgColor).
+		Render(lipgloss.JoinHorizontal(lipgloss.Top, keyPart, descPart))
 }
 
 func (m Model) currentCategoryPrefix() string {

@@ -198,21 +198,26 @@ func ApplyTheme(cfg config.Config) {
 
 	modalTitleStyle = lipgloss.NewStyle().
 		Bold(boldModalTitles).
-		Foreground(modalTitleColor)
+		Foreground(modalTitleColor).
+		Background(modalBgColor)
 
 	modalTextStyle = lipgloss.NewStyle().
-		Foreground(modalTextColor)
+		Foreground(modalTextColor).
+		Background(modalBgColor)
 
 	modalMutedStyle = lipgloss.NewStyle().
-		Foreground(modalMutedColor)
+		Foreground(modalMutedColor).
+		Background(modalBgColor)
 
 	modalFooterStyle = lipgloss.NewStyle().
-		Foreground(modalMutedColor)
+		Foreground(modalMutedColor).
+		Background(modalBgColor)
 
 	modalKeyStyle = lipgloss.NewStyle().
 		Width(14).
 		Bold(true).
-		Foreground(modalAccentColor)
+		Foreground(modalAccentColor).
+		Background(modalBgColor)
 }
 
 func builtinTheme(name string) themePalette {
