@@ -17,10 +17,14 @@ func Command(path string) *exec.Cmd {
 
 func Open(path string) tea.Cmd {
 	return tea.ExecProcess(Command(path), func(err error) tea.Msg {
-		return FinishedMsg{Err: err}
+		return FinishedMsg{
+			Err:  err,
+			Path: path,
+		}
 	})
 }
 
 type FinishedMsg struct {
-	Err error
+	Err  error
+	Path string
 }

@@ -10,23 +10,33 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const PreviewBytes = 16 * 1024
 
 type Note struct {
-	Root     string
-	Path     string
-	RelPath  string
-	Name     string
-	Category string
-	Preview  string
-	ModTime  time.Time
+	Root      string
+	Path      string
+	RelPath   string
+	Name      string // actual filename
+	TitleText string // display title from first # heading
+	Category  string
+	Preview   string
+	ModTime   time.Time
 }
 
-func (n Note) Title() string       { return n.Name }
+func (n Note) Title() string {
+	if strings.TrimSpace(n.TitleText) != "" {
+		return n.TitleText
+	}
+	return n.Name
+}
+
 func (n Note) Description() string { return n.RelPath }
-func (n Note) FilterValue() string { return n.Name + " " + n.RelPath + " " + n.Preview }
+func (n Note) FilterValue() string {
+	return n.Title() + " " + n.Name + " " + n.RelPath + " " + n.Preview
+}
 
 func Discover(root string) ([]Note, error) {
 	info, err := os.Stat(root)
@@ -72,6 +82,10 @@ func Discover(root string) ([]Note, error) {
 		}
 
 		preview, _ := ReadPreview(path)
+		title := ExtractTitle(preview)
+		if title == "" {
+			title = fallbackTitleFromFilename(filepath.Base(path))
+		}
 
 		info, err := d.Info()
 		if err != nil {
@@ -79,13 +93,14 @@ func Discover(root string) ([]Note, error) {
 		}
 
 		out = append(out, Note{
-			Root:     root,
-			Path:     path,
-			RelPath:  rel,
-			Name:     filepath.Base(path),
-			Category: category,
-			Preview:  preview,
-			ModTime:  info.ModTime(),
+			Root:      root,
+			Path:      path,
+			RelPath:   rel,
+			Name:      filepath.Base(path),
+			TitleText: title,
+			Category:  category,
+			Preview:   preview,
+			ModTime:   info.ModTime(),
 		})
 		return nil
 	})
@@ -118,6 +133,14 @@ func ReadPreview(path string) (string, error) {
 	return strings.TrimSpace(text), nil
 }
 
+func ReadAll(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func IsNoteFile(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".md", ".txt", ".org", ".norg":
@@ -145,10 +168,11 @@ func CreateNote(root, relDir string) (string, error) {
 		return "", err
 	}
 
-	name := time.Now().Format("2006-01-02-150405") + ".md"
+	// Temporary filename until we know the real title after editing.
+	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
 	path := filepath.Join(targetDir, name)
 
-	content := "# New note\n\n"
+	content := "# New\n\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		return "", err
 	}
@@ -158,4 +182,108 @@ func CreateNote(root, relDir string) (string, error) {
 
 func DeleteNote(path string) error {
 	return os.Remove(path)
+}
+
+func ExtractTitle(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "# ") {
+			title := strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			if title != "" {
+				return title
+			}
+		}
+	}
+	return ""
+}
+
+func fallbackTitleFromFilename(name string) string {
+	base := strings.TrimSuffix(name, filepath.Ext(name))
+	base = strings.TrimSpace(strings.ReplaceAll(base, "-", " "))
+	if base == "" {
+		return "Untitled"
+	}
+	return base
+}
+
+func RenameFromTitle(path string) (string, bool, error) {
+	content, err := ReadAll(path)
+	if err != nil {
+		return "", false, err
+	}
+
+	title := ExtractTitle(content)
+	if title == "" {
+		return path, false, nil
+	}
+
+	dir := filepath.Dir(path)
+	ext := filepath.Ext(path)
+	if ext == "" {
+		ext = ".md"
+	}
+
+	baseSlug := Slugify(title)
+	if baseSlug == "" {
+		baseSlug = "untitled"
+	}
+
+	target := uniquePath(dir, baseSlug, ext, path)
+	if target == path {
+		return path, false, nil
+	}
+
+	if err := os.Rename(path, target); err != nil {
+		return "", false, err
+	}
+	return target, true, nil
+}
+
+func Slugify(s string) string {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return ""
+	}
+
+	var b strings.Builder
+	lastDash := false
+
+	for _, r := range s {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			b.WriteRune(r)
+			lastDash = false
+		case unicode.IsSpace(r) || strings.ContainsRune("-_./\\:+&", r):
+			if !lastDash {
+				b.WriteRune('-')
+				lastDash = true
+			}
+		default:
+			// skip punctuation and unsafe chars
+		}
+	}
+
+	out := strings.Trim(b.String(), "-")
+	return out
+}
+
+func uniquePath(dir, slug, ext, currentPath string) string {
+	candidate := filepath.Join(dir, slug+ext)
+	if candidate == currentPath {
+		return candidate
+	}
+
+	if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+		return candidate
+	}
+
+	for i := 2; ; i++ {
+		candidate = filepath.Join(dir, fmt.Sprintf("%s-%d%s", slug, i, ext))
+		if candidate == currentPath {
+			return candidate
+		}
+		if _, err := os.Stat(candidate); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
+	}
 }

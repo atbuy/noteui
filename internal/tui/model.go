@@ -224,7 +224,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "editor error: " + msg.Err.Error()
 			return m, nil
 		}
-		m.status = "editor closed"
+
+		newPath, renamed, err := notes.RenameFromTitle(msg.Path)
+		if err != nil {
+			m.status = "rename failed: " + err.Error()
+			return m, refreshAllCmd(m.rootDir)
+		}
+
+		if renamed {
+			m.status = "renamed: " + filepath.Base(newPath)
+		} else {
+			m.status = "editor closed"
+		}
+
 		return m, refreshAllCmd(m.rootDir)
 
 	case tea.KeyMsg:
@@ -544,7 +556,8 @@ func (m Model) previewView() string {
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		headerStyle.Render(item.Note.RelPath),
+		headerStyle.Render(item.Note.Title()),
+		metaStyle.Render(item.Note.RelPath),
 		metaRow,
 		"",
 		contentStyle.Render(content),
@@ -633,7 +646,7 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 		noteCopy := n
 		*out = append(*out, treeItem{
 			Kind:    treeNote,
-			Name:    n.Name,
+			Name:    n.Title(),
 			RelPath: n.RelPath,
 			Depth:   depth,
 			Note:    &noteCopy,
@@ -943,7 +956,8 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "editor error:"),
 		strings.HasPrefix(m.status, "create failed:"),
 		strings.HasPrefix(m.status, "category create failed:"),
-		strings.HasPrefix(m.status, "delete failed:"):
+		strings.HasPrefix(m.status, "delete failed:"),
+		strings.HasPrefix(m.status, "rename failed:"):
 		return statusErrStyle.Render(m.status)
 	default:
 		return statusOKStyle.Render(m.status)
