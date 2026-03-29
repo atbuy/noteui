@@ -15,6 +15,7 @@ type keyMap struct {
 	CreateCategory key.Binding
 	ToggleCategory key.Binding
 	Delete         key.Binding
+	Move           key.Binding
 }
 
 var keys = keyMap{
@@ -57,5 +58,9 @@ var keys = keyMap{
 	Delete: key.NewBinding(
 		key.WithKeys("d"),
 		key.WithHelp("d", "delete"),
+	),
+	Move: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "move"),
 	),
 }

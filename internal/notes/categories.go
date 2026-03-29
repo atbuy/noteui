@@ -89,3 +89,40 @@ func DeleteCategory(root, relPath string) error {
 
 	return os.RemoveAll(filepath.Join(root, relPath))
 }
+
+func MoveCategory(root, oldRelPath, newRelPath string) error {
+	oldRelPath = filepath.Clean(strings.TrimSpace(oldRelPath))
+	newRelPath = filepath.Clean(strings.TrimSpace(newRelPath))
+
+	if oldRelPath == "" || oldRelPath == "." {
+		return errors.New("cannot move root category")
+	}
+	if newRelPath == "" || newRelPath == "." {
+		return errors.New("target category cannot be root")
+	}
+	if strings.HasPrefix(oldRelPath, "..") || strings.HasPrefix(newRelPath, "..") {
+		return errors.New("category path must stay inside notes root")
+	}
+	if oldRelPath == newRelPath {
+		return nil
+	}
+	if newRelPath == oldRelPath ||
+		strings.HasPrefix(newRelPath, oldRelPath+string(filepath.Separator)) {
+		return errors.New("cannot move a category inside itself")
+	}
+
+	oldPath := filepath.Join(root, oldRelPath)
+	newPath := filepath.Join(root, newRelPath)
+
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(newPath); err == nil {
+		return errors.New("target category already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return os.Rename(oldPath, newPath)
+}

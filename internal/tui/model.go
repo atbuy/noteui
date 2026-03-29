@@ -14,9 +14,11 @@ import (
 	"atbuy/noteui/internal/notes"
 )
 
-type treeItemKind int
-
-type deleteTargetKind int
+type (
+	treeItemKind     int
+	deleteTargetKind int
+	moveTargetKind   int
+)
 
 const (
 	treeCategory treeItemKind = iota
@@ -28,6 +30,30 @@ const (
 	deleteTargetCategory
 	deleteTargetNote
 )
+
+const (
+	moveTargetNone moveTargetKind = iota
+	moveTargetCategory
+	moveTargetNote
+)
+
+type movePending struct {
+	kind       moveTargetKind
+	oldRelPath string
+	name       string
+}
+
+type noteMovedMsg struct {
+	oldRelPath string
+	newRelPath string
+	err        error
+}
+
+type categoryMovedMsg struct {
+	oldRelPath string
+	newRelPath string
+	err        error
+}
 
 type deletePending struct {
 	kind    deleteTargetKind
@@ -87,6 +113,10 @@ type Model struct {
 	showCreateCategory bool
 	categoryInput      textinput.Model
 
+	showMove    bool
+	moveInput   textinput.Model
+	movePending *movePending
+
 	searchInput textinput.Model
 	searchMode  bool
 
@@ -124,12 +154,19 @@ func New(root, startupError string) Model {
 	searchInput.CharLimit = 200
 	searchInput.Width = 32
 
+	moveInput := textinput.New()
+	moveInput.Placeholder = "work/project-a/note.md"
+	moveInput.Prompt = "Move to: "
+	moveInput.CharLimit = 300
+	moveInput.Width = 48
+
 	return Model{
 		rootDir:        root,
 		status:         "loading notes...",
 		expanded:       map[string]bool{},
 		categoryInput:  categoryInput,
 		searchInput:    searchInput,
+		moveInput:      moveInput,
 		preserveCursor: -1,
 		startupError:   startupError,
 	}
@@ -153,7 +190,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previewWidth = rightWidth
 		m.searchInput.Width = max(16, leftWidth-8)
 		m.categoryInput.Width = max(24, min(50, m.width-16))
+		m.moveInput.Width = max(24, min(60, m.width-16))
 		return m, nil
+
+	case noteMovedMsg:
+		if msg.err != nil {
+			m.status = "move failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showMove = false
+		m.movePending = nil
+		m.moveInput.Blur()
+		m.moveInput.SetValue("")
+		m.preserveCursor = m.treeCursor
+		m.status = "moved note: " + msg.newRelPath
+		return m, refreshAllCmd(m.rootDir)
+
+	case categoryMovedMsg:
+		if msg.err != nil {
+			m.status = "move failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showMove = false
+		m.movePending = nil
+		m.moveInput.Blur()
+		m.moveInput.SetValue("")
+		m.preserveCursor = m.treeCursor
+		m.status = "moved category: " + msg.newRelPath
+		return m, refreshAllCmd(m.rootDir)
 
 	case noteDeletedMsg:
 		if msg.err != nil {
@@ -242,6 +306,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, refreshAllCmd(m.rootDir)
 
 	case tea.KeyMsg:
+		if m.showMove {
+			switch msg.String() {
+			case "esc":
+				m.showMove = false
+				m.movePending = nil
+				m.moveInput.Blur()
+				m.moveInput.SetValue("")
+				m.status = "move cancelled"
+				return m, nil
+			case "enter":
+				value := strings.TrimSpace(m.moveInput.Value())
+				if value == "" {
+					m.showMove = false
+					m.movePending = nil
+					m.moveInput.Blur()
+					m.status = "move cancelled"
+					return m, nil
+				}
+				return m, m.confirmMove(value)
+			}
+
+			var cmd tea.Cmd
+			m.moveInput, cmd = m.moveInput.Update(msg)
+			return m, cmd
+		}
 		if m.deletePending != nil {
 			switch msg.String() {
 			case "esc":
@@ -297,6 +386,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, keys.ShowHelp) {
 			m.showHelp = true
 			m.status = "help"
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Move) {
+			m.armMoveCurrent()
 			return m, nil
 		}
 
@@ -434,6 +528,16 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderCreateCategoryModal(),
+		)
+	}
+
+	if m.showMove {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderMoveModal(),
 		)
 	}
 
@@ -960,7 +1064,8 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "create failed:"),
 		strings.HasPrefix(m.status, "category create failed:"),
 		strings.HasPrefix(m.status, "delete failed:"),
-		strings.HasPrefix(m.status, "rename failed:"):
+		strings.HasPrefix(m.status, "rename failed:"),
+		strings.HasPrefix(m.status, "move failed:"):
 		return statusErrStyle.Render(m.status)
 	default:
 		return statusOKStyle.Render(m.status)
@@ -988,6 +1093,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("r", "refresh", innerWidth),
 		m.renderHelpLine("q", "quit", innerWidth),
 		m.renderHelpLine("esc / q / ?", "close help", innerWidth),
+		m.renderHelpLine("m", "move note/category", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -1015,6 +1121,25 @@ func (m Model) renderHelpModal() string {
 		)
 
 	return modalCardStyle(modalWidth).Render(content)
+}
+
+func (m Model) renderMoveModal() string {
+	title := modalTitleStyle.Render("Move")
+
+	hint := modalMutedStyle.Render("Enter the new relative path under ~/notes")
+
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		"",
+		hint,
+		"",
+		m.moveInput.View(),
+		"",
+		modalFooterStyle.Render("Enter to move • Esc to cancel"),
+	)
+
+	return modalCardStyle(min(76, max(48, m.width-10))).Render(body)
 }
 
 func (m Model) renderCreateCategoryModal() string {
@@ -1086,6 +1211,84 @@ func (m Model) currentCategoryPrefix() string {
 	}
 
 	return ""
+}
+
+func (m *Model) armMoveCurrent() {
+	item := m.currentTreeItem()
+	if item == nil {
+		return
+	}
+
+	m.showMove = true
+	m.moveInput.Focus()
+
+	switch item.Kind {
+	case treeCategory:
+		if item.RelPath == "" {
+			m.showMove = false
+			m.status = "cannot move root category"
+			return
+		}
+		m.movePending = &movePending{
+			kind:       moveTargetCategory,
+			oldRelPath: item.RelPath,
+			name:       item.Name,
+		}
+		m.moveInput.SetValue(item.RelPath)
+		m.moveInput.CursorEnd()
+		m.status = "move category"
+
+	case treeNote:
+		if item.Note == nil {
+			m.showMove = false
+			return
+		}
+		m.movePending = &movePending{
+			kind:       moveTargetNote,
+			oldRelPath: item.Note.RelPath,
+			name:       item.Note.Title(),
+		}
+		m.moveInput.SetValue(item.Note.RelPath)
+		m.moveInput.CursorEnd()
+		m.status = "move note"
+	}
+}
+
+func (m Model) confirmMove(newRelPath string) tea.Cmd {
+	if m.movePending == nil {
+		return nil
+	}
+
+	switch m.movePending.kind {
+	case moveTargetNote:
+		return moveNoteCmd(m.rootDir, m.movePending.oldRelPath, newRelPath)
+	case moveTargetCategory:
+		return moveCategoryCmd(m.rootDir, m.movePending.oldRelPath, newRelPath)
+	default:
+		return nil
+	}
+}
+
+func moveNoteCmd(root, oldRelPath, newRelPath string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.MoveNote(root, oldRelPath, newRelPath)
+		return noteMovedMsg{
+			oldRelPath: oldRelPath,
+			newRelPath: newRelPath,
+			err:        err,
+		}
+	}
+}
+
+func moveCategoryCmd(root, oldRelPath, newRelPath string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.MoveCategory(root, oldRelPath, newRelPath)
+		return categoryMovedMsg{
+			oldRelPath: oldRelPath,
+			newRelPath: newRelPath,
+			err:        err,
+		}
+	}
 }
 
 func (m *Model) armDeleteCurrent() {

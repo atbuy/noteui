@@ -180,6 +180,33 @@ func DeleteNote(path string) error {
 	return os.Remove(path)
 }
 
+func MoveNote(root, oldRelPath, newRelPath string) error {
+	oldRelPath = cleanRelativePath(oldRelPath, true)
+	newRelPath = cleanRelativePath(newRelPath, true)
+
+	if oldRelPath == "" || newRelPath == "" {
+		return errors.New("note path cannot be empty")
+	}
+	if oldRelPath == newRelPath {
+		return nil
+	}
+
+	oldPath := filepath.Join(root, oldRelPath)
+	newPath := filepath.Join(root, newRelPath)
+
+	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(newPath); err == nil {
+		return fmt.Errorf("target already exists: %s", newRelPath)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	return os.Rename(oldPath, newPath)
+}
+
 func ExtractTitle(content string) string {
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
@@ -282,4 +309,23 @@ func uniquePath(dir, slug, ext, currentPath string) string {
 			return candidate
 		}
 	}
+}
+
+func cleanRelativePath(rel string, keepExt bool) string {
+	rel = filepath.Clean(strings.TrimSpace(rel))
+	if rel == "." {
+		return ""
+	}
+	rel = strings.TrimPrefix(rel, string(filepath.Separator))
+	for strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+		rel = strings.TrimPrefix(rel, ".."+string(filepath.Separator))
+		if rel == ".." {
+			rel = ""
+			break
+		}
+	}
+	if keepExt && rel != "" && filepath.Ext(rel) == "" {
+		rel += ".md"
+	}
+	return rel
 }
