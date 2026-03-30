@@ -156,7 +156,7 @@ func ApplyTheme(cfg config.Config) {
 	modalBorder = borderFromName(cfg.Modal.BorderStyle)
 
 	appStyle = lipgloss.NewStyle().
-		Padding(appPaddingY, appPaddingX)
+		Padding(max(0, appPaddingY), max(0, appPaddingX))
 
 	titleBarStyle = lipgloss.NewStyle().
 		Bold(boldTitleBar).
@@ -167,7 +167,8 @@ func ApplyTheme(cfg config.Config) {
 	panelTitleStyle = lipgloss.NewStyle().
 		Bold(boldPanelTitles).
 		Foreground(accentSoftColor).
-		Padding(0, 0, 1, 0)
+		Padding(0, 0, 0, 0).
+		MarginBottom(1)
 
 	headerStyle = lipgloss.NewStyle().
 		Bold(boldHeaders).
@@ -193,7 +194,8 @@ func ApplyTheme(cfg config.Config) {
 		Foreground(mutedColor).
 		BorderTop(true).
 		BorderForeground(subtleColor).
-		Padding(0, 1)
+		Padding(0, 1).
+		MarginTop(1)
 
 	statusOKStyle = lipgloss.NewStyle().
 		Foreground(successColor)

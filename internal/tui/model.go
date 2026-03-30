@@ -27,6 +27,13 @@ type (
 )
 
 const (
+	treePaneRatio   = 0.32
+	minTreeWidth    = 30
+	minPreviewWidth = 40
+	panelGapWidth   = 2
+)
+
+const (
 	treeCategory treeItemKind = iota
 	treeNote
 )
@@ -253,10 +260,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		usableWidth := max(40, msg.Width-6)
-		leftWidth := max(28, usableWidth/3)
-		gap := 2
-		rightWidth := max(30, usableWidth-leftWidth-gap)
+		leftWidth, rightWidth := m.panelWidths()
 
 		m.previewWidth = rightWidth
 		m.searchInput.Width = max(16, leftWidth-8)
@@ -265,7 +269,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renameInput.Width = max(24, min(60, m.width-16))
 
 		previewInnerWidth := max(20, rightWidth-8)
-		previewInnerHeight := max(5, msg.Height-14)
+		previewInnerHeight := max(6, msg.Height-14)
 		m.preview.Width = previewInnerWidth
 		m.preview.Height = previewInnerHeight
 		m.refreshPreview()
@@ -642,9 +646,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	usableWidth := max(40, m.width-6)
-	leftWidth := max(28, usableWidth/3)
-	gap := "  "
-	rightWidth := max(30, usableWidth-leftWidth-len(gap))
+	leftWidth, rightWidth := m.panelWidths()
+	gap := strings.Repeat(" ", panelGapWidth)
 
 	leftBody := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -1957,10 +1960,7 @@ func (m Model) isPinnedNote(relPath string) bool {
 }
 
 func (m Model) treeInnerWidth() int {
-	usableWidth := max(40, m.width-6)
-	leftWidth := max(28, usableWidth/3)
-
-	// Match the left panel content width closely enough for stable row sizing.
+	leftWidth, _ := m.panelWidths()
 	return max(16, leftWidth-6)
 }
 
@@ -1989,4 +1989,21 @@ func trimOrPad(s string, width int) string {
 		out = append(out, []rune(strings.Repeat(" ", width-cur))...)
 	}
 	return string(out)
+}
+
+func (m Model) panelWidths() (int, int) {
+	usableWidth := max(40, m.width-6)
+
+	leftWidth := int(float64(usableWidth) * treePaneRatio)
+	leftWidth = max(minTreeWidth, leftWidth)
+
+	rightWidth := usableWidth - leftWidth - panelGapWidth
+	rightWidth = max(minPreviewWidth, rightWidth)
+
+	// Rebalance if minimums pushed things too far.
+	if leftWidth+rightWidth+panelGapWidth > usableWidth {
+		leftWidth = max(minTreeWidth, usableWidth-rightWidth-panelGapWidth)
+	}
+
+	return leftWidth, rightWidth
 }
