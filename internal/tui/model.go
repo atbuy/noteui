@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -581,6 +582,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.syncSelectedNote()
 				return m, nil
 
+			case "N":
+				m.showDashboard = false
+				return m, createTemporaryNoteCmd(m.rootDir)
+
 			case "1":
 				return m, m.openDashboardRecent(0)
 			case "2":
@@ -601,7 +606,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, nil
 		}
-
 		if m.showMove {
 			switch msg.String() {
 			case "esc":
@@ -3628,8 +3632,8 @@ func (m *Model) toggleNotesTemporaryMode() {
 }
 
 func (m Model) renderDashboardView() string {
-	cardWidth := min(84, max(56, m.width-10))
-	innerWidth := max(20, cardWidth-6)
+	cardWidth := min(92, max(60, m.width-10))
+	innerWidth := max(24, cardWidth-6)
 
 	titleText := "noteui"
 	if strings.TrimSpace(m.version) != "" {
@@ -3639,20 +3643,6 @@ func (m Model) renderDashboardView() string {
 	rootText := filepath.Join("~", "notes")
 	if strings.TrimSpace(m.rootDir) != "" {
 		rootText = m.rootDir
-	}
-
-	stats := []string{
-		fmt.Sprintf("Notes: %d", len(m.notes)),
-		fmt.Sprintf("Temporary: %d", len(m.tempNotes)),
-		fmt.Sprintf("Pinned: %d", len(m.pinnedItems())),
-	}
-
-	actions := []string{
-		"enter  Open workspace",
-		"]      Open Temporary",
-		"P      Open Pins",
-		"1-5    Open recent note",
-		"q      Quit",
 	}
 
 	title := lipgloss.NewStyle().
@@ -3666,7 +3656,12 @@ func (m Model) renderDashboardView() string {
 		Foreground(mutedColor).
 		Width(innerWidth).
 		Align(lipgloss.Center).
-		Render("Fast local notes with previews, temp notes, and pins")
+		Render("Fast local notes with previews, temporary notes, pins, and privacy controls")
+
+	divider := lipgloss.NewStyle().
+		Foreground(subtleColor).
+		Width(innerWidth).
+		Render(strings.Repeat("─", innerWidth))
 
 	rootLabel := lipgloss.NewStyle().
 		Bold(true).
@@ -3678,12 +3673,33 @@ func (m Model) renderDashboardView() string {
 		Width(innerWidth).
 		Render(rootText)
 
-	statsLabel := lipgloss.NewStyle().
+	workspaceLabel := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accentSoftColor).
 		Render("Workspace")
 
-	statsBlock := lipgloss.JoinVertical(lipgloss.Left, stats...)
+	summaryLines := []string{
+		dashboardSummaryLine("Notes:", fmt.Sprintf("%d", len(m.notes)), innerWidth),
+		dashboardSummaryLine("Temporary:", fmt.Sprintf("%d", len(m.tempNotes)), innerWidth),
+		dashboardSummaryLine(
+			"Categories:",
+			fmt.Sprintf("%d", m.dashboardCategoriesCount()),
+			innerWidth,
+		),
+		dashboardSummaryLine(
+			"Pinned notes:",
+			fmt.Sprintf("%d", m.dashboardPinnedNotesCount()),
+			innerWidth,
+		),
+		dashboardSummaryLine(
+			"Pinned categories:",
+			fmt.Sprintf("%d", m.dashboardPinnedCategoriesCount()),
+			innerWidth,
+		),
+		dashboardSummaryLine("Theme:", m.dashboardThemeName(), innerWidth),
+		dashboardSummaryLine("Privacy:", m.dashboardPrivacySummary(), innerWidth),
+	}
+	workspaceBlock := lipgloss.JoinVertical(lipgloss.Left, summaryLines...)
 
 	recentLabel := lipgloss.NewStyle().
 		Bold(true).
@@ -3691,13 +3707,13 @@ func (m Model) renderDashboardView() string {
 		Render("Recent")
 
 	recentItems := m.dashboardRecentNotes(5)
-	recentLines := make([]string, 0, len(recentItems))
+	recentLines := make([]string, 0, len(recentItems)*2)
 	if len(recentItems) == 0 {
 		recentLines = append(recentLines, mutedStyle.Render("No recent notes"))
 	} else {
-		timestampWidth := 12
+		timestampWidth := 24
 		gapWidth := 2
-		contentWidth := max(12, innerWidth-timestampWidth-gapWidth)
+		leftWidth := max(16, innerWidth-timestampWidth-gapWidth)
 
 		for i, item := range recentItems {
 			tag := "[note]"
@@ -3714,36 +3730,52 @@ func (m Model) renderDashboardView() string {
 				Foreground(mutedColor).
 				Render(tag)
 
-			titleText := item.Display
-			leftText := lipgloss.JoinHorizontal(
+			prefix := lipgloss.JoinHorizontal(
 				lipgloss.Left,
 				num,
 				"  ",
 				tagStyled,
 				" ",
-				titleText,
 			)
 
-			leftCol := lipgloss.NewStyle().
-				Width(contentWidth).
-				MaxWidth(contentWidth).
-				Foreground(textColor).
-				Render(trimOrPad(leftText, contentWidth))
+			prefixWidth := lipgloss.Width(prefix)
+			titleWidth := max(8, leftWidth-prefixWidth)
 
+			titleCol := lipgloss.NewStyle().
+				Width(titleWidth).
+				MaxWidth(titleWidth).
+				Foreground(textColor).
+				Render(trimOrPad(item.Display, titleWidth))
+
+			leftCol := lipgloss.NewStyle().
+				Width(leftWidth).
+				Render(lipgloss.JoinHorizontal(lipgloss.Left, prefix, titleCol))
+
+			timeText := relativeDashboardTime(
+				item.Note.ModTime,
+			) + " · " + formatDashboardTime(
+				item.Note.ModTime,
+			)
 			timeCol := lipgloss.NewStyle().
 				Width(timestampWidth).
 				Align(lipgloss.Right).
 				Foreground(mutedColor).
-				Render(formatDashboardTime(item.Note.ModTime))
+				Render(timeText)
 
-			line := lipgloss.JoinHorizontal(
+			topLine := lipgloss.JoinHorizontal(
 				lipgloss.Top,
 				leftCol,
 				strings.Repeat(" ", gapWidth),
 				timeCol,
 			)
 
-			recentLines = append(recentLines, line)
+			pathLine := lipgloss.NewStyle().
+				Width(innerWidth).
+				PaddingLeft(4).
+				Foreground(mutedColor).
+				Render(shortenDashboardPath(m.rootDir, item.Note.Path))
+
+			recentLines = append(recentLines, topLine, pathLine)
 		}
 	}
 	recentBlock := lipgloss.JoinVertical(lipgloss.Left, recentLines...)
@@ -3751,15 +3783,27 @@ func (m Model) renderDashboardView() string {
 	actionsLabel := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accentSoftColor).
-		Render("Start")
+		Render("Quick actions")
 
-	actionLines := make([]string, 0, len(actions))
-	for _, line := range actions {
-		actionLines = append(actionLines, lipgloss.NewStyle().
-			Foreground(textColor).
-			Render(line))
+	actionLines := []string{
+		dashboardActionLine("enter", "Open workspace", innerWidth),
+		dashboardActionLine("]", "Open Temporary", innerWidth),
+		dashboardActionLine("P", "Open Pins", innerWidth),
+		dashboardActionLine("N", "Create temporary note", innerWidth),
+		dashboardActionLine("1-5", "Open recent note", innerWidth),
+		dashboardActionLine("q", "Quit", innerWidth),
 	}
 	actionsBlock := lipgloss.JoinVertical(lipgloss.Left, actionLines...)
+
+	tipsLabel := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accentSoftColor).
+		Render("Tip")
+
+	tipsBlock := lipgloss.NewStyle().
+		Foreground(mutedColor).
+		Width(innerWidth).
+		Render("This dashboard is optional. Set dashboard = false in your TOML config to start directly in the main workspace.")
 
 	warning := ""
 	if m.startupError != "" {
@@ -3774,17 +3818,22 @@ func (m Model) renderDashboardView() string {
 		title,
 		subtitle,
 		"",
+		divider,
+		"",
 		rootLabel,
 		rootValue,
 		"",
-		statsLabel,
-		statsBlock,
+		workspaceLabel,
+		workspaceBlock,
 		"",
 		recentLabel,
 		recentBlock,
 		"",
 		actionsLabel,
 		actionsBlock,
+		"",
+		tipsLabel,
+		tipsBlock,
 	}
 
 	if warning != "" {
@@ -3867,4 +3916,127 @@ func waitForWatchTeaCmd(events <-chan teaMsg) tea.Cmd {
 	return func() tea.Msg {
 		return waitForWatchCmd(events)()
 	}
+}
+
+func relativeDashboardTime(t time.Time) string {
+	now := time.Now()
+	if t.After(now) {
+		t = now
+	}
+
+	d := now.Sub(t)
+
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	case d < 48*time.Hour:
+		return "yesterday"
+	case d < 7*24*time.Hour:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	default:
+		return t.Local().Format("Jan 02")
+	}
+}
+
+func shortenDashboardPath(rootDir, fullPath string) string {
+	if strings.TrimSpace(fullPath) == "" {
+		return ""
+	}
+
+	if rootDir != "" {
+		if rel, err := filepath.Rel(rootDir, fullPath); err == nil && rel != "." {
+			return filepath.ToSlash(rel)
+		}
+	}
+
+	home, err := os.UserHomeDir()
+	if err == nil && home != "" {
+		if strings.HasPrefix(fullPath, home+string(filepath.Separator)) {
+			return "~/" + filepath.ToSlash(
+				strings.TrimPrefix(fullPath, home+string(filepath.Separator)),
+			)
+		}
+	}
+
+	return filepath.ToSlash(fullPath)
+}
+
+func (m Model) dashboardCategoriesCount() int {
+	count := 0
+	for _, c := range m.categories {
+		if c.RelPath != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func (m Model) dashboardPinnedNotesCount() int {
+	count := 0
+	for _, p := range m.pinnedNotes {
+		if p {
+			count++
+		}
+	}
+	return count
+}
+
+func (m Model) dashboardPinnedCategoriesCount() int {
+	count := 0
+	for _, p := range m.pinnedCats {
+		if p {
+			count++
+		}
+	}
+	return count
+}
+
+func (m Model) dashboardPrivacySummary() string {
+	if m.cfg.Preview.Privacy {
+		return "config"
+	}
+	if m.previewPrivacyEnabled {
+		return "on"
+	}
+	return "off"
+}
+
+func (m Model) dashboardThemeName() string {
+	name := strings.TrimSpace(m.cfg.Theme.Name)
+	if name == "" {
+		return "default"
+	}
+	return name
+}
+
+func dashboardActionLine(keyText, desc string, width int) string {
+	keyPart := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accentColor).
+		Render(keyText)
+
+	descPart := lipgloss.NewStyle().
+		Foreground(textColor).
+		Render(desc)
+
+	line := lipgloss.JoinHorizontal(lipgloss.Left, keyPart, "  ", descPart)
+	return lipgloss.NewStyle().Width(width).Render(line)
+}
+
+func dashboardSummaryLine(label, value string, width int) string {
+	labelPart := lipgloss.NewStyle().
+		Foreground(mutedColor).
+		Render(label)
+
+	valuePart := lipgloss.NewStyle().
+		Foreground(textColor).
+		Bold(true).
+		Render(value)
+
+	line := lipgloss.JoinHorizontal(lipgloss.Left, labelPart, " ", valuePart)
+	return lipgloss.NewStyle().Width(width).Render(line)
 }
