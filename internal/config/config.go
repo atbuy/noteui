@@ -201,6 +201,16 @@ func ValidThemeNames() []string {
 		"latte",
 		"solarized-light",
 		"paper",
+		"onedark",
+		"kanagawa",
+		"dracula",
+		"everforest",
+		"everforest-dark",
+		"tokyo-night-storm",
+		"tokyonight-storm",
+		"github-light",
+		"github-dark",
+		"carbonfox",
 	}
 }
 

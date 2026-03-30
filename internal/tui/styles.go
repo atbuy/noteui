@@ -254,97 +254,239 @@ func builtinTheme(name string) themePalette {
 			BgColor:         "#2E3440",
 			PanelBgColor:    "#3B4252",
 			BorderColor:     "#4C566A",
-			AccentColor:     "#5E81AC",
-			AccentSoftColor: "#88C0D0",
+			AccentColor:     "#88C0D0",
+			AccentSoftColor: "#8FBCBB",
 			TextColor:       "#ECEFF4",
 			MutedColor:      "#D8DEE9",
 			SubtleColor:     "#4C566A",
 			ChipBgColor:     "#434C5E",
 			ErrorColor:      "#BF616A",
 			SuccessColor:    "#A3BE8C",
-			SelectedBgColor: "#5E81AC",
+			SelectedBgColor: "#4C566A",
 			SelectedFgColor: "#ECEFF4",
 		}
+
 	case "gruvbox":
 		return themePalette{
 			BgColor:         "#282828",
-			PanelBgColor:    "#3C3836",
+			PanelBgColor:    "#32302F",
 			BorderColor:     "#504945",
-			AccentColor:     "#458588",
-			AccentSoftColor: "#83A598",
+			AccentColor:     "#D79921",
+			AccentSoftColor: "#FABD2F",
 			TextColor:       "#EBDBB2",
 			MutedColor:      "#A89984",
 			SubtleColor:     "#504945",
-			ChipBgColor:     "#504945",
+			ChipBgColor:     "#3C3836",
 			ErrorColor:      "#FB4934",
 			SuccessColor:    "#B8BB26",
-			SelectedBgColor: "#458588",
+			SelectedBgColor: "#504945",
 			SelectedFgColor: "#FBF1C7",
 		}
+
 	case "catppuccin", "catppuccin-mocha", "mocha":
 		return themePalette{
 			BgColor:         "#1E1E2E",
 			PanelBgColor:    "#313244",
 			BorderColor:     "#45475A",
-			AccentColor:     "#89B4FA",
-			AccentSoftColor: "#B4BEFE",
+			AccentColor:     "#CBA6F7",
+			AccentSoftColor: "#89B4FA",
 			TextColor:       "#CDD6F4",
 			MutedColor:      "#A6ADC8",
 			SubtleColor:     "#45475A",
 			ChipBgColor:     "#45475A",
 			ErrorColor:      "#F38BA8",
 			SuccessColor:    "#A6E3A1",
-			SelectedBgColor: "#89B4FA",
-			SelectedFgColor: "#11111B",
+			SelectedBgColor: "#585B70",
+			SelectedFgColor: "#CDD6F4",
 		}
-	case "catppuccin-latte", "latte":
+
+	case "latte":
 		return themePalette{
 			BgColor:         "#EFF1F5",
 			PanelBgColor:    "#E6E9EF",
 			BorderColor:     "#BCC0CC",
-			AccentColor:     "#1E66F5",
-			AccentSoftColor: "#7287FD",
+			AccentColor:     "#8839EF",
+			AccentSoftColor: "#1E66F5",
 			TextColor:       "#4C4F69",
 			MutedColor:      "#6C6F85",
 			SubtleColor:     "#BCC0CC",
 			ChipBgColor:     "#CCD0DA",
 			ErrorColor:      "#D20F39",
 			SuccessColor:    "#40A02B",
-			SelectedBgColor: "#1E66F5",
-			SelectedFgColor: "#EFF1F5",
+			SelectedBgColor: "#BCC0CC",
+			SelectedFgColor: "#4C4F69",
 		}
+
 	case "solarized-light":
 		return themePalette{
 			BgColor:         "#FDF6E3",
 			PanelBgColor:    "#EEE8D5",
 			BorderColor:     "#93A1A1",
-			AccentColor:     "#268BD2",
-			AccentSoftColor: "#2AA198",
+			AccentColor:     "#B58900",
+			AccentSoftColor: "#268BD2",
 			TextColor:       "#586E75",
 			MutedColor:      "#657B83",
 			SubtleColor:     "#93A1A1",
 			ChipBgColor:     "#E4DDC8",
 			ErrorColor:      "#DC322F",
 			SuccessColor:    "#859900",
-			SelectedBgColor: "#268BD2",
-			SelectedFgColor: "#FDF6E3",
+			SelectedBgColor: "#D3CBB7",
+			SelectedFgColor: "#586E75",
 		}
+
 	case "paper":
 		return themePalette{
 			BgColor:         "#FAFAF7",
 			PanelBgColor:    "#F0EFEA",
 			BorderColor:     "#C8C6BE",
-			AccentColor:     "#4A7BD0",
-			AccentSoftColor: "#6B93E5",
+			AccentColor:     "#B65C2A",
+			AccentSoftColor: "#4A7BD0",
 			TextColor:       "#2F3440",
 			MutedColor:      "#667085",
 			SubtleColor:     "#C8C6BE",
 			ChipBgColor:     "#E6E3DB",
 			ErrorColor:      "#C0392B",
 			SuccessColor:    "#2E7D32",
-			SelectedBgColor: "#4A7BD0",
-			SelectedFgColor: "#FFFFFF",
+			SelectedBgColor: "#DDD9CF",
+			SelectedFgColor: "#2F3440",
 		}
+
+	case "onedark":
+		return themePalette{
+			BgColor:         "#1E222A",
+			PanelBgColor:    "#252B34",
+			BorderColor:     "#353B45",
+			AccentColor:     "#98C379",
+			AccentSoftColor: "#E5C07B",
+			TextColor:       "#ABB2BF",
+			MutedColor:      "#7F848E",
+			SubtleColor:     "#353B45",
+			ChipBgColor:     "#2C313A",
+			ErrorColor:      "#E06C75",
+			SuccessColor:    "#98C379",
+			SelectedBgColor: "#353B45",
+			SelectedFgColor: "#E6EAF2",
+		}
+
+	case "kanagawa":
+		return themePalette{
+			BgColor:         "#1F1F28",
+			PanelBgColor:    "#2A2A37",
+			BorderColor:     "#54546D",
+			AccentColor:     "#C4B28A",
+			AccentSoftColor: "#7E9CD8",
+			TextColor:       "#DCD7BA",
+			MutedColor:      "#C8C093",
+			SubtleColor:     "#54546D",
+			ChipBgColor:     "#363646",
+			ErrorColor:      "#E46876",
+			SuccessColor:    "#98BB6C",
+			SelectedBgColor: "#2D4F67",
+			SelectedFgColor: "#DCD7BA",
+		}
+
+	case "dracula":
+		return themePalette{
+			BgColor:         "#282A36",
+			PanelBgColor:    "#21222C",
+			BorderColor:     "#44475A",
+			AccentColor:     "#FF79C6",
+			AccentSoftColor: "#BD93F9",
+			TextColor:       "#F8F8F2",
+			MutedColor:      "#B6B6B2",
+			SubtleColor:     "#44475A",
+			ChipBgColor:     "#343746",
+			ErrorColor:      "#FF5555",
+			SuccessColor:    "#50FA7B",
+			SelectedBgColor: "#44475A",
+			SelectedFgColor: "#F8F8F2",
+		}
+
+	case "everforest", "everforest-dark":
+		return themePalette{
+			BgColor:         "#2B3339",
+			PanelBgColor:    "#323C41",
+			BorderColor:     "#4F5B58",
+			AccentColor:     "#A7C080",
+			AccentSoftColor: "#DBBC7F",
+			TextColor:       "#D3C6AA",
+			MutedColor:      "#9DA9A0",
+			SubtleColor:     "#4F5B58",
+			ChipBgColor:     "#374247",
+			ErrorColor:      "#E67E80",
+			SuccessColor:    "#A7C080",
+			SelectedBgColor: "#425047",
+			SelectedFgColor: "#D3C6AA",
+		}
+
+	case "tokyo-night-storm", "tokyonight-storm", "tokyo night storm":
+		return themePalette{
+			BgColor:         "#24283B",
+			PanelBgColor:    "#1F2335",
+			BorderColor:     "#414868",
+			AccentColor:     "#7AA2F7",
+			AccentSoftColor: "#7DCFFF",
+			TextColor:       "#C0CAF5",
+			MutedColor:      "#A9B1D6",
+			SubtleColor:     "#414868",
+			ChipBgColor:     "#2A3050",
+			ErrorColor:      "#F7768E",
+			SuccessColor:    "#9ECE6A",
+			SelectedBgColor: "#364A82",
+			SelectedFgColor: "#C0CAF5",
+		}
+
+	case "github-light":
+		return themePalette{
+			BgColor:         "#FFFFFF",
+			PanelBgColor:    "#F6F8FA",
+			BorderColor:     "#D0D7DE",
+			AccentColor:     "#0969DA",
+			AccentSoftColor: "#1F6FEB",
+			TextColor:       "#24292F",
+			MutedColor:      "#57606A",
+			SubtleColor:     "#D0D7DE",
+			ChipBgColor:     "#EAEEF2",
+			ErrorColor:      "#CF222E",
+			SuccessColor:    "#1A7F37",
+			SelectedBgColor: "#DDF4FF",
+			SelectedFgColor: "#24292F",
+		}
+
+	case "github-dark":
+		return themePalette{
+			BgColor:         "#0D1117",
+			PanelBgColor:    "#161B22",
+			BorderColor:     "#30363D",
+			AccentColor:     "#8B949E",
+			AccentSoftColor: "#58A6FF",
+			TextColor:       "#C9D1D9",
+			MutedColor:      "#8B949E",
+			SubtleColor:     "#30363D",
+			ChipBgColor:     "#21262D",
+			ErrorColor:      "#F85149",
+			SuccessColor:    "#3FB950",
+			SelectedBgColor: "#21262D",
+			SelectedFgColor: "#F0F6FC",
+		}
+
+	case "carbonfox":
+		return themePalette{
+			BgColor:         "#161616",
+			PanelBgColor:    "#202020",
+			BorderColor:     "#3A3A3A",
+			AccentColor:     "#A0A0A0",
+			AccentSoftColor: "#78A9FF",
+			TextColor:       "#F2F4F8",
+			MutedColor:      "#B0B0B0",
+			SubtleColor:     "#3A3A3A",
+			ChipBgColor:     "#262626",
+			ErrorColor:      "#FF8389",
+			SuccessColor:    "#42BE65",
+			SelectedBgColor: "#2B2B2B",
+			SelectedFgColor: "#F2F4F8",
+		}
+
 	default:
 		return themePalette{
 			BgColor:         "#1E1E1E",
