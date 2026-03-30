@@ -652,6 +652,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if msg.String() == "esc" && m.listMode == listModeTemporary {
+			if m.focus == focusPreview {
+				m.focus = focusTree
+				m.status = "tree focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+			}
+
+			if m.searchMode {
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
+				return m, nil
+			}
+
+			m.switchToNotesMode()
+			m.status = "left temporary"
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
