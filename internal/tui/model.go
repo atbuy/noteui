@@ -1378,8 +1378,7 @@ func (m Model) renderPreviewSegment() string {
 }
 
 func (m Model) renderHelpModal() string {
-	modalWidth := min(76, max(50, m.width-10))
-	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
+	modalWidth, innerWidth := m.modalDimensions(50, 76)
 
 	title := lipgloss.NewStyle().
 		Width(innerWidth).
@@ -1431,118 +1430,159 @@ func (m Model) renderHelpModal() string {
 }
 
 func (m Model) renderMoveModal() string {
-	title := modalTitleStyle.Render("Move")
+	title := "Move"
+	hint := "Enter the new relative path under ~/notes."
+	label := "Path"
 
-	hint := modalMutedStyle.Render("Enter the new relative path under ~/notes")
+	if m.movePending != nil {
+		switch m.movePending.kind {
+		case moveTargetNote:
+			title = "Move note"
+			hint = "Move the note to a new relative path under ~/notes."
+			label = "Note"
+		case moveTargetCategory:
+			title = "Move category"
+			hint = "Move the category to a new relative path under ~/notes."
+			label = "Category"
+		}
+	}
 
-	body := lipgloss.JoinVertical(
-		lipgloss.Left,
+	return m.renderStandardModal(
 		title,
-		"",
 		hint,
-		"",
-		m.moveInput.View(),
-		"",
-		modalFooterStyle.Render("Enter to move • Esc to cancel"),
+		label,
+		m.moveInput,
+		"Enter to move • Esc to cancel",
 	)
-
-	return modalCardStyle(min(76, max(48, m.width-10))).Render(body)
 }
 
 func (m Model) renderRenameModal() string {
-	modalWidth := min(76, max(48, m.width-10))
-	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
-
-	titleText := "Rename note"
-	hintText := "Change the note title. The file name will update automatically."
+	title := "Rename note"
+	hint := "Change the note title. The file name will update automatically."
+	label := "Title"
 
 	if m.renamePending != nil && m.renamePending.kind == renameTargetCategory {
-		titleText = "Rename category"
-		hintText = "Change the category path under ~/notes."
+		title = "Rename category"
+		hint = "Change the category path under ~/notes."
+		label = "Category"
 	}
 
-	title := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(modalTitleStyle.Render(titleText))
-
-	hint := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(modalMutedStyle.Render(hintText))
-
-	inputRow := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(
-			lipgloss.NewStyle().
-				Width(innerWidth).
-				Background(modalBgColor).
-				Render(m.renameInput.View()),
-		)
-
-	footer := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(modalFooterStyle.Render("Enter to rename • Esc to cancel"))
-
-	blank := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render("")
-
-	content := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(
-			lipgloss.JoinVertical(
-				lipgloss.Left,
-				title,
-				blank,
-				hint,
-				blank,
-				inputRow,
-				blank,
-				footer,
-			),
-		)
-
-	return modalCardStyle(modalWidth).Render(content)
+	return m.renderStandardModal(
+		title,
+		hint,
+		label,
+		m.renameInput,
+		"Enter to rename • Esc to cancel",
+	)
 }
 
 func (m Model) renderCreateCategoryModal() string {
-	modalWidth := min(76, max(48, m.width-10))
+	return m.renderStandardModal(
+		"Create category",
+		"Use / to create nested categories, e.g. work/project-a",
+		"Category",
+		m.categoryInput,
+		"Enter to create • Esc to cancel",
+	)
+}
+
+func (m Model) modalDimensions(minWidth, maxWidth int) (int, int) {
+	modalWidth := min(maxWidth, max(minWidth, m.width-10))
 	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
+	return modalWidth, innerWidth
+}
 
-	title := lipgloss.NewStyle().
+func (m Model) renderModalTitle(text string, innerWidth int) string {
+	return lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
-		Render(modalTitleStyle.Render("Create category"))
+		Render(modalTitleStyle.Render(text))
+}
 
-	hint := lipgloss.NewStyle().
+func (m Model) renderModalHint(text string, innerWidth int) string {
+	return lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
-		Render(modalMutedStyle.Render("Use / to create nested categories, e.g. work/project-a"))
+		Render(modalMutedStyle.Render(text))
+}
 
-	inputRow := lipgloss.NewStyle().
+func (m Model) renderModalFooter(text string, innerWidth int) string {
+	return lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
-		Render(
-			lipgloss.NewStyle().
-				Width(innerWidth).
-				Background(modalBgColor).
-				Render(m.categoryInput.View()),
-		)
+		Render(modalFooterStyle.Render(text))
+}
 
-	footer := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(modalFooterStyle.Render("Enter to create • Esc to cancel"))
-
-	blank := lipgloss.NewStyle().
+func (m Model) renderModalBlank(innerWidth int) string {
+	return lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
 		Render("")
+}
+
+func (m Model) renderModalInputRow(label string, input textinput.Model, innerWidth int) string {
+	local := input
+	local.Prompt = ""
+	local.Width = max(12, min(36, innerWidth-20))
+
+	local.TextStyle = lipgloss.NewStyle().
+		Foreground(modalTextColor).
+		Background(modalBgColor)
+
+	local.PlaceholderStyle = lipgloss.NewStyle().
+		Foreground(modalMutedColor).
+		Background(modalBgColor)
+
+	local.Cursor.Style = lipgloss.NewStyle().
+		Foreground(modalTextColor).
+		Background(modalTextColor)
+
+	labelText := lipgloss.NewStyle().
+		Foreground(modalAccentColor).
+		Background(modalBgColor).
+		Bold(true).
+		Render(label + ":")
+
+	// Make the label a 3-line block so its text aligns with the input text line,
+	// not with the top border of the input box.
+	promptBlock := lipgloss.NewStyle().
+		Background(modalBgColor).
+		Render(
+			lipgloss.JoinVertical(
+				lipgloss.Left,
+				"",
+				labelText,
+				"",
+			),
+		)
+
+	inputField := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(modalAccentColor).
+		BorderBackground(modalBgColor).
+		Background(modalBgColor).
+		Padding(0, 1).
+		Render(local.View())
+
+	return lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(
+			lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				promptBlock,
+				"",
+				inputField,
+			),
+		)
+}
+
+func (m Model) renderStandardModal(
+	title, hint, label string,
+	input textinput.Model,
+	footer string,
+) string {
+	modalWidth, innerWidth := m.modalDimensions(48, 76)
 
 	content := lipgloss.NewStyle().
 		Width(innerWidth).
@@ -1550,13 +1590,13 @@ func (m Model) renderCreateCategoryModal() string {
 		Render(
 			lipgloss.JoinVertical(
 				lipgloss.Left,
-				title,
-				blank,
-				hint,
-				blank,
-				inputRow,
-				blank,
-				footer,
+				m.renderModalTitle(title, innerWidth),
+				m.renderModalBlank(innerWidth),
+				m.renderModalHint(hint, innerWidth),
+				m.renderModalBlank(innerWidth),
+				m.renderModalInputRow(label, input, innerWidth),
+				m.renderModalBlank(innerWidth),
+				m.renderModalFooter(footer, innerWidth),
 			),
 		)
 
