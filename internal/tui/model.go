@@ -168,6 +168,9 @@ type Model struct {
 	previewPath    string
 	previewContent string
 
+	previewPrivacyEnabled      bool
+	previewPrivacyForcedByNote bool
+
 	focus             paneFocus
 	pendingG          bool
 	pendingBracketDir string
@@ -268,24 +271,25 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	}
 
 	return Model{
-		rootDir:        root,
-		version:        version,
-		status:         "loading notes...",
-		expanded:       expanded,
-		listMode:       listModeNotes,
-		categoryInput:  categoryInput,
-		searchInput:    searchInput,
-		moveInput:      moveInput,
-		renameInput:    renameInput,
-		preserveCursor: -1,
-		startupError:   startupError,
-		cfg:            cfg,
-		preview:        vp,
-		tempCursor:     0,
-		focus:          focusTree,
-		state:          st,
-		pinnedNotes:    pinnedNotes,
-		pinnedCats:     pinnedCats,
+		rootDir:               root,
+		version:               version,
+		status:                "loading notes...",
+		expanded:              expanded,
+		categoryInput:         categoryInput,
+		searchInput:           searchInput,
+		moveInput:             moveInput,
+		renameInput:           renameInput,
+		preserveCursor:        -1,
+		startupError:          startupError,
+		cfg:                   cfg,
+		preview:               vp,
+		focus:                 focusTree,
+		state:                 st,
+		pinnedNotes:           pinnedNotes,
+		pinnedCats:            pinnedCats,
+		listMode:              listModeNotes,
+		tempCursor:            0,
+		previewPrivacyEnabled: cfg.Preview.Privacy,
 	}
 }
 
@@ -751,6 +755,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingBracketDir = ""
 
 		// Normal actions only when not inside search mode.
+		if key.Matches(msg, keys.TogglePreviewPrivacy) {
+			if m.cfg.Preview.Privacy {
+				m.status = "preview privacy forced by config"
+				return m, nil
+			}
+
+			m.previewPrivacyEnabled = !m.previewPrivacyEnabled
+			m.previewPath = ""
+
+			if m.previewPrivacyEnabled {
+				m.status = "preview privacy enabled"
+			} else {
+				m.status = "preview privacy disabled"
+			}
+
+			m.refreshPreview()
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.Move) {
 			m.armMoveCurrent()
 			return m, nil
@@ -1491,6 +1514,7 @@ func (m Model) renderStatus() string {
 	parts := []string{
 		m.renderModeSegment(),
 		m.renderSelectionSegment(),
+		m.renderPrivacySegment(),
 	}
 
 	if filter := m.renderFilterSegment(); filter != "" {
@@ -1649,10 +1673,12 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("j/k", "Move up and down", innerWidth),
 		m.renderHelpLine("enter/o", "Open note or toggle category", innerWidth),
 		m.renderHelpLine("h/l", "Collapse/Expand category", innerWidth),
+		m.renderHelpLine("]/[", "Switch notes/temporary", innerWidth),
 		m.renderHelpLine("/", "Search", innerWidth),
 		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
 		m.renderHelpLine("n", "New note in current view", innerWidth),
 		m.renderHelpLine("N", "New temporary note", innerWidth),
+		m.renderHelpLine("B", "Toggle preview privacy", innerWidth),
 		m.renderHelpLine("C", "Create category", innerWidth),
 		m.renderHelpLine("dd", "Trash note/category", innerWidth),
 		m.renderHelpLine("r", "Refresh", innerWidth),
@@ -1661,7 +1687,6 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("m", "Move note/category", innerWidth),
 		m.renderHelpLine("R", "Rename note/category", innerWidth),
 		m.renderHelpLine("p", "Pin note/category", innerWidth),
-		m.renderHelpLine("]/[", "Switch notes/temporary", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -2198,7 +2223,15 @@ func (m *Model) refreshPreview() {
 			return
 		}
 
-		rendered := m.renderPreviewMarkdown(filepath.Join(".tmp", n.RelPath), raw)
+		private := notes.NoteIsPrivate(raw)
+		body := notes.StripFrontMatter(raw)
+
+		rendered := m.renderPreviewMarkdown(filepath.Join(".tmp", n.RelPath), body)
+		if m.effectivePreviewPrivacy(private) {
+			rendered = blurRenderedText(rendered)
+		}
+
+		m.previewPrivacyForcedByNote = private
 		m.previewPath = n.Path
 		m.previewContent = rendered
 		m.preview.SetContent(rendered)
@@ -2211,6 +2244,7 @@ func (m *Model) refreshPreview() {
 	if item == nil {
 		m.previewPath = ""
 		m.previewContent = "Nothing selected"
+		m.previewPrivacyForcedByNote = false
 		m.preview.SetContent(m.previewContent)
 		m.rebuildPreviewHeadingsFromRendered()
 		m.preview.GotoTop()
@@ -2240,6 +2274,7 @@ func (m *Model) refreshPreview() {
 		rendered := m.renderPreviewMarkdown(pathText, content)
 		m.previewPath = "category:" + item.RelPath
 		m.previewContent = rendered
+		m.previewPrivacyForcedByNote = false
 		m.preview.SetContent(rendered)
 		m.rebuildPreviewHeadingsFromRendered()
 		m.preview.GotoTop()
@@ -2269,7 +2304,15 @@ func (m *Model) refreshPreview() {
 		return
 	}
 
-	rendered := m.renderPreviewMarkdown(item.Note.RelPath, raw)
+	private := notes.NoteIsPrivate(raw)
+	body := notes.StripFrontMatter(raw)
+
+	rendered := m.renderPreviewMarkdown(item.Note.RelPath, body)
+	if m.effectivePreviewPrivacy(private) {
+		rendered = blurRenderedText(rendered)
+	}
+
+	m.previewPrivacyForcedByNote = private
 	m.previewPath = item.Note.Path
 	m.previewContent = rendered
 	m.preview.SetContent(rendered)
@@ -2796,4 +2839,53 @@ func (m Model) filteredTempNotes() []notes.Note {
 	}
 
 	return out
+}
+
+func (m Model) effectivePreviewPrivacy(noteForced bool) bool {
+	return m.cfg.Preview.Privacy || m.previewPrivacyEnabled || noteForced
+}
+
+func blurRenderedText(s string) string {
+	var b strings.Builder
+	inEsc := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+
+		if inEsc {
+			b.WriteByte(ch)
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+
+		if ch == 0x1b {
+			inEsc = true
+			b.WriteByte(ch)
+			continue
+		}
+
+		if ch == '\n' || ch == '\t' || ch == ' ' {
+			b.WriteByte(ch)
+			continue
+		}
+
+		b.WriteRune('•')
+	}
+
+	return b.String()
+}
+
+func (m Model) renderPrivacySegment() string {
+	switch {
+	case m.cfg.Preview.Privacy:
+		return "privacy: config"
+	case m.previewPrivacyForcedByNote:
+		return "privacy: note"
+	case m.previewPrivacyEnabled:
+		return "privacy: on"
+	default:
+		return "privacy: off"
+	}
 }

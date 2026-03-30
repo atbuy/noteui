@@ -77,6 +77,7 @@ type PreviewConfig struct {
 	Style           string   `toml:"style"`
 	SyntaxHighlight bool     `toml:"syntax_highlight"`
 	CodeStyle       string   `toml:"code_style"`
+	Privacy         bool     `toml:"privacy"`
 }
 
 func Default() Config {
@@ -113,6 +114,7 @@ func Default() Config {
 			Style:           "dark",
 			SyntaxHighlight: true,
 			CodeStyle:       "monokai",
+			Privacy:         false,
 		},
 	}
 }

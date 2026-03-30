@@ -5,20 +5,21 @@ import (
 )
 
 type keyMap struct {
-	Open             key.Binding
-	Refresh          key.Binding
-	Quit             key.Binding
-	Focus            key.Binding
-	NewNote          key.Binding
-	Search           key.Binding
-	ShowHelp         key.Binding
-	CreateCategory   key.Binding
-	ToggleCategory   key.Binding
-	Delete           key.Binding
-	Move             key.Binding
-	Rename           key.Binding
-	Pin              key.Binding
-	NewTemporaryNote key.Binding
+	Open                 key.Binding
+	Refresh              key.Binding
+	Quit                 key.Binding
+	Focus                key.Binding
+	NewNote              key.Binding
+	NewTemporaryNote     key.Binding
+	Search               key.Binding
+	ShowHelp             key.Binding
+	CreateCategory       key.Binding
+	ToggleCategory       key.Binding
+	Delete               key.Binding
+	Move                 key.Binding
+	Rename               key.Binding
+	Pin                  key.Binding
+	TogglePreviewPrivacy key.Binding
 }
 
 var keys = keyMap{
@@ -49,6 +50,10 @@ var keys = keyMap{
 	NewTemporaryNote: key.NewBinding(
 		key.WithKeys("N"),
 		key.WithHelp("N", "New temporary note"),
+	),
+	TogglePreviewPrivacy: key.NewBinding(
+		key.WithKeys("B"),
+		key.WithHelp("B", "Toggle preview privacy"),
 	),
 	ShowHelp: key.NewBinding(
 		key.WithKeys("?"),
