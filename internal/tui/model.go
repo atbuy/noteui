@@ -465,12 +465,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if m.showMove {
 			switch msg.String() {
-			case "pgdown", "ctrl+f":
-				m.preview.PageDown()
-				return m, nil
-			case "pgup", "ctrl+b":
-				m.preview.PageUp()
-				return m, nil
 			case "esc":
 				m.showMove = false
 				m.movePending = nil
@@ -577,6 +571,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		// Global quit always works.
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
@@ -587,28 +582,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if key.Matches(msg, keys.Move) {
-			m.armMoveCurrent()
-			return m, nil
-		}
+		// Search mode owns the keyboard.
+		if m.searchMode {
+			switch msg.String() {
+			case "esc":
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
+				return m, nil
 
-		if key.Matches(msg, keys.Rename) {
-			m.armRenameCurrent()
-			return m, nil
-		}
+			case "enter":
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
+				return m, nil
 
-		if key.Matches(msg, keys.Delete) {
-			m.armDeleteCurrent()
-			return m, nil
-		}
+			case "up":
+				m.moveTreeCursor(-1)
+				return m, nil
 
-		if key.Matches(msg, keys.Pin) {
-			if err := m.togglePinCurrent(); err != nil {
-				m.status = "pin failed: " + err.Error()
+			case "down":
+				m.moveTreeCursor(1)
+				return m, nil
 			}
+
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.rebuildTree()
+			return m, cmd
+		}
+
+		// Start search. Do NOT use keys.Focus here.
+		if key.Matches(msg, keys.Search) {
+			m.searchMode = true
+			m.searchInput.Focus()
+			m.status = "search"
 			return m, nil
 		}
 
+		// Clear applied search when already out of search mode.
+		if msg.String() == "esc" && strings.TrimSpace(m.searchInput.Value()) != "" {
+			m.searchInput.SetValue("")
+			m.searchInput.Blur()
+			m.searchMode = false
+			m.rebuildTree()
+			m.status = "search cleared"
+			return m, nil
+		}
+
+		// Pane focus toggle.
 		if key.Matches(msg, keys.Focus) {
 			if m.focus == focusTree {
 				m.focus = focusPreview
@@ -622,63 +644,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Search mode
-		if m.searchMode {
-			switch msg.String() {
-			case "esc":
-				m.searchMode = false
-				m.searchInput.Blur()
-				m.status = "search applied"
-				return m, nil
-			case "enter":
-				m.searchMode = false
-				m.searchInput.Blur()
-				m.status = "search applied"
-				return m, nil
-			}
-
-			var cmd tea.Cmd
-			m.searchInput, cmd = m.searchInput.Update(msg)
-			m.rebuildTree()
-			return m, cmd
-		}
-
-		// Start search
-		if key.Matches(msg, keys.Search) || key.Matches(msg, keys.Focus) {
-			m.searchMode = true
-			m.searchInput.Focus()
-			m.status = "search"
-			return m, nil
-		}
-
-		// Clear applied search on second esc
-		if msg.String() == "esc" && strings.TrimSpace(m.searchInput.Value()) != "" {
-			m.searchInput.SetValue("")
-			m.searchInput.Blur()
-			m.searchMode = false
-			m.rebuildTree()
-			m.status = "search cleared"
-			return m, nil
-		}
-
-		if key.Matches(msg, keys.CreateCategory) {
-			m.showCreateCategory = true
-			m.categoryInput.SetValue(m.currentCategoryPrefix())
-			m.categoryInput.Focus()
-			m.categoryInput.CursorEnd()
-			m.status = "new category"
-			return m, nil
-		}
-
-		if key.Matches(msg, keys.Refresh) {
-			m.status = "refreshing..."
-			return m, refreshAllCmd(m.rootDir)
-		}
-
-		if key.Matches(msg, keys.NewNote) {
-			return m, createNoteCmd(m.rootDir, m.currentTargetDir())
-		}
-
+		// Preview-focused navigation.
 		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMove &&
 			!m.showRename {
 			switch msg.String() {
@@ -761,6 +727,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.pendingG = false
 		m.pendingBracketDir = ""
+
+		// Normal actions only when not inside search mode.
+		if key.Matches(msg, keys.Move) {
+			m.armMoveCurrent()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Rename) {
+			m.armRenameCurrent()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Delete) {
+			m.armDeleteCurrent()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Pin) {
+			if err := m.togglePinCurrent(); err != nil {
+				m.status = "pin failed: " + err.Error()
+			}
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.CreateCategory) {
+			m.showCreateCategory = true
+			m.categoryInput.SetValue(m.currentCategoryPrefix())
+			m.categoryInput.Focus()
+			m.categoryInput.CursorEnd()
+			m.status = "new category"
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.Refresh) {
+			m.status = "refreshing..."
+			return m, refreshAllCmd(m.rootDir)
+		}
+
+		if key.Matches(msg, keys.NewNote) {
+			return m, createNoteCmd(m.rootDir, m.currentTargetDir())
+		}
 
 		switch msg.String() {
 		case "up", "k":
