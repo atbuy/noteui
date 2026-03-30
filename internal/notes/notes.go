@@ -26,6 +26,93 @@ type Note struct {
 	ModTime   time.Time
 }
 
+func TempRoot(root string) string {
+	return filepath.Join(root, ".tmp")
+}
+
+func DiscoverTemporary(root string) ([]Note, error) {
+	tempRoot := TempRoot(root)
+
+	info, err := os.Stat(tempRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			if mkErr := os.MkdirAll(tempRoot, 0o755); mkErr != nil {
+				return nil, mkErr
+			}
+			return []Note{}, nil
+		}
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("temporary notes root is not a directory: %s", tempRoot)
+	}
+
+	var out []Note
+
+	err = filepath.WalkDir(tempRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") && path != tempRoot {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if !IsNoteFile(path) {
+			return nil
+		}
+
+		rel, err := filepath.Rel(tempRoot, path)
+		if err != nil {
+			return err
+		}
+
+		category := filepath.Dir(rel)
+		if category == "." {
+			category = ""
+		}
+
+		preview, _ := ReadPreview(path)
+		title := ExtractTitle(preview)
+		if title == "" {
+			title = fallbackTitleFromFilename(filepath.Base(path))
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+
+		out = append(out, Note{
+			Root:      tempRoot,
+			Path:      path,
+			RelPath:   rel,
+			Name:      filepath.Base(path),
+			TitleText: title,
+			Category:  category,
+			Preview:   preview,
+			ModTime:   info.ModTime(),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].RelPath < out[j].RelPath
+	})
+
+	return out, nil
+}
+
+func CreateTemporaryNote(root string) (string, error) {
+	return CreateNote(TempRoot(root), "")
+}
+
 func (n Note) Title() string {
 	if strings.TrimSpace(n.TitleText) != "" {
 		return n.TitleText
