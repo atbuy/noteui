@@ -12,6 +12,7 @@ import (
 )
 
 type Config struct {
+	Dashboard  bool             `toml:"dashboard"`
 	Theme      ThemeConfig      `toml:"theme"`
 	Typography TypographyConfig `toml:"typography"`
 	Icons      IconsConfig      `toml:"icons"`
@@ -82,6 +83,7 @@ type PreviewConfig struct {
 
 func Default() Config {
 	return Config{
+		Dashboard: true,
 		Theme: ThemeConfig{
 			Name:          "default",
 			BorderStyle:   "rounded",

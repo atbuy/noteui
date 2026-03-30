@@ -295,6 +295,8 @@ func MoveNote(root, oldRelPath, newRelPath string) error {
 }
 
 func ExtractTitle(content string) string {
+	content = StripFrontMatter(content)
+
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "# ") {

@@ -76,6 +76,12 @@ const (
 	renameTargetCategory
 )
 
+type dashboardRecentNote struct {
+	Note    notes.Note
+	IsTemp  bool
+	Display string
+}
+
 type movePending struct {
 	kind       moveTargetKind
 	oldRelPath string
@@ -202,7 +208,8 @@ type Model struct {
 	pinnedNotes map[string]bool
 	pinnedCats  map[string]bool
 
-	showHelp bool
+	showHelp      bool
+	showDashboard bool
 
 	showCreateCategory bool
 	categoryInput      textinput.Model
@@ -309,6 +316,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		tempCursor:            0,
 		pinsCursor:            0,
 		previewPrivacyEnabled: cfg.Preview.Privacy,
+		showDashboard:         cfg.Dashboard,
 	}
 }
 
@@ -514,6 +522,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, refreshAllCmd(m.rootDir)
 
 	case tea.KeyMsg:
+		if m.showDashboard {
+			switch msg.String() {
+			case "enter":
+				m.showDashboard = false
+				m.status = "workspace"
+				return m, nil
+
+			case "]":
+				m.showDashboard = false
+				m.switchToTemporaryMode()
+				m.status = "temporary"
+				return m, nil
+
+			case "P":
+				m.showDashboard = false
+				m.listMode = listModePins
+				m.status = "pins"
+				m.syncSelectedNote()
+				return m, nil
+
+			case "1":
+				return m, m.openDashboardRecent(0)
+			case "2":
+				return m, m.openDashboardRecent(1)
+			case "3":
+				return m, m.openDashboardRecent(2)
+			case "4":
+				return m, m.openDashboardRecent(3)
+			case "5":
+				return m, m.openDashboardRecent(4)
+
+			case "q", "ctrl+c":
+				return m, tea.Quit
+			}
+
+			return m, nil
+		}
+
 		if m.showMove {
 			switch msg.String() {
 			case "esc":
@@ -979,6 +1025,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if m.showDashboard {
+		return m.renderDashboardView()
+	}
+
 	usableWidth := max(40, m.width-6)
 	leftWidth, rightWidth := m.panelWidths()
 	gap := strings.Repeat(" ", panelGapWidth)
@@ -1746,6 +1796,8 @@ func (m Model) renderStatus() string {
 
 func (m Model) renderModeSegment() string {
 	switch {
+	case m.showDashboard:
+		return "DASHBOARD"
 	case m.showHelp:
 		return "HELP"
 	case m.showCreateCategory:
@@ -3528,4 +3580,212 @@ func (m *Model) toggleNotesTemporaryMode() {
 	} else {
 		m.switchToTemporaryMode()
 	}
+}
+
+func (m Model) renderDashboardView() string {
+	cardWidth := min(84, max(56, m.width-10))
+	innerWidth := max(20, cardWidth-6)
+
+	titleText := "noteui"
+	if strings.TrimSpace(m.version) != "" {
+		titleText = fmt.Sprintf("noteui %s", m.version)
+	}
+
+	rootText := filepath.Join("~", "notes")
+	if strings.TrimSpace(m.rootDir) != "" {
+		rootText = m.rootDir
+	}
+
+	stats := []string{
+		fmt.Sprintf("Notes: %d", len(m.notes)),
+		fmt.Sprintf("Temporary: %d", len(m.tempNotes)),
+		fmt.Sprintf("Pinned: %d", len(m.pinnedItems())),
+	}
+
+	actions := []string{
+		"enter  Open workspace",
+		"]      Open Temporary",
+		"P      Open Pins",
+		"1-5    Open recent note",
+		"q      Quit",
+	}
+
+	title := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accentColor).
+		Width(innerWidth).
+		Align(lipgloss.Center).
+		Render(titleText)
+
+	subtitle := lipgloss.NewStyle().
+		Foreground(mutedColor).
+		Width(innerWidth).
+		Align(lipgloss.Center).
+		Render("Fast local notes with previews, temp notes, and pins")
+
+	rootLabel := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accentSoftColor).
+		Render("Root")
+
+	rootValue := lipgloss.NewStyle().
+		Foreground(textColor).
+		Width(innerWidth).
+		Render(rootText)
+
+	statsLabel := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accentSoftColor).
+		Render("Workspace")
+
+	statsBlock := lipgloss.JoinVertical(lipgloss.Left, stats...)
+
+	recentLabel := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accentSoftColor).
+		Render("Recent")
+
+	recentItems := m.dashboardRecentNotes(5)
+	recentLines := make([]string, 0, len(recentItems))
+	if len(recentItems) == 0 {
+		recentLines = append(recentLines, mutedStyle.Render("No recent notes"))
+	} else {
+		for i, item := range recentItems {
+			tag := "[note]"
+			if item.IsTemp {
+				tag = "[temp]"
+			}
+
+			num := lipgloss.NewStyle().
+				Bold(true).
+				Foreground(accentColor).
+				Render(fmt.Sprintf("%d", i+1))
+
+			tagStyled := lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Render(tag)
+
+			titleStyled := lipgloss.NewStyle().
+				Foreground(textColor).
+				Render(item.Display)
+
+			line := lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				num,
+				"  ",
+				tagStyled,
+				" ",
+				titleStyled,
+			)
+
+			recentLines = append(recentLines, lipgloss.NewStyle().
+				Width(innerWidth).
+				Render(line))
+		}
+	}
+	recentBlock := lipgloss.JoinVertical(lipgloss.Left, recentLines...)
+
+	actionsLabel := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(accentSoftColor).
+		Render("Start")
+
+	actionLines := make([]string, 0, len(actions))
+	for _, line := range actions {
+		actionLines = append(actionLines, lipgloss.NewStyle().
+			Foreground(textColor).
+			Render(line))
+	}
+	actionsBlock := lipgloss.JoinVertical(lipgloss.Left, actionLines...)
+
+	warning := ""
+	if m.startupError != "" {
+		warning = lipgloss.NewStyle().
+			Foreground(errorColor).
+			Bold(true).
+			Width(innerWidth).
+			Render("Config warning: " + m.startupError)
+	}
+
+	contentParts := []string{
+		title,
+		subtitle,
+		"",
+		rootLabel,
+		rootValue,
+		"",
+		statsLabel,
+		statsBlock,
+		"",
+		recentLabel,
+		recentBlock,
+		"",
+		actionsLabel,
+		actionsBlock,
+	}
+
+	if warning != "" {
+		contentParts = append(contentParts, "", warning)
+	}
+
+	card := lipgloss.NewStyle().
+		Width(cardWidth).
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accentColor).
+		Render(lipgloss.JoinVertical(lipgloss.Left, contentParts...))
+
+	return lipgloss.Place(
+		max(1, m.width),
+		max(1, m.height),
+		lipgloss.Center,
+		lipgloss.Center,
+		card,
+	)
+}
+
+func (m Model) dashboardRecentNotes(limit int) []dashboardRecentNote {
+	if limit <= 0 {
+		return nil
+	}
+
+	out := make([]dashboardRecentNote, 0, len(m.notes)+len(m.tempNotes))
+
+	for _, n := range m.notes {
+		out = append(out, dashboardRecentNote{
+			Note:    n,
+			IsTemp:  false,
+			Display: n.Title(),
+		})
+	}
+
+	for _, n := range m.tempNotes {
+		out = append(out, dashboardRecentNote{
+			Note:    n,
+			IsTemp:  true,
+			Display: n.Title(),
+		})
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Note.ModTime.After(out[j].Note.ModTime)
+	})
+
+	if len(out) > limit {
+		out = out[:limit]
+	}
+
+	return out
+}
+
+func (m Model) openDashboardRecent(index int) tea.Cmd {
+	items := m.dashboardRecentNotes(5)
+	if index < 0 || index >= len(items) {
+		m.status = "no recent note in that slot"
+		return nil
+	}
+
+	m.showDashboard = false
+	m.status = "opening recent note: " + items[index].Display
+	return editor.Open(items[index].Note.Path)
 }
