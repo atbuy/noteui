@@ -13,6 +13,7 @@ type keyMap struct {
 	NewTemporaryNote     key.Binding
 	Search               key.Binding
 	ShowHelp             key.Binding
+	ShowPins             key.Binding
 	CreateCategory       key.Binding
 	ToggleCategory       key.Binding
 	Delete               key.Binding
@@ -58,6 +59,10 @@ var keys = keyMap{
 	ShowHelp: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "Help"),
+	),
+	ShowPins: key.NewBinding(
+		key.WithKeys("P"),
+		key.WithHelp("P", "Pins"),
 	),
 	CreateCategory: key.NewBinding(
 		key.WithKeys("C"),

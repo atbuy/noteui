@@ -26,11 +26,19 @@ type (
 	moveTargetKind   int
 	renameTargetKind int
 	listMode         int
+	pinItemKind      int
 )
 
 const (
 	listModeNotes listMode = iota
 	listModeTemporary
+	listModePins
+)
+
+const (
+	pinItemCategory pinItemKind = iota
+	pinItemNote
+	pinItemTemporaryNote
 )
 
 const (
@@ -133,6 +141,13 @@ type treeItem struct {
 	MatchHint string
 }
 
+type pinItem struct {
+	Kind    pinItemKind
+	Name    string
+	RelPath string
+	Path    string
+}
+
 func (t treeItem) key() string {
 	switch t.Kind {
 	case treeCategory:
@@ -148,12 +163,14 @@ type Model struct {
 	rootDir string
 	version string
 
-	notes      []notes.Note
-	categories []notes.Category
-	expanded   map[string]bool
-	tempNotes  []notes.Note
-	tempCursor int
-	listMode   listMode
+	notes           []notes.Note
+	categories      []notes.Category
+	expanded        map[string]bool
+	tempNotes       []notes.Note
+	tempCursor      int
+	pinsCursor      int
+	listMode        listMode
+	lastNonPinsMode listMode
 
 	treeItems    []treeItem
 	treeCursor   int
@@ -288,7 +305,9 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		pinnedNotes:           pinnedNotes,
 		pinnedCats:            pinnedCats,
 		listMode:              listModeNotes,
+		lastNonPinsMode:       listModeNotes,
 		tempCursor:            0,
+		pinsCursor:            0,
 		previewPrivacyEnabled: cfg.Preview.Privacy,
 	}
 }
@@ -417,8 +436,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.notes = msg.notes
-		m.categories = msg.categories
 		m.tempNotes = msg.tempNotes
+		m.categories = msg.categories
 
 		m.pruneCategoryStateToExisting()
 		_ = m.saveTreeState()
@@ -436,8 +455,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if len(m.tempNotes) == 0 {
 			m.tempCursor = 0
-		} else if m.tempCursor >= len(m.tempNotes) {
-			m.tempCursor = len(m.tempNotes) - 1
+		} else if m.tempCursor >= len(m.filteredTempNotes()) {
+			m.tempCursor = max(0, len(m.filteredTempNotes())-1)
+		}
+
+		if len(m.filteredPinnedItems()) == 0 {
+			m.pinsCursor = 0
+		} else if m.pinsCursor >= len(m.filteredPinnedItems()) {
+			m.pinsCursor = len(m.filteredPinnedItems()) - 1
 		}
 
 		m.syncSelectedNote()
@@ -597,7 +622,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-		// Global quit always works.
+		if key.Matches(msg, keys.ShowPins) {
+			m.togglePinsMode()
+			return m, nil
+		}
+
+		if msg.String() == "esc" && m.listMode == listModePins {
+			if m.focus == focusPreview {
+				m.focus = focusTree
+				m.status = "tree focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+			}
+
+			if m.searchMode {
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
+				return m, nil
+			}
+
+			if m.lastNonPinsMode == listModeTemporary {
+				m.switchToTemporaryMode()
+			} else {
+				m.switchToNotesMode()
+			}
+			m.status = "left pins"
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.Quit) {
 			return m, tea.Quit
 		}
@@ -608,7 +662,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Search mode owns the keyboard.
 		if m.searchMode {
 			switch msg.String() {
 			case "esc":
@@ -624,21 +677,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 
 			case "up":
-				m.moveTreeCursor(-1)
+				switch m.listMode {
+				case listModeTemporary:
+					m.moveTempCursor(-1)
+				case listModePins:
+					m.movePinsCursor(-1)
+				default:
+					m.moveTreeCursor(-1)
+				}
 				return m, nil
 
 			case "down":
-				m.moveTreeCursor(1)
+				switch m.listMode {
+				case listModeTemporary:
+					m.moveTempCursor(1)
+				case listModePins:
+					m.movePinsCursor(1)
+				default:
+					m.moveTreeCursor(1)
+				}
 				return m, nil
 			}
 
 			var cmd tea.Cmd
 			m.searchInput, cmd = m.searchInput.Update(msg)
 			m.rebuildTree()
+			m.syncSelectedNote()
 			return m, cmd
 		}
 
-		// Start search. Do NOT use keys.Focus here.
 		if key.Matches(msg, keys.Search) {
 			m.searchMode = true
 			m.searchInput.Focus()
@@ -646,17 +713,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Clear applied search when already out of search mode.
 		if msg.String() == "esc" && strings.TrimSpace(m.searchInput.Value()) != "" {
 			m.searchInput.SetValue("")
 			m.searchInput.Blur()
 			m.searchMode = false
 			m.rebuildTree()
+			m.syncSelectedNote()
 			m.status = "search cleared"
 			return m, nil
 		}
 
-		// Pane focus toggle.
 		if key.Matches(msg, keys.Focus) {
 			if m.focus == focusTree {
 				m.focus = focusPreview
@@ -670,7 +736,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// Preview-focused navigation.
 		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMove &&
 			!m.showRename {
 			switch msg.String() {
@@ -754,26 +819,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingG = false
 		m.pendingBracketDir = ""
 
-		// Normal actions only when not inside search mode.
-		if key.Matches(msg, keys.TogglePreviewPrivacy) {
-			if m.cfg.Preview.Privacy {
-				m.status = "preview privacy forced by config"
-				return m, nil
-			}
-
-			m.previewPrivacyEnabled = !m.previewPrivacyEnabled
-			m.previewPath = ""
-
-			if m.previewPrivacyEnabled {
-				m.status = "preview privacy enabled"
-			} else {
-				m.status = "preview privacy disabled"
-			}
-
-			m.refreshPreview()
-			return m, nil
-		}
-
 		if key.Matches(msg, keys.Move) {
 			m.armMoveCurrent()
 			return m, nil
@@ -797,8 +842,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, keys.CreateCategory) {
-			if m.listMode == listModeTemporary {
-				m.status = "categories are not used in temporary notes"
+			if m.listMode != listModeNotes {
+				m.status = "categories only available in notes tree"
 				return m, nil
 			}
 			m.showCreateCategory = true
@@ -822,7 +867,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.listMode == listModeTemporary {
 				return m, createTemporaryNoteCmd(m.rootDir)
 			}
+			if m.listMode == listModePins {
+				m.status = "press enter to jump to item first"
+				return m, nil
+			}
 			return m, createNoteCmd(m.rootDir, m.currentTargetDir())
+		}
+
+		if key.Matches(msg, keys.TogglePreviewPrivacy) {
+			if m.cfg.Preview.Privacy {
+				m.status = "preview privacy forced by config"
+				return m, nil
+			}
+
+			m.previewPrivacyEnabled = !m.previewPrivacyEnabled
+			m.previewPath = ""
+
+			if m.previewPrivacyEnabled {
+				m.status = "preview privacy enabled"
+			} else {
+				m.status = "preview privacy disabled"
+			}
+
+			m.refreshPreview()
+			return m, nil
 		}
 
 		switch msg.String() {
@@ -835,17 +903,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "up", "k":
-			if m.listMode == listModeTemporary {
+			switch m.listMode {
+			case listModeTemporary:
 				m.moveTempCursor(-1)
-			} else {
+			case listModePins:
+				m.movePinsCursor(-1)
+			default:
 				m.moveTreeCursor(-1)
 			}
 			return m, nil
 
 		case "down", "j":
-			if m.listMode == listModeTemporary {
+			switch m.listMode {
+			case listModeTemporary:
 				m.moveTempCursor(1)
-			} else {
+			case listModePins:
+				m.movePinsCursor(1)
+			default:
 				m.moveTreeCursor(1)
 			}
 			return m, nil
@@ -1264,7 +1338,8 @@ func (m *Model) moveTreeCursor(delta int) {
 }
 
 func (m *Model) syncSelectedNote() {
-	if m.listMode == listModeTemporary {
+	switch m.listMode {
+	case listModeTemporary:
 		n := m.currentTempNote()
 		if n == nil {
 			m.selected = nil
@@ -1274,16 +1349,50 @@ func (m *Model) syncSelectedNote() {
 		m.selected = n
 		m.refreshPreview()
 		return
-	}
 
-	item := m.currentTreeItem()
-	if item == nil || item.Kind != treeNote || item.Note == nil {
+	case listModePins:
+		item := m.currentPinItem()
+		if item == nil {
+			m.selected = nil
+			m.refreshPreview()
+			return
+		}
+
+		switch item.Kind {
+		case pinItemNote:
+			for _, n := range m.notes {
+				if n.RelPath == item.RelPath {
+					noteCopy := n
+					m.selected = &noteCopy
+					m.refreshPreview()
+					return
+				}
+			}
+		case pinItemTemporaryNote:
+			for _, n := range m.tempNotes {
+				if n.RelPath == item.RelPath {
+					noteCopy := n
+					m.selected = &noteCopy
+					m.refreshPreview()
+					return
+				}
+			}
+		}
+
 		m.selected = nil
 		m.refreshPreview()
 		return
+
+	default:
+		item := m.currentTreeItem()
+		if item == nil || item.Kind != treeNote || item.Note == nil {
+			m.selected = nil
+			m.refreshPreview()
+			return
+		}
+		m.selected = item.Note
+		m.refreshPreview()
 	}
-	m.selected = item.Note
-	m.refreshPreview()
 }
 
 func (m Model) currentTreeItem() *treeItem {
@@ -1295,6 +1404,33 @@ func (m Model) currentTreeItem() *treeItem {
 }
 
 func (m *Model) activateCurrentItem() tea.Cmd {
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			return nil
+		}
+
+		switch item.Kind {
+		case pinItemCategory:
+			m.switchToNotesMode()
+			m.selectTreeCategory(item.RelPath)
+			m.status = "jumped to pinned category"
+			return nil
+
+		case pinItemNote:
+			m.switchToNotesMode()
+			m.selectTreeNote(item.RelPath)
+			m.status = "jumped to pinned note"
+			return nil
+
+		case pinItemTemporaryNote:
+			m.switchToTemporaryMode()
+			m.selectTemporaryNote(item.RelPath)
+			m.status = "jumped to pinned temporary note"
+			return nil
+		}
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -1320,6 +1456,39 @@ func (m *Model) activateCurrentItem() tea.Cmd {
 	}
 
 	return nil
+}
+
+func (m *Model) selectTreeCategory(relPath string) {
+	m.rebuildTree()
+	for i, item := range m.treeItems {
+		if item.Kind == treeCategory && item.RelPath == relPath {
+			m.treeCursor = i
+			m.syncSelectedNote()
+			return
+		}
+	}
+}
+
+func (m *Model) selectTreeNote(relPath string) {
+	m.rebuildTree()
+	for i, item := range m.treeItems {
+		if item.Kind == treeNote && item.RelPath == relPath {
+			m.treeCursor = i
+			m.syncSelectedNote()
+			return
+		}
+	}
+}
+
+func (m *Model) selectTemporaryNote(relPath string) {
+	items := m.filteredTempNotes()
+	for i, n := range items {
+		if n.RelPath == relPath {
+			m.tempCursor = i
+			m.syncSelectedNote()
+			return
+		}
+	}
 }
 
 func (m *Model) toggleCurrentCategory() {
@@ -1557,20 +1726,42 @@ func (m Model) renderModeSegment() string {
 	case m.showRename:
 		return "RENAME"
 	case m.searchMode:
-		if m.listMode == listModeTemporary {
+		switch m.listMode {
+		case listModeTemporary:
 			return "SEARCH TEMP"
+		case listModePins:
+			return "SEARCH PINS"
+		default:
+			return "SEARCH"
 		}
-		return "SEARCH"
 	case m.focus == focusPreview:
 		return "PREVIEW"
 	case m.listMode == listModeTemporary:
 		return "TEMP"
+	case m.listMode == listModePins:
+		return "PINS"
 	default:
 		return "TREE"
 	}
 }
 
 func (m Model) renderSelectionSegment() string {
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			return "pins: none"
+		}
+
+		switch item.Kind {
+		case pinItemCategory:
+			return "pinned category: ★ " + item.Name
+		case pinItemNote:
+			return "pinned note: ★ " + item.Name
+		case pinItemTemporaryNote:
+			return "pinned temp: ★ " + item.Name
+		}
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -1671,9 +1862,10 @@ func (m Model) renderHelpModal() string {
 
 	lines := []string{
 		m.renderHelpLine("j/k", "Move up and down", innerWidth),
-		m.renderHelpLine("enter/o", "Open note or toggle category", innerWidth),
+		m.renderHelpLine("enter/o", "Open note or jump from Pins", innerWidth),
 		m.renderHelpLine("h/l", "Collapse/Expand category", innerWidth),
-		m.renderHelpLine("]/[", "Switch notes/temporary", innerWidth),
+		m.renderHelpLine("[ / ]", "Switch Notes / Temporary", innerWidth),
+		m.renderHelpLine("P", "Toggle Pins view", innerWidth),
 		m.renderHelpLine("/", "Search", innerWidth),
 		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
 		m.renderHelpLine("n", "New note in current view", innerWidth),
@@ -1686,7 +1878,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("esc/q/?", "Close help", innerWidth),
 		m.renderHelpLine("m", "Move note/category", innerWidth),
 		m.renderHelpLine("R", "Rename note/category", innerWidth),
-		m.renderHelpLine("p", "Pin note/category", innerWidth),
+		m.renderHelpLine("p", "Pin or unpin current item", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -1943,6 +2135,41 @@ func (m Model) currentCategoryPrefix() string {
 }
 
 func (m *Model) armMoveCurrent() {
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			return
+		}
+
+		switch item.Kind {
+		case pinItemCategory:
+			m.showMove = true
+			m.moveInput.Focus()
+			m.movePending = &movePending{
+				kind:       moveTargetCategory,
+				oldRelPath: item.RelPath,
+				name:       item.Name,
+			}
+			m.moveInput.SetValue(item.RelPath)
+			m.moveInput.CursorEnd()
+			m.status = "move pinned category"
+			return
+
+		case pinItemNote, pinItemTemporaryNote:
+			m.showMove = true
+			m.moveInput.Focus()
+			m.movePending = &movePending{
+				kind:       moveTargetNote,
+				oldRelPath: item.RelPath,
+				name:       item.Name,
+			}
+			m.moveInput.SetValue(item.RelPath)
+			m.moveInput.CursorEnd()
+			m.status = "move pinned note"
+			return
+		}
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -2011,6 +2238,11 @@ func (m Model) confirmMove(newRelPath string) tea.Cmd {
 		root := m.rootDir
 		if m.listMode == listModeTemporary {
 			root = notes.TempRoot(m.rootDir)
+		} else if m.listMode == listModePins {
+			item := m.currentPinItem()
+			if item != nil && item.Kind == pinItemTemporaryNote {
+				root = notes.TempRoot(m.rootDir)
+			}
 		}
 		return moveNoteCmd(root, m.movePending.oldRelPath, newRelPath)
 	case moveTargetCategory:
@@ -2043,6 +2275,33 @@ func moveCategoryCmd(root, oldRelPath, newRelPath string) tea.Cmd {
 }
 
 func (m *Model) armDeleteCurrent() {
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			return
+		}
+
+		switch item.Kind {
+		case pinItemCategory:
+			m.deletePending = &deletePending{
+				kind:    deleteTargetCategory,
+				relPath: item.RelPath,
+				name:    item.Name,
+			}
+			m.status = "press d again to trash pinned category: " + item.Name
+			return
+
+		case pinItemNote, pinItemTemporaryNote:
+			m.deletePending = &deletePending{
+				kind:    deleteTargetNote,
+				relPath: item.Path,
+				name:    item.Name,
+			}
+			m.status = "press d again to trash pinned note: " + item.Name
+			return
+		}
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -2118,6 +2377,41 @@ func deleteCategoryCmd(root, relPath string) tea.Cmd {
 }
 
 func (m *Model) armRenameCurrent() {
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			return
+		}
+
+		switch item.Kind {
+		case pinItemCategory:
+			m.showRename = true
+			m.renamePending = &renamePending{
+				kind:    renameTargetCategory,
+				relPath: item.RelPath,
+				oldName: item.Name,
+			}
+			m.renameInput.SetValue(item.RelPath)
+			m.renameInput.Focus()
+			m.renameInput.CursorEnd()
+			m.status = "rename pinned category"
+			return
+
+		case pinItemNote, pinItemTemporaryNote:
+			m.showRename = true
+			m.renamePending = &renamePending{
+				kind:     renameTargetNote,
+				path:     item.Path,
+				oldTitle: item.Name,
+			}
+			m.renameInput.SetValue(item.Name)
+			m.renameInput.Focus()
+			m.renameInput.CursorEnd()
+			m.status = "rename pinned note"
+			return
+		}
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -2198,6 +2492,77 @@ func renameCategoryCmd(root, oldRelPath, newRelPath string) tea.Cmd {
 }
 
 func (m *Model) refreshPreview() {
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			m.previewPath = ""
+			m.previewContent = "No pinned item selected"
+			m.previewPrivacyForcedByNote = false
+			m.preview.SetContent(m.previewContent)
+			m.rebuildPreviewHeadingsFromRendered()
+			m.preview.GotoTop()
+			return
+		}
+
+		switch item.Kind {
+		case pinItemCategory:
+			pathText := filepath.Join("~/notes", item.RelPath)
+			count := m.countNotesUnder(item.RelPath)
+			children := m.countChildCategories(item.RelPath)
+
+			content := strings.Join([]string{
+				"# " + pathText,
+				"",
+				fmt.Sprintf("- Subcategories: %d", children),
+				fmt.Sprintf("- Notes: %d", count),
+				"",
+				"Pinned category. Press enter to jump to it in the tree.",
+			}, "\n")
+
+			rendered := m.renderPreviewMarkdown(pathText, content)
+			m.previewPath = "pinned-category:" + item.RelPath
+			m.previewContent = rendered
+			m.previewPrivacyForcedByNote = false
+			m.preview.SetContent(rendered)
+			m.rebuildPreviewHeadingsFromRendered()
+			m.preview.GotoTop()
+			return
+
+		case pinItemNote, pinItemTemporaryNote:
+			raw, err := notes.ReadAll(item.Path)
+			if err != nil {
+				m.previewPath = item.Path
+				m.previewContent = "Failed to read note: " + err.Error()
+				m.previewPrivacyForcedByNote = false
+				m.preview.SetContent(m.previewContent)
+				m.rebuildPreviewHeadingsFromRendered()
+				m.preview.GotoTop()
+				return
+			}
+
+			private := notes.NoteIsPrivate(raw)
+			body := notes.StripFrontMatter(raw)
+
+			rel := item.RelPath
+			if item.Kind == pinItemTemporaryNote {
+				rel = filepath.Join(".tmp", rel)
+			}
+
+			rendered := m.renderPreviewMarkdown(rel, body)
+			if m.effectivePreviewPrivacy(private) {
+				rendered = blurRenderedText(rendered)
+			}
+
+			m.previewPrivacyForcedByNote = private
+			m.previewPath = item.Path
+			m.previewContent = rendered
+			m.preview.SetContent(rendered)
+			m.rebuildPreviewHeadingsFromRendered()
+			m.preview.GotoTop()
+			return
+		}
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -2362,6 +2727,57 @@ func (m Model) previewMarkdownDisabledFor(relPath string) bool {
 }
 
 func (m *Model) togglePinCurrent() error {
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			return nil
+		}
+
+		switch item.Kind {
+		case pinItemCategory:
+			if m.pinnedCats[item.RelPath] {
+				delete(m.pinnedCats, item.RelPath)
+				m.status = "unpinned category: " + item.Name
+			} else {
+				m.pinnedCats[item.RelPath] = true
+				m.status = "pinned category: " + item.Name
+			}
+
+		case pinItemNote:
+			if m.pinnedNotes[item.RelPath] {
+				delete(m.pinnedNotes, item.RelPath)
+				m.status = "unpinned note: " + item.Name
+			} else {
+				m.pinnedNotes[item.RelPath] = true
+				m.status = "pinned note: " + item.Name
+			}
+
+		case pinItemTemporaryNote:
+			key := tempPinnedKey(item.RelPath)
+			if m.pinnedNotes[key] {
+				delete(m.pinnedNotes, key)
+				m.status = "unpinned temporary note: " + item.Name
+			} else {
+				m.pinnedNotes[key] = true
+				m.status = "pinned temporary note: " + item.Name
+			}
+		}
+
+		if err := m.saveTreeState(); err != nil {
+			return err
+		}
+
+		items := m.filteredPinnedItems()
+		if len(items) == 0 {
+			m.pinsCursor = 0
+		} else if m.pinsCursor >= len(items) {
+			m.pinsCursor = len(items) - 1
+		}
+
+		m.syncSelectedNote()
+		return nil
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -2716,20 +3132,37 @@ func stripANSI(s string) string {
 }
 
 func (m *Model) switchToNotesMode() {
-	if m.listMode == listModeNotes {
-		return
-	}
 	m.listMode = listModeNotes
+	m.lastNonPinsMode = listModeNotes
 	m.status = "notes"
 	m.syncSelectedNote()
 }
 
 func (m *Model) switchToTemporaryMode() {
-	if m.listMode == listModeTemporary {
+	m.listMode = listModeTemporary
+	m.lastNonPinsMode = listModeTemporary
+	m.status = "temporary"
+	m.syncSelectedNote()
+}
+
+func (m *Model) togglePinsMode() {
+	if m.listMode == listModePins {
+		if m.lastNonPinsMode == listModeTemporary {
+			m.switchToTemporaryMode()
+		} else {
+			m.switchToNotesMode()
+		}
 		return
 	}
-	m.listMode = listModeTemporary
-	m.status = "temporary"
+
+	if m.listMode == listModeTemporary {
+		m.lastNonPinsMode = listModeTemporary
+	} else {
+		m.lastNonPinsMode = listModeNotes
+	}
+
+	m.listMode = listModePins
+	m.status = "pins"
 	m.syncSelectedNote()
 }
 
@@ -2743,12 +3176,13 @@ func (m Model) currentTempNote() *notes.Note {
 }
 
 func (m *Model) moveTempCursor(delta int) {
-	if len(m.filteredTempNotes()) == 0 {
+	items := m.filteredTempNotes()
+	if len(items) == 0 {
 		return
 	}
 	next := max(m.tempCursor+delta, 0)
-	if next >= len(m.tempNotes) {
-		next = len(m.tempNotes) - 1
+	if next >= len(items) {
+		next = len(items) - 1
 	}
 	m.tempCursor = next
 	m.syncSelectedNote()
@@ -2770,17 +3204,73 @@ func (m Model) isPinnedTemporaryNote(relPath string) bool {
 }
 
 func (m Model) leftPanelTitle() string {
-	if m.listMode == listModeTemporary {
+	switch m.listMode {
+	case listModeTemporary:
 		return "Temporary"
+	case listModePins:
+		return "Pins"
+	default:
+		return "Tree"
 	}
-	return "Tree"
 }
 
 func (m Model) renderLeftPaneBody() string {
-	if m.listMode == listModeTemporary {
+	switch m.listMode {
+	case listModeTemporary:
 		return m.renderTemporaryListView()
+	case listModePins:
+		return m.renderPinsListView()
+	default:
+		return m.renderTreeView()
 	}
-	return m.renderTreeView()
+}
+
+func (m Model) renderPinsListView() string {
+	items := m.filteredPinnedItems()
+	if len(items) == 0 {
+		return emptyStyle.Render("(no pinned items)")
+	}
+
+	lines := make([]string, 0, len(items))
+	rowWidth := m.treeInnerWidth()
+
+	for i, item := range items {
+		var prefix string
+		switch item.Kind {
+		case pinItemCategory:
+			prefix = "★ " + iconCategoryLeaf + " [cat] "
+		case pinItemNote:
+			prefix = "★ " + iconNote + " [note] "
+		case pinItemTemporaryNote:
+			prefix = "★ " + iconNote + " [temp] "
+		}
+
+		label := item.Name
+		if strings.TrimSpace(label) == "" {
+			label = item.RelPath
+		}
+
+		plain := trimOrPad(prefix+label, rowWidth-2)
+
+		if i == m.pinsCursor {
+			lines = append(lines, lipgloss.NewStyle().
+				Width(rowWidth).
+				Padding(0, 1).
+				Foreground(selectedFgColor).
+				Background(selectedBgColor).
+				Bold(boldSelected).
+				Render(plain))
+			continue
+		}
+
+		lines = append(lines, treeNoteStyle.Copy().
+			Foreground(accentColor).
+			Width(rowWidth).
+			Padding(0, 1).
+			Render(plain))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
 func (m Model) renderTemporaryListView() string {
@@ -2789,7 +3279,7 @@ func (m Model) renderTemporaryListView() string {
 		return emptyStyle.Render("(no temporary notes)")
 	}
 
-	lines := make([]string, 0, len(m.tempNotes))
+	lines := make([]string, 0, len(tempNotes))
 	rowWidth := m.treeInnerWidth()
 
 	for i, n := range tempNotes {
@@ -2888,4 +3378,117 @@ func (m Model) renderPrivacySegment() string {
 	default:
 		return "privacy: off"
 	}
+}
+
+func tempRelFromPinnedKey(key string) (string, bool) {
+	key = filepath.ToSlash(strings.TrimSpace(key))
+	if key == ".tmp" {
+		return "", false
+	}
+	if strings.HasPrefix(key, ".tmp/") {
+		return strings.TrimPrefix(key, ".tmp/"), true
+	}
+	return "", false
+}
+
+func (m Model) pinnedItems() []pinItem {
+	var out []pinItem
+
+	for _, c := range m.categories {
+		if c.RelPath == "" {
+			continue
+		}
+		if !m.isPinnedCategory(c.RelPath) {
+			continue
+		}
+		out = append(out, pinItem{
+			Kind:    pinItemCategory,
+			Name:    c.Name,
+			RelPath: c.RelPath,
+		})
+	}
+
+	for _, n := range m.notes {
+		if !m.isPinnedNote(n.RelPath) {
+			continue
+		}
+		out = append(out, pinItem{
+			Kind:    pinItemNote,
+			Name:    n.Title(),
+			RelPath: n.RelPath,
+			Path:    n.Path,
+		})
+	}
+
+	for _, n := range m.tempNotes {
+		if !m.isPinnedTemporaryNote(n.RelPath) {
+			continue
+		}
+		out = append(out, pinItem{
+			Kind:    pinItemTemporaryNote,
+			Name:    n.Title(),
+			RelPath: n.RelPath,
+			Path:    n.Path,
+		})
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].RelPath < out[j].RelPath
+	})
+
+	return out
+}
+
+func (m Model) filteredPinnedItems() []pinItem {
+	query := strings.TrimSpace(strings.ToLower(m.searchInput.Value()))
+	items := m.pinnedItems()
+	if query == "" {
+		return items
+	}
+
+	out := make([]pinItem, 0, len(items))
+	for _, item := range items {
+		typeText := ""
+		switch item.Kind {
+		case pinItemCategory:
+			typeText = "category"
+		case pinItemNote:
+			typeText = "note"
+		case pinItemTemporaryNote:
+			typeText = "temporary"
+		}
+
+		if strings.Contains(strings.ToLower(item.Name), query) ||
+			strings.Contains(strings.ToLower(item.RelPath), query) ||
+			strings.Contains(typeText, query) {
+			out = append(out, item)
+		}
+	}
+
+	return out
+}
+
+func (m Model) currentPinItem() *pinItem {
+	items := m.filteredPinnedItems()
+	if len(items) == 0 || m.pinsCursor < 0 || m.pinsCursor >= len(items) {
+		return nil
+	}
+	item := items[m.pinsCursor]
+	return &item
+}
+
+func (m *Model) movePinsCursor(delta int) {
+	items := m.filteredPinnedItems()
+	if len(items) == 0 {
+		return
+	}
+	next := max(m.pinsCursor+delta, 0)
+	if next >= len(items) {
+		next = len(items) - 1
+	}
+	m.pinsCursor = next
+	m.syncSelectedNote()
 }
