@@ -1022,11 +1022,30 @@ func (m *Model) rebuildTree() {
 
 func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 	query := strings.TrimSpace(strings.ToLower(m.searchInput.Value()))
+
 	effectiveExpanded := func(rel string) bool {
+		if rel == "" {
+			return true
+		}
 		if query != "" {
 			return true
 		}
 		return m.expanded[rel]
+	}
+
+	// Add a synthetic root item at the top of the tree.
+	if parent == "" && depth == 0 {
+		*out = append(*out, treeItem{
+			Kind:     treeCategory,
+			Name:     "/",
+			RelPath:  "",
+			Depth:    0,
+			Expanded: true,
+			Category: nil,
+		})
+
+		// Root should show its direct children one level below it.
+		depth = 1
 	}
 
 	for _, cat := range m.directChildCategories(parent) {
@@ -1291,19 +1310,21 @@ func (m Model) currentTargetDir() string {
 		return ""
 	}
 
-	if item.Kind == treeCategory {
+	switch item.Kind {
+	case treeCategory:
 		return item.RelPath
-	}
-
-	if item.Note != nil {
+	case treeNote:
+		if item.Note == nil {
+			return ""
+		}
 		dir := filepath.Dir(item.Note.RelPath)
 		if dir == "." {
 			return ""
 		}
 		return dir
+	default:
+		return ""
 	}
-
-	return ""
 }
 
 func (m Model) countNotesUnder(relPath string) int {
