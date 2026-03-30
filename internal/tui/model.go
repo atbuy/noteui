@@ -195,6 +195,9 @@ type Model struct {
 	previewPrivacyEnabled      bool
 	previewPrivacyForcedByNote bool
 
+	watcher     interface{ Close() error }
+	watchEvents <-chan teaMsg
+
 	focus             paneFocus
 	pendingG          bool
 	pendingBracketDir string
@@ -322,7 +325,10 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return refreshAllCmd(m.rootDir)
+	return tea.Batch(
+		refreshAllCmd(m.rootDir),
+		startWatchTeaCmd(m.rootDir),
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -474,6 +480,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pinsCursor = len(m.filteredPinnedItems()) - 1
 		}
 
+		m.previewPath = ""
+
 		m.syncSelectedNote()
 
 		if len(msg.notes) > 0 {
@@ -522,6 +530,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, refreshAllCmd(m.rootDir)
 
+	case watchStartedMsg:
+		if msg.err != nil {
+			m.status = "watch disabled: " + msg.err.Error()
+			return m, nil
+		}
+		m.watcher = msg.watcher
+		m.watchEvents = msg.events
+		m.status = "ready"
+		return m, waitForWatchTeaCmd(m.watchEvents)
+
+	case watchRefreshMsg:
+		m.status = "auto refresh"
+		m.previewPath = ""
+		if m.watchEvents != nil {
+			return m, tea.Batch(
+				refreshAllCmd(m.rootDir),
+				waitForWatchTeaCmd(m.watchEvents),
+			)
+		}
+		return m, refreshAllCmd(m.rootDir)
+
+	case watchErrorMsg:
+		if msg.err != nil {
+			m.status = "watch error: " + msg.err.Error()
+		}
+		if m.watchEvents != nil {
+			return m, waitForWatchTeaCmd(m.watchEvents)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.showDashboard {
 			switch msg.String() {
@@ -555,6 +593,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.openDashboardRecent(4)
 
 			case "q", "ctrl+c":
+				if m.watcher != nil {
+					_ = m.watcher.Close()
+				}
 				return m, tea.Quit
 			}
 
@@ -721,6 +762,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, keys.Quit) {
+			if m.watcher != nil {
+				_ = m.watcher.Close()
+			}
 			return m, tea.Quit
 		}
 
@@ -3811,4 +3855,16 @@ func (m Model) openDashboardRecent(index int) tea.Cmd {
 
 func formatDashboardTime(t time.Time) string {
 	return t.Local().Format("Jan 02 15:04")
+}
+
+func startWatchTeaCmd(root string) tea.Cmd {
+	return func() tea.Msg {
+		return startWatchCmd(root)()
+	}
+}
+
+func waitForWatchTeaCmd(events <-chan teaMsg) tea.Cmd {
+	return func() tea.Msg {
+		return waitForWatchCmd(events)()
+	}
 }
