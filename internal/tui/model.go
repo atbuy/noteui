@@ -745,6 +745,8 @@ func (m Model) renderTreeView() string {
 }
 
 func (m Model) renderTreeLine(item treeItem, selected bool) string {
+	rowWidth := m.treeInnerWidth()
+
 	var icon string
 	switch item.Kind {
 	case treeCategory:
@@ -757,34 +759,54 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		} else {
 			icon = iconCategoryLeaf
 		}
-		if m.isPinnedCategory(item.RelPath) {
-			icon = "★ " + icon
-		}
 	case treeNote:
 		icon = iconNote
-		if item.Note != nil && m.isPinnedNote(item.Note.RelPath) {
-			icon = "★ " + icon
+	}
+
+	pinned := false
+	switch item.Kind {
+	case treeCategory:
+		pinned = m.isPinnedCategory(item.RelPath)
+	case treeNote:
+		if item.Note != nil {
+			pinned = m.isPinnedNote(item.Note.RelPath)
 		}
+	}
+
+	pinMark := "  "
+	if pinned {
+		pinMark = "★ "
 	}
 
 	indent := strings.Repeat("  ", item.Depth)
-	label := indent + icon + " " + item.Name
+	leftPrefix := indent + pinMark + icon + " "
+	label := item.Name
 
-	style := lipgloss.NewStyle()
+	plainLine := trimOrPad(leftPrefix+label, rowWidth-2)
+
 	if selected {
-		style = style.
+		return lipgloss.NewStyle().
+			Width(rowWidth).
+			Padding(0, 1).
 			Foreground(selectedFgColor).
 			Background(selectedBgColor).
-			Bold(boldSelected)
-	} else {
-		switch item.Kind {
-		case treeCategory:
-			style = style.Foreground(accentSoftColor)
-		case treeNote:
-			style = style.Foreground(textColor)
-		}
+			Bold(boldSelected).
+			Render(plainLine)
 	}
-	return style.Render(label)
+
+	// Non-selected rows can still have different foreground colors.
+	rowStyle := treeNoteStyle
+	if item.Kind == treeCategory {
+		rowStyle = treeCategoryStyle
+	}
+	if pinned {
+		rowStyle = rowStyle.Copy().Foreground(accentColor)
+	}
+
+	return rowStyle.
+		Width(rowWidth).
+		Padding(0, 1).
+		Render(plainLine)
 }
 
 func (m Model) previewView() string {
@@ -1820,4 +1842,39 @@ func (m Model) isPinnedCategory(relPath string) bool {
 
 func (m Model) isPinnedNote(relPath string) bool {
 	return m.pinnedNotes[relPath]
+}
+
+func (m Model) treeInnerWidth() int {
+	usableWidth := max(40, m.width-6)
+	leftWidth := max(28, usableWidth/3)
+
+	// Match the left panel content width closely enough for stable row sizing.
+	return max(16, leftWidth-6)
+}
+
+func trimOrPad(s string, width int) string {
+	w := lipgloss.Width(s)
+	if w == width {
+		return s
+	}
+	if w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+
+	// Simple trim for now.
+	runes := []rune(s)
+	out := make([]rune, 0, len(runes))
+	cur := 0
+	for _, r := range runes {
+		rw := lipgloss.Width(string(r))
+		if cur+rw > width {
+			break
+		}
+		out = append(out, r)
+		cur += rw
+	}
+	if cur < width {
+		out = append(out, []rune(strings.Repeat(" ", width-cur))...)
+	}
+	return string(out)
 }

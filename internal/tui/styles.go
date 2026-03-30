@@ -65,6 +65,12 @@ var (
 	iconCategoryCollapsed string
 	iconCategoryLeaf      string
 	iconNote              string
+
+	treeCategoryStyle         lipgloss.Style
+	treeNoteStyle             lipgloss.Style
+	treePinnedStyle           lipgloss.Style
+	treeSelectedCategoryStyle lipgloss.Style
+	treeSelectedNoteStyle     lipgloss.Style
 )
 
 type themePalette struct {
@@ -218,6 +224,25 @@ func ApplyTheme(cfg config.Config) {
 		Bold(true).
 		Foreground(modalAccentColor).
 		Background(modalBgColor)
+
+	treeCategoryStyle = lipgloss.NewStyle().
+		Foreground(accentSoftColor)
+
+	treeNoteStyle = lipgloss.NewStyle().
+		Foreground(textColor)
+
+	treePinnedStyle = lipgloss.NewStyle().
+		Foreground(accentColor)
+
+	treeSelectedCategoryStyle = lipgloss.NewStyle().
+		Foreground(selectedFgColor).
+		Background(selectedBgColor).
+		Bold(boldSelected)
+
+	treeSelectedNoteStyle = lipgloss.NewStyle().
+		Foreground(selectedFgColor).
+		Background(selectedBgColor).
+		Bold(boldSelected)
 }
 
 func builtinTheme(name string) themePalette {
