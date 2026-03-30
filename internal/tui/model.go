@@ -134,6 +134,7 @@ func (t treeItem) key() string {
 
 type Model struct {
 	rootDir string
+	version string
 
 	notes      []notes.Note
 	categories []notes.Category
@@ -193,7 +194,7 @@ type categoryCreatedMsg struct {
 	err     error
 }
 
-func New(root, startupError string, cfg config.Config) Model {
+func New(root, startupError string, cfg config.Config, version string) Model {
 	categoryInput := textinput.New()
 	categoryInput.Placeholder = "work/project-a"
 	categoryInput.Prompt = "Category: "
@@ -234,6 +235,7 @@ func New(root, startupError string, cfg config.Config) Model {
 
 	return Model{
 		rootDir:        root,
+		version:        version,
 		status:         "loading notes...",
 		expanded:       map[string]bool{},
 		categoryInput:  categoryInput,
@@ -666,9 +668,14 @@ func (m Model) View() string {
 	left := panelStyle(leftWidth, m.height, true).Render(leftBody)
 	right := panelStyle(rightWidth, m.height, false).Render(rightBody)
 
+	titleText := " noteui "
+	if strings.TrimSpace(m.version) != "" {
+		titleText = fmt.Sprintf(" noteui %s ", m.version)
+	}
+
 	title := titleBarStyle.
 		Width(usableWidth).
-		Render(" noteui ")
+		Render(titleText)
 
 	footer := footerStyle.
 		Width(usableWidth).

@@ -7,11 +7,19 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"atbuy/noteui/internal/buildinfo"
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/tui"
 )
 
 func main() {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-version" || arg == "-v" {
+			fmt.Println(buildinfo.Version)
+			return
+		}
+	}
+
 	root := os.Getenv("NOTES_ROOT")
 	if root == "" {
 		home, err := os.UserHomeDir()
@@ -31,8 +39,12 @@ func main() {
 
 	tui.ApplyTheme(cfg)
 
-	m := tui.New(root, startupError, cfg)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	m := tui.New(root, startupError, cfg, buildinfo.Version)
+	p := tea.NewProgram(
+		m,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "program error: %v\n", err)
