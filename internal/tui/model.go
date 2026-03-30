@@ -916,11 +916,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "[":
-			m.switchToNotesMode()
+			if m.listMode == listModePins {
+				m.switchToNotesMode()
+			} else {
+				m.toggleNotesTemporaryMode()
+			}
 			return m, nil
 
 		case "]":
-			m.switchToTemporaryMode()
+			if m.listMode == listModePins {
+				m.switchToTemporaryMode()
+			} else {
+				m.toggleNotesTemporaryMode()
+			}
 			return m, nil
 
 		case "up", "k":
@@ -3512,4 +3520,12 @@ func (m *Model) movePinsCursor(delta int) {
 	}
 	m.pinsCursor = next
 	m.syncSelectedNote()
+}
+
+func (m *Model) toggleNotesTemporaryMode() {
+	if m.listMode == listModeTemporary {
+		m.switchToNotesMode()
+	} else {
+		m.switchToTemporaryMode()
+	}
 }
