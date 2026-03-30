@@ -9,8 +9,9 @@ import (
 )
 
 type State struct {
-	PinnedNotes      []string `json:"pinned_notes"`
-	PinnedCategories []string `json:"pinned_categories"`
+	PinnedNotes         []string `json:"pinned_notes"`
+	PinnedCategories    []string `json:"pinned_categories"`
+	CollapsedCategories []string `json:"collapsed_categories"`
 }
 
 func Load() (State, error) {

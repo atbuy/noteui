@@ -233,11 +233,18 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		pinnedCats[p] = true
 	}
 
+	expanded := map[string]bool{
+		"": true,
+	}
+	for _, p := range st.CollapsedCategories {
+		expanded[p] = false
+	}
+
 	return Model{
 		rootDir:        root,
 		version:        version,
 		status:         "loading notes...",
-		expanded:       map[string]bool{},
+		expanded:       expanded,
 		categoryInput:  categoryInput,
 		searchInput:    searchInput,
 		moveInput:      moveInput,
@@ -313,6 +320,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renameInput.Blur()
 		m.renameInput.SetValue("")
 		m.preserveCursor = m.treeCursor
+		m.rewriteCategoryStateSubtree(msg.oldRelPath, msg.newRelPath)
+		_ = m.saveTreeState()
 		m.status = "renamed category: " + msg.newRelPath
 		return m, refreshAllCmd(m.rootDir)
 
@@ -326,6 +335,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.moveInput.Blur()
 		m.moveInput.SetValue("")
 		m.preserveCursor = m.treeCursor
+		m.rewriteCategoryStateSubtree(msg.oldRelPath, msg.newRelPath)
+		_ = m.saveTreeState()
 		m.status = "moved category: " + msg.newRelPath
 		return m, refreshAllCmd(m.rootDir)
 
@@ -346,6 +357,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.deletePending = nil
 		m.preserveCursor = m.treeCursor
+		m.removeCategoryStateSubtree(msg.relPath)
+		_ = m.saveTreeState()
 		m.status = "deleted category: " + msg.relPath
 		return m, refreshAllCmd(m.rootDir)
 
@@ -357,6 +370,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.notes = msg.notes
 		m.categories = msg.categories
+
+		m.pruneCategoryStateToExisting()
+		_ = m.saveTreeState()
 
 		for _, c := range m.categories {
 			if c.RelPath == "" {
@@ -1058,12 +1074,15 @@ func (m *Model) toggleCurrentCategory() {
 		m.status = "category: " + item.Name
 		return
 	}
+
 	m.expanded[item.RelPath] = !m.expanded[item.RelPath]
 	if m.expanded[item.RelPath] {
 		m.status = "expanded: " + item.Name
 	} else {
 		m.status = "collapsed: " + item.Name
 	}
+
+	_ = m.saveTreeState()
 	m.rebuildTree()
 }
 
@@ -1075,6 +1094,7 @@ func (m *Model) expandCurrentCategory() {
 	if m.categoryHasChildren(item.RelPath) {
 		m.expanded[item.RelPath] = true
 		m.status = "expanded: " + item.Name
+		_ = m.saveTreeState()
 		m.rebuildTree()
 	}
 }
@@ -1088,6 +1108,7 @@ func (m *Model) collapseCurrentCategory() {
 	if m.categoryHasChildren(item.RelPath) && m.expanded[item.RelPath] {
 		m.expanded[item.RelPath] = false
 		m.status = "collapsed: " + item.Name
+		_ = m.saveTreeState()
 		m.rebuildTree()
 		return
 	}
@@ -1935,8 +1956,7 @@ func (m *Model) togglePinCurrent() error {
 		}
 	}
 
-	m.syncStateFromPins()
-	if err := state.Save(m.state); err != nil {
+	if err := m.saveTreeState(); err != nil {
 		return err
 	}
 
@@ -1956,6 +1976,98 @@ func (m *Model) syncStateFromPins() {
 		m.state.PinnedCategories = append(m.state.PinnedCategories, p)
 	}
 	sort.Strings(m.state.PinnedCategories)
+}
+
+func (m *Model) syncStateFromExpanded() {
+	m.state.CollapsedCategories = m.state.CollapsedCategories[:0]
+
+	for relPath, expanded := range m.expanded {
+		if relPath == "" {
+			continue
+		}
+		if !expanded {
+			m.state.CollapsedCategories = append(m.state.CollapsedCategories, relPath)
+		}
+	}
+
+	sort.Strings(m.state.CollapsedCategories)
+}
+
+func hasCategoryPrefix(path, prefix string) bool {
+	if prefix == "" {
+		return false
+	}
+	return path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
+func rewriteCategoryPrefix(path, oldPrefix, newPrefix string) string {
+	if path == oldPrefix {
+		return newPrefix
+	}
+	if strings.HasPrefix(path, oldPrefix+"/") {
+		return newPrefix + strings.TrimPrefix(path, oldPrefix)
+	}
+	return path
+}
+
+func (m *Model) removeCategoryStateSubtree(relPath string) {
+	if relPath == "" {
+		return
+	}
+
+	for k := range m.expanded {
+		if hasCategoryPrefix(k, relPath) {
+			delete(m.expanded, k)
+		}
+	}
+
+	for k := range m.pinnedCats {
+		if hasCategoryPrefix(k, relPath) {
+			delete(m.pinnedCats, k)
+		}
+	}
+}
+
+func (m *Model) rewriteCategoryStateSubtree(oldRelPath, newRelPath string) {
+	if oldRelPath == "" || newRelPath == "" || oldRelPath == newRelPath {
+		return
+	}
+
+	newExpanded := make(map[string]bool, len(m.expanded))
+	for k, v := range m.expanded {
+		if hasCategoryPrefix(k, oldRelPath) {
+			k = rewriteCategoryPrefix(k, oldRelPath, newRelPath)
+		}
+		newExpanded[k] = v
+	}
+	m.expanded = newExpanded
+
+	newPinnedCats := make(map[string]bool, len(m.pinnedCats))
+	for k, v := range m.pinnedCats {
+		if hasCategoryPrefix(k, oldRelPath) {
+			k = rewriteCategoryPrefix(k, oldRelPath, newRelPath)
+		}
+		newPinnedCats[k] = v
+	}
+	m.pinnedCats = newPinnedCats
+
+	newPinnedNotes := make(map[string]bool, len(m.pinnedNotes))
+	oldPrefix := oldRelPath + "/"
+	newPrefix := newRelPath + "/"
+
+	for k, v := range m.pinnedNotes {
+		if after, ok := strings.CutPrefix(k, oldPrefix); ok {
+			k = newPrefix + after
+		}
+		newPinnedNotes[k] = v
+	}
+	m.pinnedNotes = newPinnedNotes
+}
+
+func (m *Model) saveTreeState() error {
+	m.syncStateFromPins()
+	m.syncStateFromExpanded()
+	return state.Save(m.state)
 }
 
 func (m Model) isPinnedCategory(relPath string) bool {
@@ -2013,4 +2125,28 @@ func (m Model) panelWidths() (int, int) {
 	}
 
 	return leftWidth, rightWidth
+}
+
+func (m *Model) pruneCategoryStateToExisting() {
+	existing := make(map[string]bool, len(m.categories))
+	for _, c := range m.categories {
+		if c.RelPath != "" {
+			existing[c.RelPath] = true
+		}
+	}
+
+	for k := range m.expanded {
+		if k == "" {
+			continue
+		}
+		if !existing[k] {
+			delete(m.expanded, k)
+		}
+	}
+
+	for k := range m.pinnedCats {
+		if !existing[k] {
+			delete(m.pinnedCats, k)
+		}
+	}
 }
