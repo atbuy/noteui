@@ -1208,17 +1208,31 @@ func createCategoryCmd(root, relPath string) tea.Cmd {
 
 func (m Model) renderStatus() string {
 	if m.deletePending != nil {
-		return statusErrStyle.Render("Delete pending: press d to confirm • esc to cancel")
+		return statusErrStyle.Render("TRASH PENDING • press d to confirm • esc to cancel")
 	}
 
 	if m.startupError != "" {
-		return statusErrStyle.Render("Config error: " + m.startupError)
+		return statusErrStyle.Render("CONFIG ERROR • " + m.startupError)
 	}
 
-	search := strings.TrimSpace(m.searchInput.Value())
-	if search != "" && !m.searchMode {
-		return statusOKStyle.Render(m.status + " • filter: " + search)
+	parts := []string{
+		m.renderModeSegment(),
+		m.renderSelectionSegment(),
 	}
+
+	if filter := m.renderFilterSegment(); filter != "" {
+		parts = append(parts, filter)
+	}
+
+	if preview := m.renderPreviewSegment(); preview != "" {
+		parts = append(parts, preview)
+	}
+
+	if m.status != "" {
+		parts = append(parts, m.status)
+	}
+
+	line := strings.Join(parts, "  •  ")
 
 	switch {
 	case strings.HasPrefix(m.status, "error:"),
@@ -1227,11 +1241,109 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "category create failed:"),
 		strings.HasPrefix(m.status, "delete failed:"),
 		strings.HasPrefix(m.status, "rename failed:"),
-		strings.HasPrefix(m.status, "move failed:"):
-		return statusErrStyle.Render(m.status)
+		strings.HasPrefix(m.status, "move failed:"),
+		strings.HasPrefix(m.status, "pin failed:"):
+		return statusErrStyle.Render(line)
 	default:
-		return statusOKStyle.Render(m.status)
+		return statusOKStyle.Render(line)
 	}
+}
+
+func (m Model) renderModeSegment() string {
+	switch {
+	case m.showHelp:
+		return "HELP"
+	case m.showCreateCategory:
+		return "NEW CATEGORY"
+	case m.showMove:
+		return "MOVE"
+	case m.showRename:
+		return "RENAME"
+	case m.searchMode:
+		return "SEARCH"
+	default:
+		return "TREE"
+	}
+}
+
+func (m Model) renderSelectionSegment() string {
+	item := m.currentTreeItem()
+	if item == nil {
+		return "nothing selected"
+	}
+
+	switch item.Kind {
+	case treeCategory:
+		name := item.Name
+		if item.RelPath == "" {
+			name = "~/notes"
+		}
+		if m.isPinnedCategory(item.RelPath) {
+			return "category: ★ " + name
+		}
+		return "category: " + name
+
+	case treeNote:
+		if item.Note == nil {
+			return "note"
+		}
+		title := item.Note.Title()
+		if m.isPinnedNote(item.Note.RelPath) {
+			return "note: ★ " + title
+		}
+		return "note: " + title
+	}
+
+	return "selection"
+}
+
+func (m Model) renderFilterSegment() string {
+	filter := strings.TrimSpace(m.searchInput.Value())
+	if filter == "" {
+		return ""
+	}
+	return "filter: " + filter
+}
+
+func (m Model) renderPreviewSegment() string {
+	if m.preview.TotalLineCount() == 0 {
+		return ""
+	}
+
+	atTop := m.preview.AtTop()
+	atBottom := m.preview.AtBottom()
+
+	switch {
+	case atTop && atBottom:
+		return "preview: 100%"
+	case atTop:
+		return "preview: top"
+	case atBottom:
+		return "preview: bottom"
+	}
+
+	total := m.preview.TotalLineCount()
+	offset := m.preview.YOffset
+	height := m.preview.Height
+
+	if total <= 0 {
+		return ""
+	}
+
+	maxOffset := total - height
+	if maxOffset <= 0 {
+		return "preview: 100%"
+	}
+
+	pct := int(float64(offset) / float64(maxOffset) * 100.0)
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+
+	return fmt.Sprintf("preview: %d%%", pct)
 }
 
 func (m Model) renderHelpModal() string {
