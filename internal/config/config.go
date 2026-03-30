@@ -22,19 +22,20 @@ type Config struct {
 type ThemeConfig struct {
 	Name string `toml:"name"`
 
-	BgColor         string `toml:"bg_color"`
-	PanelBgColor    string `toml:"panel_bg_color"`
-	BorderColor     string `toml:"border_color"`
-	AccentColor     string `toml:"accent_color"`
-	AccentSoftColor string `toml:"accent_soft_color"`
-	TextColor       string `toml:"text_color"`
-	MutedColor      string `toml:"muted_color"`
-	SubtleColor     string `toml:"subtle_color"`
-	ChipBgColor     string `toml:"chip_bg_color"`
-	ErrorColor      string `toml:"error_color"`
-	SuccessColor    string `toml:"success_color"`
-	SelectedBgColor string `toml:"selected_bg_color"`
-	SelectedFgColor string `toml:"selected_fg_color"`
+	BgColor          string `toml:"bg_color"`
+	PanelBgColor     string `toml:"panel_bg_color"`
+	BorderColor      string `toml:"border_color"`
+	FocusBorderColor string `toml:"focus_border_color"`
+	AccentColor      string `toml:"accent_color"`
+	AccentSoftColor  string `toml:"accent_soft_color"`
+	TextColor        string `toml:"text_color"`
+	MutedColor       string `toml:"muted_color"`
+	SubtleColor      string `toml:"subtle_color"`
+	ChipBgColor      string `toml:"chip_bg_color"`
+	ErrorColor       string `toml:"error_color"`
+	SuccessColor     string `toml:"success_color"`
+	SelectedBgColor  string `toml:"selected_bg_color"`
+	SelectedFgColor  string `toml:"selected_fg_color"`
 
 	BorderStyle   string `toml:"border_style"`
 	AppPaddingX   int    `toml:"app_padding_x"`

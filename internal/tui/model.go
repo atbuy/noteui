@@ -20,10 +20,16 @@ import (
 )
 
 type (
+	paneFocus        int
 	treeItemKind     int
 	deleteTargetKind int
 	moveTargetKind   int
 	renameTargetKind int
+)
+
+const (
+	focusTree paneFocus = iota
+	focusPreview
 )
 
 const (
@@ -153,6 +159,16 @@ type Model struct {
 	previewPath    string
 	previewContent string
 
+	focus             paneFocus
+	pendingG          bool
+	pendingBracketDir string
+	previewHover      bool
+	previewPaneX      int
+	previewPaneY      int
+	previewPaneW      int
+	previewPaneH      int
+	previewHeadings   []int
+
 	state       state.State
 	pinnedNotes map[string]bool
 	pinnedCats  map[string]bool
@@ -253,6 +269,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		startupError:   startupError,
 		cfg:            cfg,
 		preview:        vp,
+		focus:          focusTree,
 		state:          st,
 		pinnedNotes:    pinnedNotes,
 		pinnedCats:     pinnedCats,
@@ -265,6 +282,20 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		m.previewHover = m.mouseInPreview(msg.X, msg.Y)
+
+		if m.previewHover || m.focus == focusPreview {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.preview.LineUp(3)
+				return m, nil
+			case tea.MouseButtonWheelDown:
+				m.preview.LineDown(3)
+				return m, nil
+			}
+		}
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -578,6 +609,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if key.Matches(msg, keys.Focus) {
+			if m.focus == focusTree {
+				m.focus = focusPreview
+				m.status = "preview focused"
+			} else {
+				m.focus = focusTree
+				m.status = "tree focused"
+			}
+			m.pendingG = false
+			m.pendingBracketDir = ""
+			return m, nil
+		}
+
 		// Search mode
 		if m.searchMode {
 			switch msg.String() {
@@ -635,6 +679,89 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, createNoteCmd(m.rootDir, m.currentTargetDir())
 		}
 
+		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMove &&
+			!m.showRename {
+			switch msg.String() {
+			case "esc":
+				m.focus = focusTree
+				m.status = "tree focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "j", "down":
+				m.preview.LineDown(1)
+				m.status = "preview focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "k", "up":
+				m.preview.LineUp(1)
+				m.status = "preview focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "pgdown", "ctrl+f":
+				m.preview.PageDown()
+				m.status = "preview focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "pgup", "ctrl+b":
+				m.preview.PageUp()
+				m.status = "preview focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "G":
+				m.preview.GotoBottom()
+				m.status = "preview bottom"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "g":
+				if m.pendingG {
+					m.preview.GotoTop()
+					m.status = "preview top"
+					m.pendingG = false
+					return m, nil
+				}
+				m.pendingG = true
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "]":
+				m.pendingBracketDir = "]"
+				m.pendingG = false
+				return m, nil
+
+			case "[":
+				m.pendingBracketDir = "["
+				m.pendingG = false
+				return m, nil
+
+			case "h":
+				if m.pendingBracketDir == "]" {
+					m.jumpToNextHeading()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
+				if m.pendingBracketDir == "[" {
+					m.jumpToPrevHeading()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
+			}
+		}
+
+		m.pendingG = false
+		m.pendingBracketDir = ""
+
 		switch msg.String() {
 		case "up", "k":
 			m.moveTreeCursor(-1)
@@ -681,8 +808,11 @@ func (m Model) View() string {
 		m.previewView(),
 	)
 
-	left := panelStyle(leftWidth, m.height, true).Render(leftBody)
-	right := panelStyle(rightWidth, m.height, false).Render(rightBody)
+	leftFocused := m.focus == focusTree
+	rightFocused := m.focus == focusPreview
+
+	left := panelStyle(leftWidth, m.height, leftFocused).Render(leftBody)
+	right := panelStyle(rightWidth, m.height, rightFocused).Render(rightBody)
 
 	titleText := " noteui "
 	if strings.TrimSpace(m.version) != "" {
@@ -1292,6 +1422,8 @@ func (m Model) renderModeSegment() string {
 		return "RENAME"
 	case m.searchMode:
 		return "SEARCH"
+	case m.focus == focusPreview:
+		return "PREVIEW"
 	default:
 		return "TREE"
 	}
@@ -1862,6 +1994,7 @@ func (m *Model) refreshPreview() {
 		m.previewPath = ""
 		m.previewContent = "Nothing selected"
 		m.preview.SetContent(m.previewContent)
+		m.rebuildPreviewHeadingsFromRendered()
 		m.preview.GotoTop()
 		return
 	}
@@ -1890,6 +2023,7 @@ func (m *Model) refreshPreview() {
 		m.previewPath = "category:" + item.RelPath
 		m.previewContent = rendered
 		m.preview.SetContent(rendered)
+		m.rebuildPreviewHeadingsFromRendered()
 		m.preview.GotoTop()
 		return
 	}
@@ -1898,6 +2032,7 @@ func (m *Model) refreshPreview() {
 		m.previewPath = ""
 		m.previewContent = "No note selected"
 		m.preview.SetContent(m.previewContent)
+		m.rebuildPreviewHeadingsFromRendered()
 		m.preview.GotoTop()
 		return
 	}
@@ -1911,6 +2046,7 @@ func (m *Model) refreshPreview() {
 		m.previewPath = item.Note.Path
 		m.previewContent = "Failed to read note: " + err.Error()
 		m.preview.SetContent(m.previewContent)
+		m.rebuildPreviewHeadingsFromRendered()
 		m.preview.GotoTop()
 		return
 	}
@@ -1919,6 +2055,7 @@ func (m *Model) refreshPreview() {
 	m.previewPath = item.Note.Path
 	m.previewContent = rendered
 	m.preview.SetContent(rendered)
+	m.rebuildPreviewHeadingsFromRendered()
 	m.preview.GotoTop()
 }
 
@@ -2189,4 +2326,111 @@ func (m *Model) pruneCategoryStateToExisting() {
 			delete(m.pinnedCats, k)
 		}
 	}
+}
+
+func (m *Model) jumpToNextHeading() {
+	if len(m.previewHeadings) == 0 {
+		m.status = "no headings"
+		return
+	}
+
+	cur := m.preview.YOffset
+	for _, line := range m.previewHeadings {
+		if line > cur {
+			m.preview.SetYOffset(line)
+			m.status = "next heading"
+			return
+		}
+	}
+
+	m.preview.SetYOffset(m.previewHeadings[len(m.previewHeadings)-1])
+	m.status = "last heading"
+}
+
+func (m *Model) jumpToPrevHeading() {
+	if len(m.previewHeadings) == 0 {
+		m.status = "no headings"
+		return
+	}
+
+	cur := m.preview.YOffset
+	prev := m.previewHeadings[0]
+
+	for _, line := range m.previewHeadings {
+		if line >= cur {
+			break
+		}
+		prev = line
+	}
+
+	m.preview.SetYOffset(prev)
+	m.status = "previous heading"
+}
+
+func (m *Model) rebuildPreviewHeadingsFromRendered() {
+	m.previewHeadings = m.previewHeadings[:0]
+
+	lines := strings.Split(stripANSI(m.previewContent), "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		// Heuristic based on your renderer:
+		// H1/H2/H3/H4 render as plain heading text, and H2 is followed by underline.
+		if strings.HasPrefix(trimmed, "▸ ") || strings.HasPrefix(trimmed, "• ") {
+			m.previewHeadings = append(m.previewHeadings, i)
+			continue
+		}
+
+		if i+1 < len(lines) {
+			next := strings.TrimSpace(lines[i+1])
+			if next != "" && isUnderlineHeadingLine(next) {
+				m.previewHeadings = append(m.previewHeadings, i)
+				continue
+			}
+		}
+	}
+}
+
+func isUnderlineHeadingLine(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r != '─' && r != '═' {
+			return false
+		}
+	}
+	return true
+}
+
+func (m Model) mouseInPreview(x, y int) bool {
+	return x >= m.previewPaneX &&
+		x < m.previewPaneX+m.previewPaneW &&
+		y >= m.previewPaneY &&
+		y < m.previewPaneY+m.previewPaneH
+}
+
+func stripANSI(s string) string {
+	var b strings.Builder
+	inEsc := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if inEsc {
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		if ch == 0x1b {
+			inEsc = true
+			continue
+		}
+		b.WriteByte(ch)
+	}
+
+	return b.String()
 }

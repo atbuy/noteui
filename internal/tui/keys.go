@@ -39,7 +39,7 @@ var keys = keyMap{
 	),
 	Focus: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "Search"),
+		key.WithHelp("tab", "Switch focused pane"),
 	),
 	NewNote: key.NewBinding(
 		key.WithKeys("n"),
