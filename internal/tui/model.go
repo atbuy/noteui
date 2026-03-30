@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -3650,6 +3651,10 @@ func (m Model) renderDashboardView() string {
 	if len(recentItems) == 0 {
 		recentLines = append(recentLines, mutedStyle.Render("No recent notes"))
 	} else {
+		timestampWidth := 12
+		gapWidth := 2
+		contentWidth := max(12, innerWidth-timestampWidth-gapWidth)
+
 		for i, item := range recentItems {
 			tag := "[note]"
 			if item.IsTemp {
@@ -3665,22 +3670,36 @@ func (m Model) renderDashboardView() string {
 				Foreground(mutedColor).
 				Render(tag)
 
-			titleStyled := lipgloss.NewStyle().
-				Foreground(textColor).
-				Render(item.Display)
-
-			line := lipgloss.JoinHorizontal(
+			titleText := item.Display
+			leftText := lipgloss.JoinHorizontal(
 				lipgloss.Left,
 				num,
 				"  ",
 				tagStyled,
 				" ",
-				titleStyled,
+				titleText,
 			)
 
-			recentLines = append(recentLines, lipgloss.NewStyle().
-				Width(innerWidth).
-				Render(line))
+			leftCol := lipgloss.NewStyle().
+				Width(contentWidth).
+				MaxWidth(contentWidth).
+				Foreground(textColor).
+				Render(trimOrPad(leftText, contentWidth))
+
+			timeCol := lipgloss.NewStyle().
+				Width(timestampWidth).
+				Align(lipgloss.Right).
+				Foreground(mutedColor).
+				Render(formatDashboardTime(item.Note.ModTime))
+
+			line := lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				leftCol,
+				strings.Repeat(" ", gapWidth),
+				timeCol,
+			)
+
+			recentLines = append(recentLines, line)
 		}
 	}
 	recentBlock := lipgloss.JoinVertical(lipgloss.Left, recentLines...)
@@ -3788,4 +3807,8 @@ func (m Model) openDashboardRecent(index int) tea.Cmd {
 	m.showDashboard = false
 	m.status = "opening recent note: " + items[index].Display
 	return editor.Open(items[index].Note.Path)
+}
+
+func formatDashboardTime(t time.Time) string {
+	return t.Local().Format("Jan 02 15:04")
 }
