@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"atbuy/noteui/internal/notes"
@@ -142,6 +144,54 @@ func editTodoCmd(path string, lineIdx int, newText string) tea.Cmd {
 	return func() tea.Msg {
 		err := notes.EditTodoLine(path, lineIdx, newText)
 		return todoModifiedMsg{path: path, err: err}
+	}
+}
+
+func encryptNoteCmd(path, passphrase string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.EncryptNoteFile(path, passphrase)
+		return encryptNoteMsg{path: path, err: err}
+	}
+}
+
+func decryptNoteCmd(path, passphrase string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.DecryptNoteFile(path, passphrase)
+		return decryptNoteMsg{path: path, err: err}
+	}
+}
+
+func openEncryptedNoteCmd(path, passphrase string) tea.Cmd {
+	return func() tea.Msg {
+		raw, err := notes.ReadAll(path)
+		if err != nil {
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+
+		tempContent, err := notes.PrepareForEdit(raw, passphrase)
+		if err != nil {
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+
+		tmpFile, err := os.CreateTemp("", "noteui-*.md")
+		if err != nil {
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+		tmpFile.Close()
+
+		if err := os.WriteFile(tmpFile.Name(), []byte(tempContent), 0o600); err != nil {
+			os.Remove(tmpFile.Name())
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+
+		return openEncryptedNoteReadyMsg{origPath: path, tempPath: tmpFile.Name()}
+	}
+}
+
+func reencryptFromTempCmd(origPath, tempPath, passphrase string) tea.Cmd {
+	return func() tea.Msg {
+		newPath, err := notes.ReencryptFromTemp(origPath, tempPath, passphrase)
+		return reencryptFinishedMsg{newPath: newPath, err: err}
 	}
 }
 

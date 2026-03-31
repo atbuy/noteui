@@ -123,6 +123,7 @@ type KeysConfig struct {
 	DeleteConfirm        []string `toml:"delete_confirm"`
 	ScrollPageDown       []string `toml:"scroll_page_down"`
 	ScrollPageUp         []string `toml:"scroll_page_up"`
+	ToggleEncryption     []string `toml:"toggle_encryption"`
 }
 
 func Default() Config {

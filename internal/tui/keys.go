@@ -49,6 +49,7 @@ type keyMap struct {
 	DeleteConfirm    key.Binding
 	ScrollPageDown   key.Binding
 	ScrollPageUp     key.Binding
+	ToggleEncryption key.Binding
 }
 
 var keys = keyMap{
@@ -209,6 +210,10 @@ var keys = keyMap{
 		key.WithKeys("ctrl+b", "pgup"),
 		key.WithHelp("ctrl+b/pgup", "Page up"),
 	),
+	ToggleEncryption: key.NewBinding(
+		key.WithKeys("E"),
+		key.WithHelp("E", "Toggle encryption"),
+	),
 }
 
 // ApplyConfigKeys overwrites key bindings with user-provided overrides from config.
@@ -262,4 +267,5 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.DeleteConfirm, cfg.DeleteConfirm)
 	apply(&keys.ScrollPageDown, cfg.ScrollPageDown)
 	apply(&keys.ScrollPageUp, cfg.ScrollPageUp)
+	apply(&keys.ToggleEncryption, cfg.ToggleEncryption)
 }

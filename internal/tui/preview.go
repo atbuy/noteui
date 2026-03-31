@@ -158,6 +158,21 @@ func (m Model) notePreviewCmd(notePath, relPath string, tags []string) tea.Cmd {
 				baseContent: "Failed to read note: " + err.Error(),
 			}
 		}
+
+		if notes.NoteIsEncrypted(raw) {
+			if m.sessionPassphrase == "" {
+				return previewLockedMsg{path: notePath}
+			}
+			decrypted, err := notes.DecryptForPreview(raw, m.sessionPassphrase)
+			if err != nil {
+				return previewRenderedMsg{
+					forPath:     notePath,
+					baseContent: "[decryption failed — wrong passphrase?]",
+				}
+			}
+			raw = decrypted
+		}
+
 		private := notes.NoteIsPrivate(raw)
 		rendered := m.renderNotePreview(relPath, raw, tags)
 		if m.effectivePreviewPrivacy(private) {

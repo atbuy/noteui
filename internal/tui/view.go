@@ -126,6 +126,26 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showPassphraseModal {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderPassphraseModal(),
+		)
+	}
+
+	if m.showEncryptConfirm {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderEncryptConfirmModal(),
+		)
+	}
+
 	return base
 }
 
@@ -400,8 +420,13 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		pinMark = "★ "
 	}
 
+	encMark := ""
+	if item.Kind == treeNote && item.Note != nil && item.Note.Encrypted {
+		encMark = "[enc] "
+	}
+
 	indent := strings.Repeat("  ", item.Depth)
-	leftPrefix := indent + pinMark + icon + " "
+	leftPrefix := indent + pinMark + encMark + icon + " "
 	prefixWidth := lipgloss.Width(leftPrefix)
 
 	var tags []string
@@ -709,7 +734,13 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "rename failed:"),
 		strings.HasPrefix(m.status, "move failed:"),
 		strings.HasPrefix(m.status, "pin failed:"),
-		strings.HasPrefix(m.status, "todo error:"):
+		strings.HasPrefix(m.status, "todo error:"),
+		strings.HasPrefix(m.status, "encryption failed:"),
+		strings.HasPrefix(m.status, "decryption failed:"),
+		strings.HasPrefix(m.status, "re-encryption failed:"),
+		strings.HasPrefix(m.status, "wrong passphrase"),
+		strings.HasPrefix(m.status, "error reading note:"),
+		strings.HasPrefix(m.status, "error opening note:"):
 		return statusErrStyle.Render(line)
 	default:
 		return statusOKStyle.Render(line)
@@ -732,6 +763,10 @@ func (m Model) renderModeSegment() string {
 		return "ADD TODO"
 	case m.showTodoEdit:
 		return "EDIT TODO"
+	case m.showPassphraseModal:
+		return "PASSPHRASE"
+	case m.showEncryptConfirm:
+		return "CONFIRM"
 	case m.searchMode:
 		switch m.listMode {
 		case listModeTemporary:
@@ -931,6 +966,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine(keys.TodoKey.Help().Key+keys.TodoAdd.Help().Key, "Add new todo item", innerWidth),
 		m.renderHelpLine(keys.TodoKey.Help().Key+keys.TodoDelete.Help().Key, "Delete current todo item", innerWidth),
 		m.renderHelpLine(keys.TodoKey.Help().Key+keys.TodoEdit.Help().Key, "Edit current todo item", innerWidth),
+		m.renderHelpLine(keys.ToggleEncryption.Help().Key, "Toggle note encryption", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -1061,6 +1097,82 @@ func (m Model) renderTodoEditModal() string {
 		m.todoInput,
 		"Enter to save • Esc to cancel",
 	)
+}
+
+func (m Model) renderPassphraseModal() string {
+	title := "Enter passphrase"
+	hint := "This passphrase protects all encrypted notes in this session."
+	if m.passphraseModalCtx == "encrypt" {
+		title = "Set passphrase"
+	}
+	return m.renderStandardModal(
+		title,
+		hint,
+		"Passphrase",
+		m.passphraseInput,
+		"Enter to confirm • Esc to cancel",
+	)
+}
+
+func (m Model) renderEncryptConfirmModal() string {
+	modalWidth, innerWidth := m.modalDimensions(40, 64)
+
+	bodyText := "The note body will be encrypted on disk."
+	confirmTitle := "Encrypt this note?"
+	if m.passphraseModalCtx == "decrypt" {
+		confirmTitle = "Remove encryption?"
+		bodyText = "The note will be saved as plaintext on disk."
+	}
+
+	yesStyle := lipgloss.NewStyle().
+		Padding(0, 2).
+		Border(lipgloss.RoundedBorder())
+	noStyle := lipgloss.NewStyle().
+		Padding(0, 2).
+		Border(lipgloss.RoundedBorder())
+
+	if m.encryptConfirmYes {
+		yesStyle = yesStyle.
+			Background(selectedBgColor).
+			Foreground(selectedFgColor).
+			BorderForeground(selectedBgColor)
+		noStyle = noStyle.
+			Foreground(mutedColor).
+			BorderForeground(borderColor)
+	} else {
+		yesStyle = yesStyle.
+			Foreground(mutedColor).
+			BorderForeground(borderColor)
+		noStyle = noStyle.
+			Background(selectedBgColor).
+			Foreground(selectedFgColor).
+			BorderForeground(selectedBgColor)
+	}
+
+	yesBtn := yesStyle.Render("Yes")
+	noBtn := noStyle.Render("No")
+	buttons := lipgloss.JoinHorizontal(lipgloss.Top, yesBtn, "  ", noBtn)
+
+	content := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(
+			lipgloss.JoinVertical(
+				lipgloss.Left,
+				m.renderModalTitle(confirmTitle, innerWidth),
+				m.renderModalBlank(innerWidth),
+				m.renderModalHint(bodyText, innerWidth),
+				m.renderModalBlank(innerWidth),
+				lipgloss.NewStyle().
+					Width(innerWidth).
+					Background(modalBgColor).
+					Render(buttons),
+				m.renderModalBlank(innerWidth),
+				m.renderModalFooter("left/right to switch • Enter to confirm • Esc to cancel", innerWidth),
+			),
+		)
+
+	return modalCardStyle(modalWidth).Render(content)
 }
 
 func (m Model) renderModalTitle(text string, innerWidth int) string {

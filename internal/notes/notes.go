@@ -25,6 +25,7 @@ type Note struct {
 	Preview   string
 	ModTime   time.Time
 	Tags      []string
+	Encrypted bool
 }
 
 func TempRoot(root string) string {
@@ -84,6 +85,7 @@ func DiscoverTemporary(root string) ([]Note, error) {
 
 		fm, _, _ := ParseFrontMatter(preview)
 		tags := ParseTags(fm)
+		encrypted := FrontMatterBool(fm, "encrypted")
 
 		info, err := d.Info()
 		if err != nil {
@@ -100,6 +102,7 @@ func DiscoverTemporary(root string) ([]Note, error) {
 			Preview:   preview,
 			ModTime:   info.ModTime(),
 			Tags:      tags,
+			Encrypted: encrypted,
 		})
 		return nil
 	})
@@ -184,6 +187,7 @@ func Discover(root string) ([]Note, error) {
 
 		fm, _, _ := ParseFrontMatter(preview)
 		tags := ParseTags(fm)
+		encrypted := FrontMatterBool(fm, "encrypted")
 
 		info, err := d.Info()
 		if err != nil {
@@ -200,6 +204,7 @@ func Discover(root string) ([]Note, error) {
 			Preview:   preview,
 			ModTime:   info.ModTime(),
 			Tags:      tags,
+			Encrypted: encrypted,
 		})
 		return nil
 	})

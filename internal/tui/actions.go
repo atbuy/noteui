@@ -465,3 +465,85 @@ func (m Model) currentCategoryPrefix() string {
 
 	return ""
 }
+
+func (m Model) currentNotePath() string {
+	if m.listMode == listModeTemporary {
+		n := m.currentTempNote()
+		if n == nil {
+			return ""
+		}
+		return n.Path
+	}
+
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil {
+			return ""
+		}
+		if item.Kind == pinItemNote || item.Kind == pinItemTemporaryNote {
+			return item.Path
+		}
+		return ""
+	}
+
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeNote || item.Note == nil {
+		return ""
+	}
+	return item.Note.Path
+}
+
+func (m *Model) armToggleEncryption() {
+	path := m.currentNotePath()
+	if path == "" {
+		m.status = "no note selected"
+		return
+	}
+
+	raw, err := notes.ReadAll(path)
+	if err != nil {
+		m.status = "error reading note: " + err.Error()
+		return
+	}
+
+	m.pendingEncryptPath = path
+
+	if notes.NoteIsEncrypted(raw) {
+		m.passphraseModalCtx = "decrypt"
+	} else {
+		m.passphraseModalCtx = "encrypt"
+	}
+
+	if m.sessionPassphrase == "" {
+		m.showPassphraseModal = true
+		m.passphraseInput.SetValue("")
+		m.passphraseInput.Focus()
+		if m.passphraseModalCtx == "encrypt" {
+			m.status = "enter passphrase to encrypt"
+		} else {
+			m.status = "enter passphrase to decrypt"
+		}
+		return
+	}
+
+	m.showEncryptConfirm = true
+	m.encryptConfirmYes = true
+	if m.passphraseModalCtx == "encrypt" {
+		m.status = "confirm: encrypt note?"
+	} else {
+		m.status = "confirm: remove encryption?"
+	}
+}
+
+func (m *Model) armOpenEncrypted(path string) tea.Cmd {
+	if m.sessionPassphrase == "" {
+		m.pendingEncryptPath = path
+		m.passphraseModalCtx = "unlock_edit"
+		m.showPassphraseModal = true
+		m.passphraseInput.SetValue("")
+		m.passphraseInput.Focus()
+		m.status = "enter passphrase to open"
+		return nil
+	}
+	return openEncryptedNoteCmd(path, m.sessionPassphrase)
+}

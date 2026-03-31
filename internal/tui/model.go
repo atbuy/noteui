@@ -146,6 +146,17 @@ type todoModifiedMsg struct {
 	err  error
 }
 
+type encryptedEdit struct {
+	origPath string
+	tempPath string
+}
+
+type previewLockedMsg          struct{ path string }
+type encryptNoteMsg            struct{ path string; err error }
+type decryptNoteMsg            struct{ path string; err error }
+type openEncryptedNoteReadyMsg struct{ origPath, tempPath string; err error }
+type reencryptFinishedMsg      struct{ newPath string; err error }
+
 type previewTodoItem struct {
 	rawLine  int
 	rendLine int
@@ -262,6 +273,15 @@ type Model struct {
 	showTodoEdit        bool
 	todoInput           textinput.Model
 
+	sessionPassphrase    string
+	showPassphraseModal  bool
+	passphraseInput      textinput.Model
+	passphraseModalCtx   string
+	showEncryptConfirm   bool
+	encryptConfirmYes    bool
+	pendingEncryptPath   string
+	pendingEncryptedEdit *encryptedEdit
+
 	startupError string
 
 	sortByModTime bool
@@ -315,6 +335,14 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	todoInput.CharLimit = 300
 	todoInput.Width = 48
 
+	passphraseInput := textinput.New()
+	passphraseInput.Placeholder = "Passphrase"
+	passphraseInput.Prompt = ""
+	passphraseInput.CharLimit = 256
+	passphraseInput.Width = 48
+	passphraseInput.EchoMode = textinput.EchoPassword
+	passphraseInput.EchoCharacter = '•'
+
 	vp := viewport.New(0, 0)
 
 	st, _ := state.Load()
@@ -346,6 +374,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		moveInput:             moveInput,
 		renameInput:           renameInput,
 		todoInput:             todoInput,
+		passphraseInput:       passphraseInput,
 		preserveCursor:        -1,
 		pendingTodoCursor:     -1,
 		startupError:          startupError,
@@ -604,10 +633,67 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.status = "created category: " + msg.relPath
 		return m, refreshAllCmd(m.rootDir)
 
+	case previewLockedMsg:
+		if msg.path != m.previewPath {
+			return m, nil
+		}
+		locked := m.lockedPreviewText()
+		m.previewBaseContent = ""
+		m.previewContent = locked
+		m.previewTodos = nil
+		m.preview.SetContent(locked)
+		m.rebuildPreviewHeadingsFromRendered()
+		m.previewMatches = nil
+		m.preview.GotoTop()
+		return m, nil
+
+	case encryptNoteMsg:
+		if msg.err != nil {
+			m.status = "encryption failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.status = "note encrypted"
+		m.previewPath = ""
+		return m, refreshAllCmd(m.rootDir)
+
+	case decryptNoteMsg:
+		if msg.err != nil {
+			m.status = "decryption failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.status = "note decrypted"
+		m.previewPath = ""
+		return m, refreshAllCmd(m.rootDir)
+
+	case openEncryptedNoteReadyMsg:
+		if msg.err != nil {
+			m.status = "error opening note: " + msg.err.Error()
+			return m, nil
+		}
+		m.pendingEncryptedEdit = &encryptedEdit{
+			origPath: msg.origPath,
+			tempPath: msg.tempPath,
+		}
+		return m, editor.Open(msg.tempPath)
+
+	case reencryptFinishedMsg:
+		if msg.err != nil {
+			m.status = "re-encryption failed: " + msg.err.Error()
+			return m, refreshAllCmd(m.rootDir)
+		}
+		m.status = "note saved and re-encrypted"
+		return m, refreshAllCmd(m.rootDir)
+
 	case editor.FinishedMsg:
 		if msg.Err != nil {
 			m.status = "editor error: " + msg.Err.Error()
 			return m, nil
+		}
+
+		if m.pendingEncryptedEdit != nil {
+			edit := m.pendingEncryptedEdit
+			m.pendingEncryptedEdit = nil
+			return m, reencryptFromTempCmd(edit.origPath, edit.tempPath, m.sessionPassphrase)
 		}
 
 		newPath, renamed, err := notes.RenameFromTitle(msg.Path)
@@ -739,6 +825,94 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.todoInput, cmd = m.todoInput.Update(msg)
 			return m, cmd
+		}
+
+		if m.showPassphraseModal {
+			switch msg.String() {
+			case "esc":
+				m.showPassphraseModal = false
+				m.passphraseInput.Blur()
+				m.passphraseInput.SetValue("")
+				m.status = "cancelled"
+				return m, nil
+			case "enter":
+				passphrase := m.passphraseInput.Value()
+				if strings.TrimSpace(passphrase) == "" {
+					m.status = "passphrase cannot be empty"
+					return m, nil
+				}
+				switch m.passphraseModalCtx {
+				case "unlock", "unlock_edit", "decrypt":
+					raw, err := notes.ReadAll(m.pendingEncryptPath)
+					if err != nil {
+						m.status = "error: " + err.Error()
+						return m, nil
+					}
+					body := strings.TrimSpace(notes.StripFrontMatter(raw))
+					if _, err := notes.DecryptBody(body, passphrase); err != nil {
+						m.status = "wrong passphrase"
+						m.passphraseInput.SetValue("")
+						return m, nil
+					}
+					m.sessionPassphrase = passphrase
+					m.showPassphraseModal = false
+					m.passphraseInput.Blur()
+					m.passphraseInput.SetValue("")
+					if m.passphraseModalCtx == "unlock_edit" {
+						return m, openEncryptedNoteCmd(m.pendingEncryptPath, m.sessionPassphrase)
+					}
+					if m.passphraseModalCtx == "decrypt" {
+						m.showEncryptConfirm = true
+						m.encryptConfirmYes = true
+						m.status = "confirm: remove encryption?"
+						return m, nil
+					}
+					m.previewPath = ""
+					m.status = "passphrase accepted"
+					m.refreshPreview()
+					return m, nil
+				case "encrypt":
+					m.sessionPassphrase = passphrase
+					m.showPassphraseModal = false
+					m.passphraseInput.Blur()
+					m.passphraseInput.SetValue("")
+					m.showEncryptConfirm = true
+					m.encryptConfirmYes = true
+					m.status = "confirm: encrypt note?"
+					return m, nil
+				}
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.passphraseInput, cmd = m.passphraseInput.Update(msg)
+			return m, cmd
+		}
+
+		if m.showEncryptConfirm {
+			switch msg.String() {
+			case "esc":
+				m.showEncryptConfirm = false
+				m.status = "cancelled"
+				return m, nil
+			case "left", "right", "tab":
+				m.encryptConfirmYes = !m.encryptConfirmYes
+				return m, nil
+			case "enter":
+				m.showEncryptConfirm = false
+				if !m.encryptConfirmYes {
+					m.status = "cancelled"
+					return m, nil
+				}
+				path := m.pendingEncryptPath
+				passphrase := m.sessionPassphrase
+				if m.passphraseModalCtx == "encrypt" {
+					m.status = "encrypting..."
+					return m, encryptNoteCmd(path, passphrase)
+				}
+				m.status = "decrypting..."
+				return m, decryptNoteCmd(path, passphrase)
+			}
+			return m, nil
 		}
 
 		if m.showTodoEdit {
@@ -1406,6 +1580,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if key.Matches(msg, keys.ToggleEncryption) {
+			m.armToggleEncryption()
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.Open) || key.Matches(msg, keys.ToggleCategory) {
 			return m, m.activateCurrentItem()
 		}
@@ -1416,6 +1595,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 	_ = cmd
 
 	return m, nil
+}
+
+func (m Model) lockedPreviewText() string {
+	return "[encrypted]\n\nThis note is encrypted.\nPress E to enter your passphrase."
 }
 
 func (m Model) modalDimensions(minWidth, maxWidth int) (int, int) {

@@ -363,6 +363,10 @@ func (m *Model) activateCurrentItem() tea.Cmd {
 		if n == nil {
 			return nil
 		}
+		if n.Encrypted {
+			m.status = "opening encrypted note: " + n.RelPath
+			return m.armOpenEncrypted(n.Path)
+		}
 		m.status = "opening in nvim: " + n.RelPath
 		return editor.Open(n.Path)
 	}
@@ -378,6 +382,10 @@ func (m *Model) activateCurrentItem() tea.Cmd {
 	}
 
 	if item.Note != nil {
+		if item.Note.Encrypted {
+			m.status = "opening encrypted note: " + item.Note.RelPath
+			return m.armOpenEncrypted(item.Note.Path)
+		}
 		m.status = "opening in nvim: " + item.Note.RelPath
 		return editor.Open(item.Note.Path)
 	}

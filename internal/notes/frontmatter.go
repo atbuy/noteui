@@ -76,6 +76,14 @@ func FrontMatterBool(fm FrontMatter, key string) bool {
 	}
 }
 
+func NoteIsEncrypted(raw string) bool {
+	fm, _, err := ParseFrontMatter(raw)
+	if err != nil || len(fm) == 0 {
+		return false
+	}
+	return FrontMatterBool(fm, "encrypted")
+}
+
 func NoteIsPrivate(raw string) bool {
 	fm, _, err := ParseFrontMatter(raw)
 	if err != nil || len(fm) == 0 {
