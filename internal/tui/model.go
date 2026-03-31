@@ -613,6 +613,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			return m, nil
 		}
+
 		if m.showMove {
 			switch msg.String() {
 			case "esc":
@@ -936,6 +937,53 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pendingBracketDir = ""
 					return m, nil
 				}
+			}
+		}
+
+		// Tree navigation: gg and G.
+		if m.focus == focusTree {
+			switch msg.String() {
+			case "G":
+				switch m.listMode {
+				case listModeTemporary:
+					items := m.filteredTempNotes()
+					if len(items) > 0 {
+						m.tempCursor = len(items) - 1
+						m.syncSelectedNote()
+					}
+				case listModePins:
+					items := m.filteredPinnedItems()
+					if len(items) > 0 {
+						m.pinsCursor = len(items) - 1
+						m.syncSelectedNote()
+					}
+				default:
+					if len(m.treeItems) > 0 {
+						m.treeCursor = len(m.treeItems) - 1
+						m.syncSelectedNote()
+					}
+				}
+				m.pendingG = false
+				return m, nil
+
+			case "g":
+				if m.pendingG {
+					m.pendingG = false
+					switch m.listMode {
+					case listModeTemporary:
+						m.tempCursor = 0
+						m.syncSelectedNote()
+					case listModePins:
+						m.pinsCursor = 0
+						m.syncSelectedNote()
+					default:
+						m.treeCursor = 0
+						m.syncSelectedNote()
+					}
+				} else {
+					m.pendingG = true
+				}
+				return m, nil
 			}
 		}
 

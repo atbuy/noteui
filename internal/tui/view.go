@@ -704,10 +704,10 @@ func (m Model) renderHelpModal() string {
 		Render(modalTitleStyle.Render("Help"))
 
 	lines := []string{
-		m.renderHelpLine("j/k", "Move up and down", innerWidth),
-		m.renderHelpLine("enter/o", "Open note or jump from Pins", innerWidth),
+		m.renderHelpLine("j / k", "Move up and down", innerWidth),
+		m.renderHelpLine("enter / o", "Open note or jump from Pins", innerWidth),
 		m.renderHelpLine("h/l", "Collapse/Expand category", innerWidth),
-		m.renderHelpLine("[ / ]", "Switch Notes / Temporary", innerWidth),
+		m.renderHelpLine("]/[", "Switch Notes / Temporary", innerWidth),
 		m.renderHelpLine("P", "Toggle Pins view", innerWidth),
 		m.renderHelpLine("/", "Search", innerWidth),
 		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
@@ -718,10 +718,11 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("dd", "Trash note/category", innerWidth),
 		m.renderHelpLine("r", "Refresh", innerWidth),
 		m.renderHelpLine("q", "Quit", innerWidth),
-		m.renderHelpLine("esc/q/?", "Close help", innerWidth),
+		m.renderHelpLine("esc / q / ?", "Close help", innerWidth),
 		m.renderHelpLine("m", "Move note/category", innerWidth),
 		m.renderHelpLine("R", "Rename note/category", innerWidth),
 		m.renderHelpLine("p", "Pin or unpin current item", innerWidth),
+		m.renderHelpLine("gg / G", "Jump to top / bottom of list", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
