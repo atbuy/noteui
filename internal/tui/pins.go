@@ -271,6 +271,7 @@ func (m Model) pinnedItems() []pinItem {
 			Name:    n.Title(),
 			RelPath: n.RelPath,
 			Path:    n.Path,
+			Tags:    n.Tags,
 		})
 	}
 
@@ -283,6 +284,7 @@ func (m Model) pinnedItems() []pinItem {
 			Name:    n.Title(),
 			RelPath: n.RelPath,
 			Path:    n.Path,
+			Tags:    n.Tags,
 		})
 	}
 

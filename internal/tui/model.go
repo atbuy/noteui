@@ -150,6 +150,7 @@ type pinItem struct {
 	Name    string
 	RelPath string
 	Path    string
+	Tags    []string
 }
 
 func (t treeItem) key() string {

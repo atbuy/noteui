@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"atbuy/noteui/internal/notes"
 )
 
@@ -59,14 +61,13 @@ func (m *Model) refreshPreview() {
 			}
 
 			private := notes.NoteIsPrivate(raw)
-			body := notes.StripFrontMatter(raw)
 
 			rel := item.RelPath
 			if item.Kind == pinItemTemporaryNote {
 				rel = filepath.Join(".tmp", rel)
 			}
 
-			rendered := m.renderPreviewMarkdown(rel, body)
+			rendered := m.renderNotePreview(rel, raw, item.Tags)
 			if m.effectivePreviewPrivacy(private) {
 				rendered = blurRenderedText(rendered)
 			}
@@ -107,9 +108,8 @@ func (m *Model) refreshPreview() {
 		}
 
 		private := notes.NoteIsPrivate(raw)
-		body := notes.StripFrontMatter(raw)
 
-		rendered := m.renderPreviewMarkdown(filepath.Join(".tmp", n.RelPath), body)
+		rendered := m.renderNotePreview(filepath.Join(".tmp", n.RelPath), raw, n.Tags)
 		if m.effectivePreviewPrivacy(private) {
 			rendered = blurRenderedText(rendered)
 		}
@@ -188,9 +188,8 @@ func (m *Model) refreshPreview() {
 	}
 
 	private := notes.NoteIsPrivate(raw)
-	body := notes.StripFrontMatter(raw)
 
-	rendered := m.renderPreviewMarkdown(item.Note.RelPath, body)
+	rendered := m.renderNotePreview(item.Note.RelPath, raw, item.Note.Tags)
 	if m.effectivePreviewPrivacy(private) {
 		rendered = blurRenderedText(rendered)
 	}
@@ -385,4 +384,33 @@ func isUnderlineHeadingLine(s string) bool {
 		}
 	}
 	return true
+}
+
+func renderTagsHeader(tags []string) string {
+	if len(tags) == 0 {
+		return ""
+	}
+
+	chips := make([]string, 0, len(tags))
+	for _, t := range tags {
+		chips = append(chips, lipgloss.NewStyle().
+			Foreground(accentColor).
+			Background(chipBgColor).
+			Padding(0, 1).
+			Render(t))
+	}
+
+	return strings.Join(chips, " ")
+}
+
+func (m Model) renderNotePreview(relPath string, raw string, tags []string) string {
+	body := notes.StripFrontMatter(raw)
+	rendered := m.renderPreviewMarkdown(relPath, body)
+
+	tagsHeader := renderTagsHeader(tags)
+	if tagsHeader == "" {
+		return rendered
+	}
+
+	return tagsHeader + "\n\n" + rendered
 }
