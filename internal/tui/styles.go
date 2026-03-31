@@ -164,6 +164,7 @@ func ApplyTheme(cfg config.Config) {
 	modalBorder = borderFromName(cfg.Modal.BorderStyle)
 
 	appStyle = lipgloss.NewStyle().
+		Background(bgColor).
 		Padding(max(0, appPaddingY), max(0, appPaddingX))
 
 	titleBarStyle = lipgloss.NewStyle().
@@ -175,8 +176,8 @@ func ApplyTheme(cfg config.Config) {
 	panelTitleStyle = lipgloss.NewStyle().
 		Bold(boldPanelTitles).
 		Foreground(accentSoftColor).
-		Padding(0, 0, 0, 0).
-		MarginBottom(1)
+		Background(bgSoftColor).
+		Padding(0, 0, 1, 0)
 
 	headerStyle = lipgloss.NewStyle().
 		Bold(boldHeaders).
@@ -196,20 +197,24 @@ func ApplyTheme(cfg config.Config) {
 
 	emptyStyle = lipgloss.NewStyle().
 		Foreground(mutedColor).
+		Background(bgSoftColor).
 		Italic(true)
 
 	footerStyle = lipgloss.NewStyle().
 		Foreground(mutedColor).
+		Background(bgColor).
 		BorderTop(true).
 		BorderForeground(subtleColor).
-		Padding(0, 1).
-		MarginTop(1)
+		BorderBackground(bgColor).
+		Padding(0, 1)
 
 	statusOKStyle = lipgloss.NewStyle().
-		Foreground(successColor)
+		Foreground(successColor).
+		Background(bgColor)
 
 	statusErrStyle = lipgloss.NewStyle().
 		Foreground(errorColor).
+		Background(bgColor).
 		Bold(true)
 
 	modalTitleStyle = lipgloss.NewStyle().
@@ -236,13 +241,16 @@ func ApplyTheme(cfg config.Config) {
 		Background(modalBgColor)
 
 	treeCategoryStyle = lipgloss.NewStyle().
-		Foreground(accentSoftColor)
+		Foreground(accentSoftColor).
+		Background(bgSoftColor)
 
 	treeNoteStyle = lipgloss.NewStyle().
-		Foreground(textColor)
+		Foreground(textColor).
+		Background(bgSoftColor)
 
 	treePinnedStyle = lipgloss.NewStyle().
-		Foreground(accentColor)
+		Foreground(accentColor).
+		Background(bgSoftColor)
 
 	treeSelectedCategoryStyle = lipgloss.NewStyle().
 		Foreground(selectedFgColor).
@@ -594,6 +602,8 @@ func panelStyle(width, height int, focused bool) lipgloss.Style {
 	return lipgloss.NewStyle().
 		Border(currentBorder).
 		BorderForeground(bc).
+		BorderBackground(bgColor).
+		Background(bgSoftColor).
 		Width(max(20, width-2)).
 		Height(max(8, height-8)).
 		Padding(panelPaddingY, panelPaddingX)
@@ -604,6 +614,7 @@ func modalCardStyle(width int) lipgloss.Style {
 		Width(width).
 		Border(modalBorder).
 		BorderForeground(modalBorderColor).
+		BorderBackground(modalBgColor).
 		Background(modalBgColor).
 		Padding(modalPaddingY, modalPaddingX)
 }

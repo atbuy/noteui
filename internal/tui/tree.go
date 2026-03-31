@@ -569,7 +569,10 @@ func (m Model) countChildCategories(relPath string) int {
 
 func (m Model) treeInnerWidth() int {
 	leftWidth, _ := m.panelWidths()
-	return max(16, leftWidth-6)
+	// Panel inner = max(20, leftWidth-2) - 2*panelPaddingX; tree items use
+	// Padding(0,1) internally so subtract 2 more for their own side padding.
+	innerWidth := max(20, leftWidth-2) - 2*panelPaddingX
+	return max(16, innerWidth-2)
 }
 
 func (m Model) panelWidths() (int, int) {

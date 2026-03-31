@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -266,12 +267,7 @@ func ValidThemeNames() []string {
 
 func IsValidThemeName(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
-	for _, v := range ValidThemeNames() {
-		if name == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ValidThemeNames(), name)
 }
 
 func isValidBorderStyle(name string) bool {

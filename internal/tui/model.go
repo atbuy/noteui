@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/editor"
@@ -151,11 +152,25 @@ type encryptedEdit struct {
 	tempPath string
 }
 
-type previewLockedMsg          struct{ path string }
-type encryptNoteMsg            struct{ path string; err error }
-type decryptNoteMsg            struct{ path string; err error }
-type openEncryptedNoteReadyMsg struct{ origPath, tempPath string; err error }
-type reencryptFinishedMsg      struct{ newPath string; err error }
+type (
+	previewLockedMsg struct{ path string }
+	encryptNoteMsg   struct {
+		path string
+		err  error
+	}
+	decryptNoteMsg struct {
+		path string
+		err  error
+	}
+	openEncryptedNoteReadyMsg struct {
+		origPath, tempPath string
+		err                error
+	}
+	reencryptFinishedMsg struct {
+		newPath string
+		err     error
+	}
+)
 
 type previewTodoItem struct {
 	rawLine  int
@@ -265,13 +280,13 @@ type Model struct {
 	deletePending  *deletePending
 	preserveCursor int
 
-	previewTodos        []previewTodoItem
-	previewTodoCursor   int
-	pendingTodoCursor   int
-	pendingT            bool
-	showTodoAdd         bool
-	showTodoEdit        bool
-	todoInput           textinput.Model
+	previewTodos      []previewTodoItem
+	previewTodoCursor int
+	pendingTodoCursor int
+	pendingT          bool
+	showTodoAdd       bool
+	showTodoEdit      bool
+	todoInput         textinput.Model
 
 	sessionPassphrase    string
 	showPassphraseModal  bool
@@ -316,6 +331,10 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	searchInput.Prompt = "/ "
 	searchInput.CharLimit = 200
 	searchInput.Width = 32
+	searchInput.TextStyle = lipgloss.NewStyle().Foreground(textColor).Background(bgSoftColor)
+	searchInput.PlaceholderStyle = lipgloss.NewStyle().
+		Foreground(mutedColor).
+		Background(bgSoftColor)
 
 	moveInput := textinput.New()
 	moveInput.Placeholder = "work/project-a/note.md"
@@ -1212,7 +1231,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			if !key.Matches(msg, keys.PendingZ) {
 				m.pendingZ = false
 			}
-			if m.pendingT && !key.Matches(msg, keys.TodoKey) && !key.Matches(msg, keys.TodoAdd) && !key.Matches(msg, keys.TodoDelete) && !key.Matches(msg, keys.TodoEdit) {
+			if m.pendingT && !key.Matches(msg, keys.TodoKey) && !key.Matches(msg, keys.TodoAdd) &&
+				!key.Matches(msg, keys.TodoDelete) &&
+				!key.Matches(msg, keys.TodoEdit) {
 				m.pendingT = false
 			}
 			switch {

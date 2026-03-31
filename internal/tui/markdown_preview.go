@@ -146,6 +146,7 @@ func (r markdownPreviewRenderer) renderHeading(text string, level int, indent in
 			lipgloss.NewStyle().
 				Bold(true).
 				Foreground(accentColor).
+				Background(bgSoftColor).
 				Width(max(10, r.width-indent)).
 				Render(text),
 			base,
@@ -157,10 +158,12 @@ func (r markdownPreviewRenderer) renderHeading(text string, level int, indent in
 			lipgloss.NewStyle().
 				Bold(true).
 				Foreground(textColor).
+				Background(bgSoftColor).
 				Width(max(10, r.width-indent)).
 				Render(text),
 			lipgloss.NewStyle().
 				Foreground(accentSoftColor).
+				Background(bgSoftColor).
 				Width(max(10, r.width-indent)).
 				Render(underline),
 		)
@@ -170,6 +173,7 @@ func (r markdownPreviewRenderer) renderHeading(text string, level int, indent in
 			lipgloss.NewStyle().
 				Bold(true).
 				Foreground(accentSoftColor).
+				Background(bgSoftColor).
 				Width(max(10, r.width-indent)).
 				Render(text),
 			base,
@@ -179,6 +183,7 @@ func (r markdownPreviewRenderer) renderHeading(text string, level int, indent in
 			lipgloss.NewStyle().
 				Bold(true).
 				Foreground(textColor).
+				Background(bgSoftColor).
 				Width(max(10, r.width-indent)).
 				Render(text),
 			base,
@@ -221,9 +226,15 @@ func (r markdownPreviewRenderer) renderListItem(
 			if firstInline := firstBlock.FirstChild(); firstInline != nil {
 				if cb, ok := firstInline.(*extast.TaskCheckBox); ok {
 					if cb.IsChecked {
-						marker = lipgloss.NewStyle().Foreground(successColor).Render("[X]") + " "
+						marker = lipgloss.NewStyle().
+							Foreground(successColor).
+							Background(bgSoftColor).
+							Render("[X]") + lipgloss.NewStyle().Background(bgSoftColor).Render(" ")
 					} else {
-						marker = lipgloss.NewStyle().Foreground(errorColor).Render("[ ]") + " "
+						marker = lipgloss.NewStyle().
+							Foreground(errorColor).
+							Background(bgSoftColor).
+							Render("[ ]") + lipgloss.NewStyle().Background(bgSoftColor).Render(" ")
 					}
 					markerWidth = 4
 				}
@@ -392,29 +403,31 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 	switch n := node.(type) {
 	case *ast.Text:
 		s := string(n.Segment.Value(r.source))
+		base := lipgloss.NewStyle().Background(bgSoftColor)
 		switch {
 		case n.HardLineBreak():
-			return s + "\n"
+			return base.Render(s) + "\n"
 		case n.SoftLineBreak():
-			return s + " "
+			return base.Render(s + " ")
 		default:
-			return s
+			return base.Render(s)
 		}
 
 	case *ast.String:
-		return string(n.Value)
+		return lipgloss.NewStyle().Background(bgSoftColor).Render(string(n.Value))
 
 	case *ast.Emphasis:
 		content := r.renderInlineChildren(n)
 		if n.Level == 2 {
-			return lipgloss.NewStyle().Bold(true).Render(content)
+			return lipgloss.NewStyle().Bold(true).Background(bgSoftColor).Render(content)
 		}
-		return lipgloss.NewStyle().Italic(true).Render(content)
+		return lipgloss.NewStyle().Italic(true).Background(bgSoftColor).Render(content)
 
 	case *ast.CodeSpan:
 		content := strings.TrimSpace(string(n.Text(r.source)))
 		return lipgloss.NewStyle().
 			Foreground(accentSoftColor).
+			Background(bgSoftColor).
 			Render("`" + content + "`")
 
 	case *ast.Link:
@@ -427,10 +440,14 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		styled := lipgloss.NewStyle().
 			Underline(true).
 			Foreground(accentColor).
+			Background(bgSoftColor).
 			Render(label)
 
 		if dest != "" && dest != label {
-			return styled + mutedStyle.Render(" ("+dest+")")
+			return styled + lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Background(bgSoftColor).
+				Render(" ("+dest+")")
 		}
 		return styled
 
@@ -439,6 +456,7 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		return lipgloss.NewStyle().
 			Underline(true).
 			Foreground(accentColor).
+			Background(bgSoftColor).
 			Render(text)
 
 	case *ast.Image:
@@ -446,7 +464,10 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		if alt == "" {
 			alt = "image"
 		}
-		return mutedStyle.Render("[image: " + alt + "]")
+		return lipgloss.NewStyle().
+			Foreground(mutedColor).
+			Background(bgSoftColor).
+			Render("[image: " + alt + "]")
 
 	case *extast.TaskCheckBox:
 		return ""
@@ -455,7 +476,7 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		if node.FirstChild() != nil {
 			return r.renderInlineChildren(node)
 		}
-		return string(node.Text(r.source))
+		return lipgloss.NewStyle().Background(bgSoftColor).Render(string(node.Text(r.source)))
 	}
 }
 
@@ -476,6 +497,7 @@ func (r markdownPreviewRenderer) wrap(text string, indent int) string {
 	width := max(10, r.width-indent)
 	rendered := lipgloss.NewStyle().
 		Width(width).
+		Background(bgSoftColor).
 		Render(text)
 
 	return prefixLines(rendered, strings.Repeat(" ", indent))

@@ -20,20 +20,25 @@ func (m Model) View() string {
 
 	usableWidth := max(40, m.width-6)
 	leftWidth, rightWidth := m.panelWidths()
-	gap := strings.Repeat(" ", panelGapWidth)
+
+	// Inner usable content area for each panel (after border and padding).
+	leftInnerWidth := max(18, leftWidth-2-2*panelPaddingX)
+	rightInnerWidth := max(18, rightWidth-2-2*panelPaddingX)
+
+	panelBg := lipgloss.NewStyle().Background(bgSoftColor)
 
 	leftBody := lipgloss.JoinVertical(
 		lipgloss.Left,
-		panelTitleStyle.Render(m.leftPanelTitle()),
-		m.renderSearchBar(),
-		"",
-		m.renderLeftPaneBody(),
+		panelTitleStyle.Width(leftInnerWidth).Render(m.leftPanelTitle()),
+		panelBg.Width(leftInnerWidth).Render(m.renderSearchBar()),
+		panelBg.Width(leftInnerWidth).Render(""),
+		panelBg.Width(leftInnerWidth).Render(m.renderLeftPaneBody()),
 	)
 
 	rightBody := lipgloss.JoinVertical(
 		lipgloss.Left,
-		panelTitleStyle.Render("Preview"),
-		m.previewView(),
+		panelTitleStyle.Width(rightInnerWidth).Render("Preview"),
+		panelBg.Width(rightInnerWidth).Render(m.previewView()),
 	)
 
 	leftFocused := m.focus == focusTree
@@ -55,6 +60,17 @@ func (m Model) View() string {
 		Width(usableWidth).
 		Render(m.renderStatus())
 
+	// A background-filled spacer replaces the removed footerStyle MarginTop.
+	spacer := lipgloss.NewStyle().Width(usableWidth).Background(bgColor).Render("")
+
+	// Full-height gap so JoinHorizontal never falls back to plain spaces.
+	gapHeight := max(10, m.height-6)
+	gap := lipgloss.NewStyle().
+		Width(panelGapWidth).
+		Height(gapHeight).
+		Background(bgColor).
+		Render("")
+
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, gap, right)
 
 	base := appStyle.Render(
@@ -62,9 +78,17 @@ func (m Model) View() string {
 			lipgloss.Left,
 			title,
 			body,
+			spacer,
 			footer,
 		),
 	)
+
+	// Full-screen background wrapper ensures no terminal bg bleeds at the edges.
+	fullScreen := lipgloss.NewStyle().
+		Width(m.width).
+		Height(m.height).
+		Background(bgColor).
+		Render(base)
 
 	if m.showCreateCategory {
 		return lipgloss.Place(
@@ -73,6 +97,7 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderCreateCategoryModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
@@ -83,6 +108,7 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderMoveModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
@@ -93,6 +119,7 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderRenameModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
@@ -103,6 +130,7 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderHelpModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
@@ -113,6 +141,7 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderTodoAddModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
@@ -123,6 +152,7 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderTodoEditModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
@@ -133,6 +163,7 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderPassphraseModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
@@ -143,15 +174,19 @@ func (m Model) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			m.renderEncryptConfirmModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
 		)
 	}
 
-	return base
+	return fullScreen
 }
 
 func (m Model) renderDashboardView() string {
 	cardWidth := min(92, max(60, m.width-10))
 	innerWidth := max(24, cardWidth-6)
+	surface := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(bgSoftColor)
 
 	titleText := "noteui"
 	if strings.TrimSpace(m.version) != "" {
@@ -167,33 +202,41 @@ func (m Model) renderDashboardView() string {
 		Bold(true).
 		Foreground(accentColor).
 		Width(innerWidth).
+		Background(bgSoftColor).
 		Align(lipgloss.Center).
 		Render(titleText)
 
 	subtitle := lipgloss.NewStyle().
 		Foreground(mutedColor).
 		Width(innerWidth).
+		Background(bgSoftColor).
 		Align(lipgloss.Center).
 		Render("Fast local notes with previews, temporary notes, pins, and privacy controls")
 
 	divider := lipgloss.NewStyle().
 		Foreground(subtleColor).
 		Width(innerWidth).
+		Background(bgSoftColor).
 		Render(strings.Repeat("─", innerWidth))
 
 	rootLabel := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accentSoftColor).
+		Width(innerWidth).
+		Background(bgSoftColor).
 		Render("Root")
 
 	rootValue := lipgloss.NewStyle().
 		Foreground(textColor).
 		Width(innerWidth).
+		Background(bgSoftColor).
 		Render(rootText)
 
 	workspaceLabel := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accentSoftColor).
+		Width(innerWidth).
+		Background(bgSoftColor).
 		Render("Workspace")
 
 	summaryLines := []string{
@@ -222,12 +265,18 @@ func (m Model) renderDashboardView() string {
 	recentLabel := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accentSoftColor).
+		Width(innerWidth).
+		Background(bgSoftColor).
 		Render("Recent")
 
 	recentItems := m.dashboardRecentNotes(5)
 	recentLines := make([]string, 0, len(recentItems)*2)
 	if len(recentItems) == 0 {
-		recentLines = append(recentLines, mutedStyle.Render("No recent notes"))
+		recentLines = append(recentLines, lipgloss.NewStyle().
+			Width(innerWidth).
+			Foreground(mutedColor).
+			Background(bgSoftColor).
+			Render(trimOrPad("No recent notes", innerWidth)))
 	} else {
 		timestampWidth := 24
 		gapWidth := 2
@@ -239,21 +288,26 @@ func (m Model) renderDashboardView() string {
 				tag = "[temp]"
 			}
 
+			numText := fmt.Sprintf("%d", i+1)
 			num := lipgloss.NewStyle().
+				Width(lipgloss.Width(numText)).
 				Bold(true).
 				Foreground(accentColor).
-				Render(fmt.Sprintf("%d", i+1))
+				Background(bgSoftColor).
+				Render(numText)
 
 			tagStyled := lipgloss.NewStyle().
+				Width(lipgloss.Width(tag)).
 				Foreground(mutedColor).
+				Background(bgSoftColor).
 				Render(tag)
 
 			prefix := lipgloss.JoinHorizontal(
 				lipgloss.Left,
 				num,
-				"  ",
+				lipgloss.NewStyle().Width(2).Background(bgSoftColor).Render("  "),
 				tagStyled,
-				" ",
+				lipgloss.NewStyle().Width(1).Background(bgSoftColor).Render(" "),
 			)
 
 			prefixWidth := lipgloss.Width(prefix)
@@ -263,10 +317,12 @@ func (m Model) renderDashboardView() string {
 				Width(titleWidth).
 				MaxWidth(titleWidth).
 				Foreground(textColor).
+				Background(bgSoftColor).
 				Render(trimOrPad(item.Display, titleWidth))
 
 			leftCol := lipgloss.NewStyle().
 				Width(leftWidth).
+				Background(bgSoftColor).
 				Render(lipgloss.JoinHorizontal(lipgloss.Left, prefix, titleCol))
 
 			timeText := relativeDashboardTime(
@@ -278,20 +334,28 @@ func (m Model) renderDashboardView() string {
 				Width(timestampWidth).
 				Align(lipgloss.Right).
 				Foreground(mutedColor).
-				Render(timeText)
+				Background(bgSoftColor).
+				Render(trimOrPad(timeText, timestampWidth))
 
 			topLine := lipgloss.JoinHorizontal(
 				lipgloss.Top,
 				leftCol,
-				strings.Repeat(" ", gapWidth),
+				lipgloss.NewStyle().
+					Width(gapWidth).
+					Background(bgSoftColor).
+					Render(strings.Repeat(" ", gapWidth)),
 				timeCol,
 			)
 
+			pathText := trimOrPad(
+				"    "+shortenDashboardPath(m.rootDir, item.Note.Path),
+				innerWidth,
+			)
 			pathLine := lipgloss.NewStyle().
 				Width(innerWidth).
-				PaddingLeft(4).
 				Foreground(mutedColor).
-				Render(shortenDashboardPath(m.rootDir, item.Note.Path))
+				Background(bgSoftColor).
+				Render(pathText)
 
 			recentLines = append(recentLines, topLine, pathLine)
 		}
@@ -301,6 +365,8 @@ func (m Model) renderDashboardView() string {
 	actionsLabel := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accentSoftColor).
+		Width(innerWidth).
+		Background(bgSoftColor).
 		Render("Quick actions")
 
 	actionLines := []string{
@@ -316,11 +382,14 @@ func (m Model) renderDashboardView() string {
 	tipsLabel := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(accentSoftColor).
+		Width(innerWidth).
+		Background(bgSoftColor).
 		Render("Tip")
 
 	tipsBlock := lipgloss.NewStyle().
 		Foreground(mutedColor).
 		Width(innerWidth).
+		Background(bgSoftColor).
 		Render("This dashboard is optional. Set dashboard = false in your TOML config to start directly in the main workspace.")
 
 	warning := ""
@@ -329,6 +398,7 @@ func (m Model) renderDashboardView() string {
 			Foreground(errorColor).
 			Bold(true).
 			Width(innerWidth).
+			Background(bgSoftColor).
 			Render("Config warning: " + m.startupError)
 	}
 
@@ -358,20 +428,37 @@ func (m Model) renderDashboardView() string {
 		contentParts = append(contentParts, "", warning)
 	}
 
+	cardBody := surface.Render(
+		fillWidthBackground(
+			lipgloss.JoinVertical(lipgloss.Left, contentParts...),
+			innerWidth,
+			bgSoftColor,
+		),
+	)
+
 	card := lipgloss.NewStyle().
 		Width(cardWidth).
 		Padding(1, 2).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accentColor).
-		Render(lipgloss.JoinVertical(lipgloss.Left, contentParts...))
+		BorderBackground(bgSoftColor).
+		Background(bgSoftColor).
+		Render(cardBody)
 
-	return lipgloss.Place(
+	placed := lipgloss.Place(
 		max(1, m.width),
 		max(1, m.height),
 		lipgloss.Center,
 		lipgloss.Center,
 		card,
+		lipgloss.WithWhitespaceBackground(bgColor),
 	)
+
+	return lipgloss.NewStyle().
+		Width(max(1, m.width)).
+		Height(max(1, m.height)).
+		Background(bgColor).
+		Render(placed)
 }
 
 func (m Model) renderTreeView() string {
@@ -935,37 +1022,93 @@ func (m Model) renderHelpModal() string {
 	bf := keys.BracketForward.Help().Key
 	bb := keys.BracketBackward.Help().Key
 	lines := []string{
-		m.renderHelpLine(keys.MoveDown.Help().Key+" / "+keys.MoveUp.Help().Key, "Move up and down", innerWidth),
-		m.renderHelpLine(keys.ScrollHalfPageUp.Help().Key+" / "+keys.ScrollHalfPageDown.Help().Key, "Scroll half page up / down", innerWidth),
+		m.renderHelpLine(
+			keys.MoveDown.Help().Key+" / "+keys.MoveUp.Help().Key,
+			"Move up and down",
+			innerWidth,
+		),
+		m.renderHelpLine(
+			keys.ScrollHalfPageUp.Help().Key+" / "+keys.ScrollHalfPageDown.Help().Key,
+			"Scroll half page up / down",
+			innerWidth,
+		),
 		m.renderHelpLine(keys.Open.Help().Key, "Open note or jump from Pins", innerWidth),
-		m.renderHelpLine(keys.CollapseCategory.Help().Key+"/"+keys.ExpandCategory.Help().Key, "Collapse/Expand category", innerWidth),
+		m.renderHelpLine(
+			keys.CollapseCategory.Help().Key+"/"+keys.ExpandCategory.Help().Key,
+			"Collapse/Expand category",
+			innerWidth,
+		),
 		m.renderHelpLine(bf+"/"+bb, "Switch Notes / Temporary", innerWidth),
 		m.renderHelpLine(keys.ShowPins.Help().Key, "Toggle Pins view", innerWidth),
 		m.renderHelpLine(keys.Search.Help().Key, "Search", innerWidth),
-		m.renderHelpLine(keys.NextMatch.Help().Key+" / "+keys.PrevMatch.Help().Key, "Next / previous match in preview", innerWidth),
-		m.renderHelpLine(keys.PendingZ.Help().Key+keys.PendingZ.Help().Key, "Center current match in preview", innerWidth),
+		m.renderHelpLine(
+			keys.NextMatch.Help().Key+" / "+keys.PrevMatch.Help().Key,
+			"Next / previous match in preview",
+			innerWidth,
+		),
+		m.renderHelpLine(
+			keys.PendingZ.Help().Key+keys.PendingZ.Help().Key,
+			"Center current match in preview",
+			innerWidth,
+		),
 		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
 		m.renderHelpLine(keys.NewNote.Help().Key, "New note in current view", innerWidth),
 		m.renderHelpLine(keys.NewTemporaryNote.Help().Key, "New temporary note", innerWidth),
-		m.renderHelpLine(keys.TogglePreviewPrivacy.Help().Key, "Toggle preview privacy", innerWidth),
+		m.renderHelpLine(
+			keys.TogglePreviewPrivacy.Help().Key,
+			"Toggle preview privacy",
+			innerWidth,
+		),
 		m.renderHelpLine(keys.CreateCategory.Help().Key, "Create category", innerWidth),
-		m.renderHelpLine(keys.Delete.Help().Key+keys.DeleteConfirm.Help().Key, "Trash note/category", innerWidth),
+		m.renderHelpLine(
+			keys.Delete.Help().Key+keys.DeleteConfirm.Help().Key,
+			"Trash note/category",
+			innerWidth,
+		),
 		m.renderHelpLine(keys.Refresh.Help().Key, "Refresh", innerWidth),
 		m.renderHelpLine(keys.Quit.Help().Key, "Quit", innerWidth),
 		m.renderHelpLine("esc / q / ?", "Close help", innerWidth),
 		m.renderHelpLine(keys.Move.Help().Key, "Move note/category", innerWidth),
 		m.renderHelpLine(keys.Rename.Help().Key, "Rename note/category", innerWidth),
 		m.renderHelpLine(keys.Pin.Help().Key, "Pin or unpin current item", innerWidth),
-		m.renderHelpLine(keys.PendingG.Help().Key+keys.PendingG.Help().Key+" / "+keys.JumpBottom.Help().Key, "Jump to top / bottom of list", innerWidth),
+		m.renderHelpLine(
+			keys.PendingG.Help().Key+keys.PendingG.Help().Key+" / "+keys.JumpBottom.Help().Key,
+			"Jump to top / bottom of list",
+			innerWidth,
+		),
 		m.renderHelpLine(keys.SortToggle.Help().Key, "Toggle sort (alpha / modified)", innerWidth),
 		m.renderHelpLine("#tag", "Filter by tag in search", innerWidth),
 		m.renderHelpLine(keys.NewTodoList.Help().Key, "New todo list (tree focus)", innerWidth),
-		m.renderHelpLine(bf+keys.HeadingJumpKey.Help().Key+" / "+bb+keys.HeadingJumpKey.Help().Key, "Next / prev heading in preview", innerWidth),
-		m.renderHelpLine(bf+keys.TodoKey.Help().Key+" / "+bb+keys.TodoKey.Help().Key, "Next / prev todo in preview", innerWidth),
-		m.renderHelpLine(keys.TodoKey.Help().Key+keys.TodoKey.Help().Key, "Toggle current todo checkbox", innerWidth),
-		m.renderHelpLine(keys.TodoKey.Help().Key+keys.TodoAdd.Help().Key, "Add new todo item", innerWidth),
-		m.renderHelpLine(keys.TodoKey.Help().Key+keys.TodoDelete.Help().Key, "Delete current todo item", innerWidth),
-		m.renderHelpLine(keys.TodoKey.Help().Key+keys.TodoEdit.Help().Key, "Edit current todo item", innerWidth),
+		m.renderHelpLine(
+			bf+keys.HeadingJumpKey.Help().Key+" / "+bb+keys.HeadingJumpKey.Help().Key,
+			"Next / prev heading in preview",
+			innerWidth,
+		),
+		m.renderHelpLine(
+			bf+keys.TodoKey.Help().Key+" / "+bb+keys.TodoKey.Help().Key,
+			"Next / prev todo in preview",
+			innerWidth,
+		),
+		m.renderHelpLine(
+			keys.TodoKey.Help().Key+keys.TodoKey.Help().Key,
+			"Toggle current todo checkbox",
+			innerWidth,
+		),
+		m.renderHelpLine(
+			keys.TodoKey.Help().Key+keys.TodoAdd.Help().Key,
+			"Add new todo item",
+			innerWidth,
+		),
+		m.renderHelpLine(
+			keys.TodoKey.Help().Key+keys.TodoDelete.Help().Key,
+			"Delete current todo item",
+			innerWidth,
+		),
+		m.renderHelpLine(
+			keys.TodoKey.Help().Key+keys.TodoEdit.Help().Key,
+			"Edit current todo item",
+			innerWidth,
+		),
 		m.renderHelpLine(keys.ToggleEncryption.Help().Key, "Toggle note encryption", innerWidth),
 	}
 
@@ -1126,10 +1269,12 @@ func (m Model) renderEncryptConfirmModal() string {
 
 	yesStyle := lipgloss.NewStyle().
 		Padding(0, 2).
-		Border(lipgloss.RoundedBorder())
+		Border(lipgloss.RoundedBorder()).
+		BorderBackground(modalBgColor)
 	noStyle := lipgloss.NewStyle().
 		Padding(0, 2).
-		Border(lipgloss.RoundedBorder())
+		Border(lipgloss.RoundedBorder()).
+		BorderBackground(modalBgColor)
 
 	if m.encryptConfirmYes {
 		yesStyle = yesStyle.
@@ -1168,7 +1313,10 @@ func (m Model) renderEncryptConfirmModal() string {
 					Background(modalBgColor).
 					Render(buttons),
 				m.renderModalBlank(innerWidth),
-				m.renderModalFooter("left/right to switch • Enter to confirm • Esc to cancel", innerWidth),
+				m.renderModalFooter(
+					"left/right to switch • Enter to confirm • Esc to cancel",
+					innerWidth,
+				),
 			),
 		)
 
@@ -1206,7 +1354,10 @@ func (m Model) renderModalBlank(innerWidth int) string {
 func (m Model) renderModalInputRow(label string, input textinput.Model, innerWidth int) string {
 	local := input
 	local.Prompt = ""
-	local.Width = max(12, min(36, innerWidth-20))
+	labelWidth := 12
+	fieldInnerWidth := max(12, min(36, innerWidth-20))
+	fieldOuterWidth := fieldInnerWidth + 4
+	local.Width = fieldInnerWidth
 
 	local.TextStyle = lipgloss.NewStyle().
 		Foreground(modalTextColor).
@@ -1224,6 +1375,7 @@ func (m Model) renderModalInputRow(label string, input textinput.Model, innerWid
 		Foreground(modalAccentColor).
 		Background(modalBgColor).
 		Bold(true).
+		Width(labelWidth).
 		Render(label + ":")
 
 	// Make the label a 3-line block so its text aligns with the input text line,
@@ -1239,13 +1391,22 @@ func (m Model) renderModalInputRow(label string, input textinput.Model, innerWid
 			),
 		)
 
+	rawInput := local.View()
+	trimmedInput := strings.TrimRight(rawInput, " ")
+	inputPad := max(0, fieldInnerWidth-lipgloss.Width(trimmedInput))
+	inputView := trimmedInput + lipgloss.NewStyle().
+		Width(inputPad).
+		Background(modalBgColor).
+		Render(strings.Repeat(" ", inputPad))
+
 	inputField := lipgloss.NewStyle().
+		Width(fieldOuterWidth).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(modalAccentColor).
 		BorderBackground(modalBgColor).
 		Background(modalBgColor).
 		Padding(0, 1).
-		Render(local.View())
+		Render(inputView)
 
 	return lipgloss.NewStyle().
 		Width(innerWidth).
@@ -1289,7 +1450,25 @@ func (m Model) renderHelpLine(k, desc string, width int) string {
 }
 
 func (m Model) previewView() string {
-	return m.preview.View()
+	return fillWidthBackground(m.preview.View(), m.preview.Width, bgSoftColor)
+}
+
+func fillWidthBackground(content string, width int, bg lipgloss.Color) string {
+	if width <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	lineStyle := lipgloss.NewStyle().
+		Width(width).
+		MaxWidth(width).
+		Background(bg)
+
+	for i, line := range lines {
+		lines[i] = lineStyle.Render(trimOrPad(line, width))
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) leftPanelTitle() string {
@@ -1367,31 +1546,69 @@ func shortenDashboardPath(rootDir, fullPath string) string {
 }
 
 func dashboardActionLine(keyText, desc string, width int) string {
+	keyWidth := lipgloss.Width(keyText)
+	if keyWidth > width {
+		keyWidth = width
+	}
+
+	sepWidth := 2
+	if keyWidth+sepWidth > width {
+		sepWidth = max(0, width-keyWidth)
+	}
+	descWidth := max(0, width-keyWidth-sepWidth)
+
 	keyPart := lipgloss.NewStyle().
+		Width(keyWidth).
 		Bold(true).
 		Foreground(accentColor).
-		Render(keyText)
+		Background(bgSoftColor).
+		Render(trimOrPad(keyText, keyWidth))
+
+	sepPart := lipgloss.NewStyle().
+		Width(sepWidth).
+		Background(bgSoftColor).
+		Render(strings.Repeat(" ", sepWidth))
 
 	descPart := lipgloss.NewStyle().
+		Width(descWidth).
 		Foreground(textColor).
-		Render(desc)
+		Background(bgSoftColor).
+		Render(trimOrPad(desc, descWidth))
 
-	line := lipgloss.JoinHorizontal(lipgloss.Left, keyPart, "  ", descPart)
-	return lipgloss.NewStyle().Width(width).Render(line)
+	return lipgloss.JoinHorizontal(lipgloss.Left, keyPart, sepPart, descPart)
 }
 
 func dashboardSummaryLine(label, value string, width int) string {
+	labelWidth := lipgloss.Width(label)
+	if labelWidth > width {
+		labelWidth = width
+	}
+
+	sepWidth := 1
+	if labelWidth+sepWidth > width {
+		sepWidth = max(0, width-labelWidth)
+	}
+	valueWidth := max(0, width-labelWidth-sepWidth)
+
 	labelPart := lipgloss.NewStyle().
+		Width(labelWidth).
 		Foreground(mutedColor).
-		Render(label)
+		Background(bgSoftColor).
+		Render(trimOrPad(label, labelWidth))
+
+	sepPart := lipgloss.NewStyle().
+		Width(sepWidth).
+		Background(bgSoftColor).
+		Render(strings.Repeat(" ", sepWidth))
 
 	valuePart := lipgloss.NewStyle().
+		Width(valueWidth).
 		Foreground(textColor).
 		Bold(true).
-		Render(value)
+		Background(bgSoftColor).
+		Render(trimOrPad(value, valueWidth))
 
-	line := lipgloss.JoinHorizontal(lipgloss.Left, labelPart, " ", valuePart)
-	return lipgloss.NewStyle().Width(width).Render(line)
+	return lipgloss.JoinHorizontal(lipgloss.Left, labelPart, sepPart, valuePart)
 }
 
 func (m Model) renderSortSegment() string {
