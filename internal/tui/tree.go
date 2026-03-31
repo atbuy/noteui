@@ -183,7 +183,10 @@ func (m Model) directChildCategories(parent string) []notes.Category {
 }
 
 func (m Model) noteMatches(n notes.Note, query string) bool {
-	q := strings.ToLower(query)
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return true
+	}
 
 	if after, ok := strings.CutPrefix(q, "#"); ok {
 		tag := after
@@ -198,10 +201,27 @@ func (m Model) noteMatches(n notes.Note, query string) bool {
 		return false
 	}
 
-	return strings.Contains(strings.ToLower(n.Title()), q) ||
-		strings.Contains(strings.ToLower(n.Name), q) ||
-		strings.Contains(strings.ToLower(n.RelPath), q) ||
-		strings.Contains(strings.ToLower(n.Preview), q)
+	terms := strings.FieldsSeq(q)
+	for term := range terms {
+		termFound := strings.Contains(strings.ToLower(n.Title()), term) ||
+			strings.Contains(strings.ToLower(n.Name), term) ||
+			strings.Contains(strings.ToLower(n.RelPath), term) ||
+			strings.Contains(strings.ToLower(n.Preview), term) ||
+			matchesAnyTag(n.Tags, term)
+		if !termFound {
+			return false
+		}
+	}
+	return true
+}
+
+func matchesAnyTag(tags []string, term string) bool {
+	for _, t := range tags {
+		if strings.Contains(strings.ToLower(t), term) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m Model) categoryMatches(c notes.Category, query string) bool {
@@ -594,6 +614,7 @@ func findMatchExcerpt(n notes.Note, query string) string {
 		return ""
 	}
 
+	// Tag search.
 	if after, ok := strings.CutPrefix(q, "#"); ok {
 		tag := after
 		if tag == "" {
@@ -607,9 +628,7 @@ func findMatchExcerpt(n notes.Note, query string) string {
 		return ""
 	}
 
-	titleMatch := strings.Contains(strings.ToLower(n.Title()), q)
-	nameMatch := strings.Contains(strings.ToLower(n.Name), q)
-	pathMatch := strings.Contains(strings.ToLower(n.RelPath), q)
+	terms := strings.Fields(q)
 
 	content := notes.StripFrontMatter(n.Preview)
 	lines := strings.SplitSeq(content, "\n")
@@ -622,13 +641,12 @@ func findMatchExcerpt(n notes.Note, query string) string {
 		if strings.HasPrefix(trimmed, "# ") {
 			continue
 		}
-		if strings.Contains(strings.ToLower(trimmed), q) {
-			return trimmed
+		lower := strings.ToLower(trimmed)
+		for _, term := range terms {
+			if strings.Contains(lower, term) {
+				return trimmed
+			}
 		}
-	}
-
-	if titleMatch || nameMatch || pathMatch {
-		return ""
 	}
 
 	return ""
