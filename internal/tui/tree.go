@@ -179,6 +179,20 @@ func (m Model) directChildCategories(parent string) []notes.Category {
 
 func (m Model) noteMatches(n notes.Note, query string) bool {
 	q := strings.ToLower(query)
+
+	if after, ok := strings.CutPrefix(q, "#"); ok {
+		tag := after
+		if tag == "" {
+			return true
+		}
+		for _, t := range n.Tags {
+			if strings.Contains(strings.ToLower(t), tag) {
+				return true
+			}
+		}
+		return false
+	}
+
 	return strings.Contains(strings.ToLower(n.Title()), q) ||
 		strings.Contains(strings.ToLower(n.Name), q) ||
 		strings.Contains(strings.ToLower(n.RelPath), q) ||

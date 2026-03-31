@@ -19,11 +19,12 @@ type Note struct {
 	Root      string
 	Path      string
 	RelPath   string
-	Name      string // actual filename
-	TitleText string // display title from first # heading
+	Name      string
+	TitleText string
 	Category  string
 	Preview   string
 	ModTime   time.Time
+	Tags      []string
 }
 
 func TempRoot(root string) string {
@@ -81,6 +82,9 @@ func DiscoverTemporary(root string) ([]Note, error) {
 			title = fallbackTitleFromFilename(filepath.Base(path))
 		}
 
+		fm, _, _ := ParseFrontMatter(preview)
+		tags := ParseTags(fm)
+
 		info, err := d.Info()
 		if err != nil {
 			return err
@@ -95,6 +99,7 @@ func DiscoverTemporary(root string) ([]Note, error) {
 			Category:  category,
 			Preview:   preview,
 			ModTime:   info.ModTime(),
+			Tags:      tags,
 		})
 		return nil
 	})
@@ -122,7 +127,10 @@ func (n Note) Title() string {
 
 func (n Note) Description() string { return n.RelPath }
 func (n Note) FilterValue() string {
-	return n.Title() + " " + n.Name + " " + n.RelPath + " " + n.Preview
+	return n.Title() + " " + n.Name + " " + n.RelPath + " " + n.Preview + " " + strings.Join(
+		n.Tags,
+		" ",
+	)
 }
 
 func Discover(root string) ([]Note, error) {
@@ -174,6 +182,9 @@ func Discover(root string) ([]Note, error) {
 			title = fallbackTitleFromFilename(filepath.Base(path))
 		}
 
+		fm, _, _ := ParseFrontMatter(preview)
+		tags := ParseTags(fm)
+
 		info, err := d.Info()
 		if err != nil {
 			return err
@@ -188,6 +199,7 @@ func Discover(root string) ([]Note, error) {
 			Category:  category,
 			Preview:   preview,
 			ModTime:   info.ModTime(),
+			Tags:      tags,
 		})
 		return nil
 	})

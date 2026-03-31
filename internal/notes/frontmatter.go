@@ -91,3 +91,20 @@ func StripFrontMatter(raw string) string {
 	}
 	return body
 }
+
+func ParseTags(fm FrontMatter) []string {
+	raw, ok := fm[normalizeFrontMatterKey("tags")]
+	if !ok || strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}

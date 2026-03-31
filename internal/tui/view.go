@@ -380,9 +380,37 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 
 	indent := strings.Repeat("  ", item.Depth)
 	leftPrefix := indent + pinMark + icon + " "
-	label := item.Name
+	prefixWidth := lipgloss.Width(leftPrefix)
 
-	plainLine := trimOrPad(leftPrefix+label, rowWidth-2)
+	// Tags are only shown for notes.
+	var tags []string
+	if item.Kind == treeNote && item.Note != nil {
+		tags = item.Note.Tags
+	}
+
+	// Calculate available space.
+	// Leave 2 for padding on each side.
+	availableWidth := rowWidth - 2 - prefixWidth
+
+	tagsPart := ""
+	titleWidth := availableWidth
+
+	if len(tags) > 0 {
+		// Reserve up to 40% of available width for tags, minimum 10 chars.
+		maxTagsWidth := max(10, availableWidth*40/100)
+		tagsPart, titleWidth = renderTagChips(tags, availableWidth, maxTagsWidth)
+	}
+
+	title := item.Name
+	truncatedTitle := truncateToWidth(title, titleWidth)
+
+	// Pad the title to fill its allocated width so tags are right-aligned.
+	titlePadded := truncatedTitle + strings.Repeat(
+		" ",
+		max(0, titleWidth-lipgloss.Width(truncatedTitle)),
+	)
+
+	plainLine := leftPrefix + titlePadded + tagsPart
 
 	if selected {
 		return lipgloss.NewStyle().
@@ -394,19 +422,115 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 			Render(plainLine)
 	}
 
-	// Non-selected rows can still have different foreground colors.
 	rowStyle := treeNoteStyle
 	if item.Kind == treeCategory {
 		rowStyle = treeCategoryStyle
 	}
 	if pinned {
-		rowStyle = rowStyle.Copy().Foreground(accentColor)
+		rowStyle = rowStyle.Foreground(accentColor)
 	}
 
 	return rowStyle.
 		Width(rowWidth).
 		Padding(0, 1).
 		Render(plainLine)
+}
+
+func renderTagChips(tags []string, availableWidth, maxTagsWidth int) (string, int) {
+	// Build chips and fit as many as possible within maxTagsWidth.
+	// Each chip looks like: [tag]
+	// If not all fit, append +N for the remainder.
+
+	type chip struct {
+		text  string
+		width int
+	}
+
+	chips := make([]chip, 0, len(tags))
+	for _, t := range tags {
+		text := "[" + t + "]"
+		chips = append(chips, chip{text: text, width: lipgloss.Width(text)})
+	}
+
+	fitted := make([]chip, 0, len(chips))
+	usedWidth := 0
+	remaining := 0
+
+	for i, c := range chips {
+		// Account for a space before each chip.
+		needed := c.width
+		if len(fitted) > 0 {
+			needed++
+		}
+
+		// Check if we need to reserve space for an overflow indicator.
+		overflowText := ""
+		if i < len(chips)-1 {
+			overflowText = fmt.Sprintf("+%d", len(chips)-i)
+		}
+		overflowWidth := 0
+		if overflowText != "" {
+			overflowWidth = lipgloss.Width(overflowText) + 1
+		}
+
+		if usedWidth+needed+overflowWidth <= maxTagsWidth {
+			fitted = append(fitted, c)
+			usedWidth += needed
+		} else {
+			remaining = len(chips) - i
+			break
+		}
+	}
+
+	if len(fitted) == 0 {
+		// Nothing fits at all, return full width to title.
+		return "", availableWidth
+	}
+
+	var b strings.Builder
+	for i, c := range fitted {
+		if i > 0 {
+			b.WriteString(" ")
+		}
+		b.WriteString(c.text)
+	}
+
+	if remaining > 0 {
+		fmt.Fprintf(&b, " +%d", remaining)
+	}
+
+	tagsStr := mutedStyle.Render(b.String())
+	tagsRenderedWidth := usedWidth
+	if remaining > 0 {
+		tagsRenderedWidth += lipgloss.Width(fmt.Sprintf(" +%d", remaining))
+	}
+
+	titleWidth := availableWidth - tagsRenderedWidth
+	return tagsStr, max(8, titleWidth)
+}
+
+func truncateToWidth(s string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
+	if lipgloss.Width(s) <= maxWidth {
+		return s
+	}
+
+	runes := []rune(s)
+	out := make([]rune, 0, len(runes))
+	cur := 0
+
+	for _, r := range runes {
+		rw := lipgloss.Width(string(r))
+		if cur+rw > maxWidth-1 {
+			break
+		}
+		out = append(out, r)
+		cur += rw
+	}
+
+	return string(out) + "…"
 }
 
 func (m Model) renderTemporaryListView() string {
@@ -724,6 +848,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("p", "Pin or unpin current item", innerWidth),
 		m.renderHelpLine("gg / G", "Jump to top / bottom of list", innerWidth),
 		m.renderHelpLine("s", "Toggle sort (alpha / modified)", innerWidth),
+		m.renderHelpLine("#tag", "Filter by tag in search", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
