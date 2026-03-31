@@ -201,12 +201,17 @@ func (m Model) noteMatches(n notes.Note, query string) bool {
 		return false
 	}
 
+	previewText := n.Preview
+	if n.Encrypted {
+		previewText = "<encrypted>"
+	}
+
 	terms := strings.FieldsSeq(q)
 	for term := range terms {
 		termFound := strings.Contains(strings.ToLower(n.Title()), term) ||
 			strings.Contains(strings.ToLower(n.Name), term) ||
 			strings.Contains(strings.ToLower(n.RelPath), term) ||
-			strings.Contains(strings.ToLower(n.Preview), term) ||
+			strings.Contains(strings.ToLower(previewText), term) ||
 			matchesAnyTag(n.Tags, term)
 		if !termFound {
 			return false
@@ -637,6 +642,10 @@ func findMatchExcerpt(n notes.Note, query string) string {
 			}
 		}
 		return ""
+	}
+
+	if n.Encrypted {
+		return "<encrypted>"
 	}
 
 	terms := strings.Fields(q)

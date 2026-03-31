@@ -692,7 +692,11 @@ func highlightMatchesInRendered(
 		if i == activeMatchLine {
 			activeOccurr = activeOccurrIdx
 		}
-		lines[i] = highlightTermsInLine(plainLine, terms, activeOccurr)
+		lines[i] = fillWidthBackground(
+			highlightTermsInLine(plainLine, terms, activeOccurr),
+			lipgloss.Width(plainLine),
+			bgSoftColor,
+		)
 	}
 
 	return strings.Join(lines, "\n")
@@ -702,6 +706,10 @@ func highlightTermsInLine(line string, terms []string, activeOccurrIdx int) stri
 	if line == "" {
 		return line
 	}
+
+	base := lipgloss.NewStyle().
+		Foreground(textColor).
+		Background(bgSoftColor)
 
 	type interval struct{ start, end int }
 	var intervals []interval
@@ -724,7 +732,7 @@ func highlightTermsInLine(line string, terms []string, activeOccurrIdx int) stri
 	}
 
 	if len(intervals) == 0 {
-		return mutedStyle.Render(line)
+		return base.Render(line)
 	}
 
 	sort.Slice(intervals, func(i, j int) bool {
@@ -748,7 +756,7 @@ func highlightTermsInLine(line string, terms []string, activeOccurrIdx int) stri
 	pos := 0
 	for occurrIdx, iv := range merged {
 		if pos < iv.start {
-			b.WriteString(mutedStyle.Render(line[pos:iv.start]))
+			b.WriteString(base.Render(line[pos:iv.start]))
 		}
 		matchBg := highlightBgColor
 		matchFg := selectedFgColor
@@ -763,7 +771,7 @@ func highlightTermsInLine(line string, terms []string, activeOccurrIdx int) stri
 		pos = iv.end
 	}
 	if pos < len(line) {
-		b.WriteString(mutedStyle.Render(line[pos:]))
+		b.WriteString(base.Render(line[pos:]))
 	}
 
 	return b.String()
