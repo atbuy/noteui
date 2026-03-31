@@ -251,12 +251,10 @@ func CreateNote(root, relDir string) (string, error) {
 		return "", err
 	}
 
-	// Temporary filename until we know the real title after editing.
 	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
 	path := filepath.Join(targetDir, name)
 
-	content := "# New\n\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
 		return "", err
 	}
 
@@ -324,7 +322,13 @@ func RenameFromTitle(path string) (string, bool, error) {
 		return "", false, err
 	}
 
-	title := ExtractTitle(content)
+	// If the file is empty and still has the temp name, delete it.
+	if strings.TrimSpace(content) == "" && isTempNoteName(filepath.Base(path)) {
+		_ = os.Remove(path)
+		return "", false, nil
+	}
+
+	title := ExtractTitleOrFirstLine(content)
 	if title == "" {
 		return path, false, nil
 	}
@@ -351,6 +355,10 @@ func RenameFromTitle(path string) (string, bool, error) {
 	return target, true, nil
 }
 
+func isTempNoteName(name string) bool {
+	return strings.HasPrefix(name, ".new-")
+}
+
 func RenameNoteTitle(path, newTitle string) (string, bool, error) {
 	newTitle = strings.TrimSpace(newTitle)
 	if newTitle == "" {
@@ -368,6 +376,30 @@ func RenameNoteTitle(path, newTitle string) (string, bool, error) {
 	}
 
 	return RenameFromTitle(path)
+}
+
+func ExtractTitleOrFirstLine(content string) string {
+	content = StripFrontMatter(content)
+
+	firstNonEmpty := ""
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "# ") {
+			title := strings.TrimSpace(strings.TrimPrefix(line, "# "))
+			if title != "" {
+				return title
+			}
+		}
+		if firstNonEmpty == "" {
+			firstNonEmpty = strings.TrimLeft(line, "#~*`->")
+			firstNonEmpty = strings.TrimSpace(firstNonEmpty)
+		}
+	}
+
+	return firstNonEmpty
 }
 
 func Slugify(s string) string {

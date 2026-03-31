@@ -519,6 +519,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, refreshAllCmd(m.rootDir)
 		}
 
+		// Empty file with temp name was deleted.
+		if newPath == "" && !renamed {
+			m.status = "note discarded"
+			return m, refreshAllCmd(m.rootDir)
+		}
+
 		if renamed {
 			m.status = "renamed: " + filepath.Base(newPath)
 		} else {
