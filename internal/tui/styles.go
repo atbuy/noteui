@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -117,6 +120,8 @@ func ApplyTheme(cfg config.Config) {
 	override(&p.SelectedBgColor, cfg.Theme.SelectedBgColor)
 	override(&p.SelectedFgColor, cfg.Theme.SelectedFgColor)
 	override(&p.HighlightBgColor, cfg.Theme.HighlightBgColor)
+
+	p = normalizePaletteAccessibility(p)
 
 	bgColor = lipgloss.Color(p.BgColor)
 	bgSoftColor = lipgloss.Color(p.PanelBgColor)
@@ -272,12 +277,12 @@ func builtinTheme(name string) themePalette {
 			BorderColor:      "#434C5E",
 			FocusBorderColor: "#88C0D0",
 			AccentColor:      "#88C0D0",
-			AccentSoftColor:  "#81A1C1",
+			AccentSoftColor:  "#97B1CC",
 			TextColor:        "#ECEFF4",
 			MutedColor:       "#D8DEE9",
 			SubtleColor:      "#4C566A",
 			ChipBgColor:      "#434C5E",
-			ErrorColor:       "#BF616A",
+			ErrorColor:       "#D9A2A7",
 			SuccessColor:     "#A3BE8C",
 			SelectedBgColor:  "#4C566A",
 			SelectedFgColor:  "#ECEFF4",
@@ -296,7 +301,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#A89984",
 			SubtleColor:      "#665C54",
 			ChipBgColor:      "#3C3836",
-			ErrorColor:       "#FB4934",
+			ErrorColor:       "#FC6755",
 			SuccessColor:     "#B8BB26",
 			SelectedBgColor:  "#504945",
 			SelectedFgColor:  "#FBF1C7",
@@ -329,15 +334,15 @@ func builtinTheme(name string) themePalette {
 			BorderColor:      "#CCD0DA",
 			FocusBorderColor: "#8839EF",
 			AccentColor:      "#8839EF",
-			AccentSoftColor:  "#1E66F5",
-			TextColor:        "#4C4F69",
-			MutedColor:       "#6C6F85",
+			AccentSoftColor:  "#1C5FE5",
+			TextColor:        "#484B64",
+			MutedColor:       "#65687D",
 			SubtleColor:      "#BCC0CC",
 			ChipBgColor:      "#CCD0DA",
-			ErrorColor:       "#D20F39",
-			SuccessColor:     "#40A02B",
+			ErrorColor:       "#CC1038",
+			SuccessColor:     "#307820",
 			SelectedBgColor:  "#BCC0CC",
-			SelectedFgColor:  "#4C4F69",
+			SelectedFgColor:  "#4B4D67",
 			HighlightBgColor: "#C5BDFF",
 		}
 
@@ -347,16 +352,16 @@ func builtinTheme(name string) themePalette {
 			PanelBgColor:     "#EEE8D5",
 			BorderColor:      "#93A1A1",
 			FocusBorderColor: "#B58900",
-			AccentColor:      "#B58900",
-			AccentSoftColor:  "#268BD2",
-			TextColor:        "#586E75",
-			MutedColor:       "#657B83",
+			AccentColor:      "#8F6C00",
+			AccentSoftColor:  "#1E6DA5",
+			TextColor:        "#3E4E53",
+			MutedColor:       "#586B72",
 			SubtleColor:      "#93A1A1",
 			ChipBgColor:      "#E4DDC8",
-			ErrorColor:       "#DC322F",
-			SuccessColor:     "#859900",
+			ErrorColor:       "#C22C29",
+			SuccessColor:     "#5F6F00",
 			SelectedBgColor:  "#D3CBB7",
-			SelectedFgColor:  "#586E75",
+			SelectedFgColor:  "#47595E",
 			HighlightBgColor: "#C9D8E8",
 		}
 
@@ -366,10 +371,10 @@ func builtinTheme(name string) themePalette {
 			PanelBgColor:     "#F2F1EC",
 			BorderColor:      "#D8D5CC",
 			FocusBorderColor: "#4A7BD0",
-			AccentColor:      "#4A7BD0",
-			AccentSoftColor:  "#B65C2A",
+			AccentColor:      "#4472C0",
+			AccentSoftColor:  "#AA5526",
 			TextColor:        "#2F3440",
-			MutedColor:       "#667085",
+			MutedColor:       "#656E83",
 			SubtleColor:      "#C8C6BE",
 			ChipBgColor:      "#E8E5DC",
 			ErrorColor:       "#C0392B",
@@ -381,21 +386,21 @@ func builtinTheme(name string) themePalette {
 
 	case "onedark":
 		return themePalette{
-			BgColor:          "#282C34",
-			PanelBgColor:     "#21252B",
-			BorderColor:      "#3E4452",
+			BgColor:          "#1E2127",
+			PanelBgColor:     "#282C34",
+			BorderColor:      "#3A404C",
 			FocusBorderColor: "#61AFEF",
 			AccentColor:      "#61AFEF",
-			AccentSoftColor:  "#98C379",
+			AccentSoftColor:  "#C678DD",
 			TextColor:        "#ABB2BF",
-			MutedColor:       "#5C6370",
-			SubtleColor:      "#4B5263",
-			ChipBgColor:      "#2C313C",
+			MutedColor:       "#828997",
+			SubtleColor:      "#3A404C",
+			ChipBgColor:      "#2C313A",
 			ErrorColor:       "#E06C75",
 			SuccessColor:     "#98C379",
-			SelectedBgColor:  "#3E4452",
+			SelectedBgColor:  "#353B45",
 			SelectedFgColor:  "#E6EAF2",
-			HighlightBgColor: "#2D4A6A",
+			HighlightBgColor: "#2B4A63",
 		}
 
 	case "kanagawa":
@@ -410,7 +415,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#C8C093",
 			SubtleColor:      "#54546D",
 			ChipBgColor:      "#2D2D3A",
-			ErrorColor:       "#E46876",
+			ErrorColor:       "#E56D7B",
 			SuccessColor:     "#98BB6C",
 			SelectedBgColor:  "#2D4F67",
 			SelectedFgColor:  "#DCD7BA",
@@ -426,7 +431,7 @@ func builtinTheme(name string) themePalette {
 			AccentColor:      "#FF79C6",
 			AccentSoftColor:  "#BD93F9",
 			TextColor:        "#F8F8F2",
-			MutedColor:       "#6272A4",
+			MutedColor:       "#7A88B2",
 			SubtleColor:      "#44475A",
 			ChipBgColor:      "#343746",
 			ErrorColor:       "#FF5555",
@@ -444,11 +449,11 @@ func builtinTheme(name string) themePalette {
 			FocusBorderColor: "#A7C080",
 			AccentColor:      "#A7C080",
 			AccentSoftColor:  "#DBBC7F",
-			TextColor:        "#D3C6AA",
-			MutedColor:       "#9DA9A0",
+			TextColor:        "#DACFB7",
+			MutedColor:       "#9FAAA2",
 			SubtleColor:      "#475258",
 			ChipBgColor:      "#374145",
-			ErrorColor:       "#E67E80",
+			ErrorColor:       "#E99092",
 			SuccessColor:     "#A7C080",
 			SelectedBgColor:  "#425047",
 			SelectedFgColor:  "#D3C6AA",
@@ -479,18 +484,18 @@ func builtinTheme(name string) themePalette {
 			BgColor:          "#FFFFFF",
 			PanelBgColor:     "#F6F8FA",
 			BorderColor:      "#D0D7DE",
-			FocusBorderColor: "#0969DA",
-			AccentColor:      "#0969DA",
-			AccentSoftColor:  "#1F6FEB",
-			TextColor:        "#1F2328",
-			MutedColor:       "#656D76",
-			SubtleColor:      "#D0D7DE",
+			FocusBorderColor: "#0550AE",
+			AccentColor:      "#0550AE",
+			AccentSoftColor:  "#0349A5",
+			TextColor:        "#24292F",
+			MutedColor:       "#57606A",
+			SubtleColor:      "#AFB8C1",
 			ChipBgColor:      "#EAEEF2",
-			ErrorColor:       "#CF222E",
-			SuccessColor:     "#1A7F37",
+			ErrorColor:       "#A40E26",
+			SuccessColor:     "#116329",
 			SelectedBgColor:  "#DDF4FF",
-			SelectedFgColor:  "#1F2328",
-			HighlightBgColor: "#D4E8FF",
+			SelectedFgColor:  "#0E1116",
+			HighlightBgColor: "#B6E3FF",
 		}
 
 	case "github-dark":
@@ -561,6 +566,143 @@ func normalizeThemeName(name string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(name))
 	}
+}
+
+func normalizePaletteAccessibility(p themePalette) themePalette {
+	p.TextColor = ensureContrast(p.TextColor, p.PanelBgColor, 7.0)
+	p.MutedColor = ensureContrast(p.MutedColor, p.PanelBgColor, 4.5)
+	p.AccentSoftColor = ensureContrast(p.AccentSoftColor, p.PanelBgColor, 4.5)
+	p.AccentColor = ensureContrast(p.AccentColor, p.BgColor, 4.5)
+	p.SelectedFgColor = ensureContrast(p.SelectedFgColor, p.SelectedBgColor, 4.5)
+	return p
+}
+
+func ensureContrast(fgHex, bgHex string, minRatio float64) string {
+	fg, ok := parseHexColor(fgHex)
+	if !ok {
+		return fgHex
+	}
+	bg, ok := parseHexColor(bgHex)
+	if !ok {
+		return fgHex
+	}
+	if contrastRatio(fg, bg) >= minRatio {
+		return formatHexColor(fg)
+	}
+
+	black := rgbColor{0, 0, 0}
+	white := rgbColor{255, 255, 255}
+
+	best := fg
+	bestDist := math.MaxFloat64
+	for _, target := range []rgbColor{black, white} {
+		adjusted, ok := blendForContrast(fg, bg, target, minRatio)
+		if !ok {
+			continue
+		}
+		dist := colorDistanceSq(fg, adjusted)
+		if dist < bestDist {
+			best = adjusted
+			bestDist = dist
+		}
+	}
+
+	if bestDist == math.MaxFloat64 {
+		if contrastRatio(black, bg) >= contrastRatio(white, bg) {
+			best = black
+		} else {
+			best = white
+		}
+	}
+
+	return formatHexColor(best)
+}
+
+type rgbColor struct {
+	r float64
+	g float64
+	b float64
+}
+
+func parseHexColor(hex string) (rgbColor, bool) {
+	hex = strings.TrimSpace(strings.TrimPrefix(hex, "#"))
+	if len(hex) != 6 {
+		return rgbColor{}, false
+	}
+	value, err := strconv.ParseUint(hex, 16, 32)
+	if err != nil {
+		return rgbColor{}, false
+	}
+	return rgbColor{
+		r: float64((value >> 16) & 0xFF),
+		g: float64((value >> 8) & 0xFF),
+		b: float64(value & 0xFF),
+	}, true
+}
+
+func formatHexColor(c rgbColor) string {
+	return fmt.Sprintf("#%02X%02X%02X", clampChannel(c.r), clampChannel(c.g), clampChannel(c.b))
+}
+
+func clampChannel(v float64) int {
+	return max(0, min(255, int(math.Round(v))))
+}
+
+func blendForContrast(start, bg, target rgbColor, minRatio float64) (rgbColor, bool) {
+	lo := 0.0
+	hi := 1.0
+	best := start
+	found := false
+	for range 24 {
+		mid := (lo + hi) / 2
+		candidate := mixColor(start, target, mid)
+		if contrastRatio(candidate, bg) >= minRatio {
+			best = candidate
+			found = true
+			hi = mid
+		} else {
+			lo = mid
+		}
+	}
+	return best, found
+}
+
+func mixColor(a, b rgbColor, t float64) rgbColor {
+	return rgbColor{
+		r: a.r + (b.r-a.r)*t,
+		g: a.g + (b.g-a.g)*t,
+		b: a.b + (b.b-a.b)*t,
+	}
+}
+
+func colorDistanceSq(a, b rgbColor) float64 {
+	dr := a.r - b.r
+	dg := a.g - b.g
+	db := a.b - b.b
+	return dr*dr + dg*dg + db*db
+}
+
+func contrastRatio(a, b rgbColor) float64 {
+	la := relativeLuminance(a)
+	lb := relativeLuminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+func relativeLuminance(c rgbColor) float64 {
+	r := linearizeChannel(c.r / 255.0)
+	g := linearizeChannel(c.g / 255.0)
+	b := linearizeChannel(c.b / 255.0)
+	return 0.2126*r + 0.7152*g + 0.0722*b
+}
+
+func linearizeChannel(v float64) float64 {
+	if v <= 0.04045 {
+		return v / 12.92
+	}
+	return math.Pow((v+0.055)/1.055, 2.4)
 }
 
 func firstNonEmpty(v, fallback string) string {
