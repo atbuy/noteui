@@ -37,6 +37,7 @@ type ThemeConfig struct {
 	SuccessColor     string `toml:"success_color"`
 	SelectedBgColor  string `toml:"selected_bg_color"`
 	SelectedFgColor  string `toml:"selected_fg_color"`
+	HighlightBgColor string `toml:"highlight_bg_color"`
 
 	BorderStyle   string `toml:"border_style"`
 	AppPaddingX   int    `toml:"app_padding_x"`

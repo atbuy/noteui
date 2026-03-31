@@ -384,21 +384,17 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	leftPrefix := indent + pinMark + icon + " "
 	prefixWidth := lipgloss.Width(leftPrefix)
 
-	// Tags are only shown for notes.
 	var tags []string
 	if item.Kind == treeNote && item.Note != nil {
 		tags = item.Note.Tags
 	}
 
-	// Calculate available space.
-	// Leave 2 for padding on each side.
 	availableWidth := rowWidth - 2 - prefixWidth
 
 	tagsPart := ""
 	titleWidth := availableWidth
 
 	if len(tags) > 0 {
-		// Reserve up to 40% of available width for tags, minimum 10 chars.
 		maxTagsWidth := max(10, availableWidth*40/100)
 		tagsPart, titleWidth = renderTagChips(tags, availableWidth, maxTagsWidth)
 	}
@@ -406,7 +402,6 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	title := item.Name
 	truncatedTitle := truncateToWidth(title, titleWidth)
 
-	// Pad the title to fill its allocated width so tags are right-aligned.
 	titlePadded := truncatedTitle + strings.Repeat(
 		" ",
 		max(0, titleWidth-lipgloss.Width(truncatedTitle)),
@@ -414,28 +409,54 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 
 	plainLine := leftPrefix + titlePadded + tagsPart
 
+	// Build the hint line if present.
+	hintLine := ""
+	if item.MatchHint != "" {
+		hintIndent := strings.Repeat(" ", prefixWidth+2)
+		hintAvailable := max(8, rowWidth-2-lipgloss.Width(hintIndent))
+
+		if after, ok := strings.CutPrefix(item.MatchHint, "tag:"); ok {
+			tagName := after
+			hintLine = hintIndent + lipgloss.NewStyle().
+				Foreground(accentSoftColor).
+				Background(chipBgColor).
+				Padding(0, 1).
+				Render("tag: "+tagName)
+		} else {
+			excerpt := truncateToWidth(item.MatchHint, hintAvailable-4)
+			highlighted := highlightMatch(excerpt, strings.TrimSpace(m.searchInput.Value()))
+			hintLine = hintIndent + "… " + highlighted
+		}
+	}
+
+	var mainLine string
 	if selected {
-		return lipgloss.NewStyle().
+		mainLine = lipgloss.NewStyle().
 			Width(rowWidth).
 			Padding(0, 1).
 			Foreground(selectedFgColor).
 			Background(selectedBgColor).
 			Bold(boldSelected).
 			Render(plainLine)
+	} else {
+		rowStyle := treeNoteStyle
+		if item.Kind == treeCategory {
+			rowStyle = treeCategoryStyle
+		}
+		if pinned {
+			rowStyle = rowStyle.Foreground(accentColor)
+		}
+		mainLine = rowStyle.
+			Width(rowWidth).
+			Padding(0, 1).
+			Render(plainLine)
 	}
 
-	rowStyle := treeNoteStyle
-	if item.Kind == treeCategory {
-		rowStyle = treeCategoryStyle
-	}
-	if pinned {
-		rowStyle = rowStyle.Foreground(accentColor)
+	if hintLine == "" {
+		return mainLine
 	}
 
-	return rowStyle.
-		Width(rowWidth).
-		Padding(0, 1).
-		Render(plainLine)
+	return lipgloss.JoinVertical(lipgloss.Left, mainLine, hintLine)
 }
 
 func renderTagChips(tags []string, availableWidth, maxTagsWidth int) (string, int) {
@@ -1210,4 +1231,29 @@ func (m Model) renderSortSegment() string {
 		return "sort: modified"
 	}
 	return "sort: alpha"
+}
+
+func highlightMatch(text, query string) string {
+	if query == "" {
+		return mutedStyle.Render(text)
+	}
+
+	lower := strings.ToLower(text)
+	lowerQ := strings.ToLower(query)
+
+	idx := strings.Index(lower, lowerQ)
+	if idx == -1 {
+		return mutedStyle.Render(text)
+	}
+
+	before := text[:idx]
+	match := text[idx : idx+len(query)]
+	after := text[idx+len(query):]
+
+	highlighted := lipgloss.NewStyle().
+		Background(highlightBgColor).
+		Foreground(selectedFgColor).
+		Render(match)
+
+	return mutedStyle.Render(before) + highlighted + mutedStyle.Render(after)
 }

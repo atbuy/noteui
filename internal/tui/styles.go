@@ -23,6 +23,7 @@ var (
 	chipBgColor      lipgloss.Color
 	selectedBgColor  lipgloss.Color
 	selectedFgColor  lipgloss.Color
+	highlightBgColor lipgloss.Color
 
 	modalBgColor     lipgloss.Color
 	modalBorderColor lipgloss.Color
@@ -89,6 +90,7 @@ type themePalette struct {
 	SuccessColor     string
 	SelectedBgColor  string
 	SelectedFgColor  string
+	HighlightBgColor string
 }
 
 func ApplyTheme(cfg config.Config) {
@@ -114,6 +116,7 @@ func ApplyTheme(cfg config.Config) {
 	override(&p.SuccessColor, cfg.Theme.SuccessColor)
 	override(&p.SelectedBgColor, cfg.Theme.SelectedBgColor)
 	override(&p.SelectedFgColor, cfg.Theme.SelectedFgColor)
+	override(&p.HighlightBgColor, cfg.Theme.HighlightBgColor)
 
 	bgColor = lipgloss.Color(p.BgColor)
 	bgSoftColor = lipgloss.Color(p.PanelBgColor)
@@ -129,6 +132,7 @@ func ApplyTheme(cfg config.Config) {
 	successColor = lipgloss.Color(p.SuccessColor)
 	selectedBgColor = lipgloss.Color(p.SelectedBgColor)
 	selectedFgColor = lipgloss.Color(p.SelectedFgColor)
+	highlightBgColor = lipgloss.Color(p.HighlightBgColor)
 
 	modalBgColor = firstNonEmptyColor(cfg.Modal.BgColor, p.PanelBgColor)
 	modalBorderColor = firstNonEmptyColor(cfg.Modal.BorderColor, p.AccentColor)
@@ -269,6 +273,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#A3BE8C",
 			SelectedBgColor:  "#4C566A",
 			SelectedFgColor:  "#ECEFF4",
+			HighlightBgColor: "#3B4D6A",
 		}
 
 	case "gruvbox":
@@ -287,6 +292,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#B8BB26",
 			SelectedBgColor:  "#504945",
 			SelectedFgColor:  "#FBF1C7",
+			HighlightBgColor: "#504528",
 		}
 
 	case "catppuccin", "catppuccin-mocha", "mocha":
@@ -305,6 +311,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#A6E3A1",
 			SelectedBgColor:  "#45475A",
 			SelectedFgColor:  "#CDD6F4",
+			HighlightBgColor: "#3D3560",
 		}
 
 	case "latte":
@@ -323,6 +330,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#40A02B",
 			SelectedBgColor:  "#BCC0CC",
 			SelectedFgColor:  "#4C4F69",
+			HighlightBgColor: "#C5BDFF",
 		}
 
 	case "solarized-light":
@@ -341,6 +349,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#859900",
 			SelectedBgColor:  "#D3CBB7",
 			SelectedFgColor:  "#586E75",
+			HighlightBgColor: "#C9D8E8",
 		}
 
 	case "paper":
@@ -359,6 +368,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#2E7D32",
 			SelectedBgColor:  "#DDD9CF",
 			SelectedFgColor:  "#2F3440",
+			HighlightBgColor: "#D6E4F7",
 		}
 
 	case "onedark":
@@ -377,6 +387,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#98C379",
 			SelectedBgColor:  "#3E4452",
 			SelectedFgColor:  "#E6EAF2",
+			HighlightBgColor: "#2D4A6A",
 		}
 
 	case "kanagawa":
@@ -395,6 +406,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#98BB6C",
 			SelectedBgColor:  "#2D4F67",
 			SelectedFgColor:  "#DCD7BA",
+			HighlightBgColor: "#2D4F67",
 		}
 
 	case "dracula":
@@ -413,6 +425,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#50FA7B",
 			SelectedBgColor:  "#44475A",
 			SelectedFgColor:  "#F8F8F2",
+			HighlightBgColor: "#44366A",
 		}
 
 	case "everforest", "everforest-dark":
@@ -431,6 +444,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#A7C080",
 			SelectedBgColor:  "#425047",
 			SelectedFgColor:  "#D3C6AA",
+			HighlightBgColor: "#3A5247",
 		}
 
 	case "tokyo-night-storm", "tokyonight-storm", "tokyo night storm":
@@ -449,6 +463,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#9ECE6A",
 			SelectedBgColor:  "#364A82",
 			SelectedFgColor:  "#C0CAF5",
+			HighlightBgColor: "#2A3F6A",
 		}
 
 	case "github-light":
@@ -467,6 +482,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#1A7F37",
 			SelectedBgColor:  "#DDF4FF",
 			SelectedFgColor:  "#1F2328",
+			HighlightBgColor: "#D4E8FF",
 		}
 
 	case "github-dark":
@@ -485,6 +501,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#3FB950",
 			SelectedBgColor:  "#1C2B45",
 			SelectedFgColor:  "#F0F6FC",
+			HighlightBgColor: "#1C3A5C",
 		}
 
 	case "carbonfox":
@@ -503,6 +520,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#42BE65",
 			SelectedBgColor:  "#2B2B2B",
 			SelectedFgColor:  "#F2F4F8",
+			HighlightBgColor: "#1E3A5C",
 		}
 
 	default:
@@ -521,6 +539,7 @@ func builtinTheme(name string) themePalette {
 			SuccessColor:     "#87AF87",
 			SelectedBgColor:  "#3F5F9F",
 			SelectedFgColor:  "#FFFFFF",
+			HighlightBgColor: "#3A3A6A",
 		}
 	}
 }

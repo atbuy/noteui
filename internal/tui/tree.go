@@ -111,12 +111,17 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 			continue
 		}
 		noteCopy := n
+		hint := ""
+		if query != "" {
+			hint = findMatchExcerpt(noteCopy, query)
+		}
 		*out = append(*out, treeItem{
-			Kind:    treeNote,
-			Name:    n.Title(),
-			RelPath: n.RelPath,
-			Depth:   depth,
-			Note:    &noteCopy,
+			Kind:      treeNote,
+			Name:      n.Title(),
+			RelPath:   n.RelPath,
+			Depth:     depth,
+			Note:      &noteCopy,
+			MatchHint: hint,
 		})
 	}
 }
@@ -581,4 +586,50 @@ func trimOrPad(s string, width int) string {
 		out = append(out, []rune(strings.Repeat(" ", width-cur))...)
 	}
 	return string(out)
+}
+
+func findMatchExcerpt(n notes.Note, query string) string {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return ""
+	}
+
+	if after, ok := strings.CutPrefix(q, "#"); ok {
+		tag := after
+		if tag == "" {
+			return ""
+		}
+		for _, t := range n.Tags {
+			if strings.Contains(strings.ToLower(t), tag) {
+				return "tag:" + t
+			}
+		}
+		return ""
+	}
+
+	titleMatch := strings.Contains(strings.ToLower(n.Title()), q)
+	nameMatch := strings.Contains(strings.ToLower(n.Name), q)
+	pathMatch := strings.Contains(strings.ToLower(n.RelPath), q)
+
+	content := notes.StripFrontMatter(n.Preview)
+	lines := strings.SplitSeq(content, "\n")
+
+	for line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "# ") {
+			continue
+		}
+		if strings.Contains(strings.ToLower(trimmed), q) {
+			return trimmed
+		}
+	}
+
+	if titleMatch || nameMatch || pathMatch {
+		return ""
+	}
+
+	return ""
 }
