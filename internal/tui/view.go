@@ -642,6 +642,7 @@ func (m Model) renderStatus() string {
 		m.renderModeSegment(),
 		m.renderSelectionSegment(),
 		m.renderPrivacySegment(),
+		m.renderSortSegment(),
 	}
 
 	if filter := m.renderFilterSegment(); filter != "" {
@@ -1103,19 +1104,14 @@ func (m Model) previewView() string {
 }
 
 func (m Model) leftPanelTitle() string {
-	sortIndicator := ""
-	if m.sortByModTime {
-		sortIndicator = " ⏱"
-	}
-
 	switch m.listMode {
 	case listModeTemporary:
-		return fmt.Sprintf("Temporary (%d)%s", len(m.filteredTempNotes()), sortIndicator)
+		return fmt.Sprintf("Temporary (%d)", len(m.filteredTempNotes()))
 	case listModePins:
 		return fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
 	default:
 		count := max(0, len(m.treeItems)-1)
-		return fmt.Sprintf("Tree (%d)%s", count, sortIndicator)
+		return fmt.Sprintf("Tree (%d)", count)
 	}
 }
 
@@ -1207,4 +1203,11 @@ func dashboardSummaryLine(label, value string, width int) string {
 
 	line := lipgloss.JoinHorizontal(lipgloss.Left, labelPart, " ", valuePart)
 	return lipgloss.NewStyle().Width(width).Render(line)
+}
+
+func (m Model) renderSortSegment() string {
+	if m.sortByModTime {
+		return "sort: modified"
+	}
+	return "sort: alpha"
 }
