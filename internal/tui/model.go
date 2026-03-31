@@ -134,6 +134,12 @@ type categoryDeletedMsg struct {
 	err     error
 }
 
+type previewRenderedMsg struct {
+	forPath             string
+	baseContent         string
+	privacyForcedByNote bool
+}
+
 type treeItem struct {
 	Kind      treeItemKind
 	Name      string
@@ -209,6 +215,7 @@ type Model struct {
 	previewMatches     []previewMatch
 	previewMatchIndex  int
 	previewBaseContent string
+	pendingPreviewCmd  tea.Cmd
 
 	state       state.State
 	pinnedNotes map[string]bool
@@ -337,7 +344,41 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m, cmd := m.handleMsg(msg)
+	if m.pendingPreviewCmd != nil {
+		previewCmd := m.pendingPreviewCmd
+		m.pendingPreviewCmd = nil
+		if cmd != nil {
+			cmd = tea.Batch(cmd, previewCmd)
+		} else {
+			cmd = previewCmd
+		}
+	}
+	return m, cmd
+}
+
+func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case previewRenderedMsg:
+		if msg.forPath != m.previewPath {
+			return m, nil
+		}
+		m.previewBaseContent = msg.baseContent
+		m.previewPrivacyForcedByNote = msg.privacyForcedByNote
+		query := strings.TrimSpace(m.searchInput.Value())
+		m.previewMatches = buildPreviewMatches(msg.baseContent, query)
+		m.previewMatchIndex = 0
+		highlighted := applyMatchHighlights(msg.baseContent, query, m.previewMatches, 0)
+		m.previewContent = highlighted
+		m.preview.SetContent(highlighted)
+		m.rebuildPreviewHeadingsFromRendered()
+		if len(m.previewMatches) > 0 && query != "" {
+			m.scrollToMatchLine(m.previewMatches[0].line)
+		} else {
+			m.preview.GotoTop()
+		}
+		return m, nil
+
 	case tea.MouseMsg:
 		m.previewHover = m.mouseInPreview(msg.X, msg.Y)
 
@@ -368,6 +409,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		previewInnerHeight := max(6, msg.Height-14)
 		m.preview.Width = previewInnerWidth
 		m.preview.Height = previewInnerHeight
+		m.previewPath = ""
 		m.refreshPreview()
 		return m, nil
 

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"atbuy/noteui/internal/notes"
@@ -52,52 +53,16 @@ func (m *Model) refreshPreview() {
 			return
 
 		case pinItemNote, pinItemTemporaryNote:
-			raw, err := notes.ReadAll(item.Path)
-			if err != nil {
-				m.previewPath = item.Path
-				m.previewContent = "Failed to read note: " + err.Error()
-				m.previewPrivacyForcedByNote = false
-				m.preview.SetContent(m.previewContent)
-				m.rebuildPreviewHeadingsFromRendered()
-				m.previewMatches = nil
-				m.preview.GotoTop()
+			if m.previewPath == item.Path {
 				return
 			}
-
-			private := notes.NoteIsPrivate(raw)
-
 			rel := item.RelPath
 			if item.Kind == pinItemTemporaryNote {
 				rel = filepath.Join(".tmp", rel)
 			}
-
-			rendered := m.renderNotePreview(rel, raw, item.Tags)
-			if m.effectivePreviewPrivacy(private) {
-				rendered = blurRenderedText(rendered)
-			}
-
-			m.previewPrivacyForcedByNote = private
 			m.previewPath = item.Path
-			m.previewBaseContent = rendered
-			m.previewMatchIndex = 0
-			m.previewMatches = buildPreviewMatches(
-				rendered,
-				strings.TrimSpace(m.searchInput.Value()),
-			)
-			highlighted := applyMatchHighlights(
-				rendered,
-				strings.TrimSpace(m.searchInput.Value()),
-				m.previewMatches,
-				m.previewMatchIndex,
-			)
-			m.previewContent = highlighted
-			m.preview.SetContent(highlighted)
-			m.rebuildPreviewHeadingsFromRendered()
-			if len(m.previewMatches) > 0 {
-				m.preview.SetYOffset(m.centeredOffset(m.previewMatches[0].line))
-			} else {
-				m.preview.GotoTop()
-			}
+			m.previewMatches = nil
+			m.pendingPreviewCmd = m.notePreviewCmd(item.Path, rel, item.Tags)
 			return
 		}
 	}
@@ -114,47 +79,12 @@ func (m *Model) refreshPreview() {
 			return
 		}
 
-		if m.previewPath == n.Path && m.previewContent != "" {
+		if m.previewPath == n.Path {
 			return
 		}
-
-		raw, err := notes.ReadAll(n.Path)
-		if err != nil {
-			m.previewPath = n.Path
-			m.previewContent = "Failed to read note: " + err.Error()
-			m.preview.SetContent(m.previewContent)
-			m.rebuildPreviewHeadingsFromRendered()
-			m.previewMatches = nil
-			m.preview.GotoTop()
-			return
-		}
-
-		private := notes.NoteIsPrivate(raw)
-
-		rendered := m.renderNotePreview(filepath.Join(".tmp", n.RelPath), raw, n.Tags)
-		if m.effectivePreviewPrivacy(private) {
-			rendered = blurRenderedText(rendered)
-		}
-
-		m.previewPrivacyForcedByNote = private
 		m.previewPath = n.Path
-		m.previewBaseContent = rendered
-		m.previewMatchIndex = 0
-		m.previewMatches = buildPreviewMatches(rendered, strings.TrimSpace(m.searchInput.Value()))
-		highlighted := applyMatchHighlights(
-			rendered,
-			strings.TrimSpace(m.searchInput.Value()),
-			m.previewMatches,
-			m.previewMatchIndex,
-		)
-		m.previewContent = highlighted
-		m.preview.SetContent(highlighted)
-		m.rebuildPreviewHeadingsFromRendered()
-		if len(m.previewMatches) > 0 {
-			m.preview.SetYOffset(m.centeredOffset(m.previewMatches[0].line))
-		} else {
-			m.preview.GotoTop()
-		}
+		m.previewMatches = nil
+		m.pendingPreviewCmd = m.notePreviewCmd(n.Path, filepath.Join(".tmp", n.RelPath), n.Tags)
 		return
 	}
 
@@ -211,46 +141,33 @@ func (m *Model) refreshPreview() {
 		return
 	}
 
-	if m.previewPath == item.Note.Path && m.previewContent != "" {
+	if m.previewPath == item.Note.Path {
 		return
 	}
-
-	raw, err := notes.ReadAll(item.Note.Path)
-	if err != nil {
-		m.previewPath = item.Note.Path
-		m.previewContent = "Failed to read note: " + err.Error()
-		m.preview.SetContent(m.previewContent)
-		m.rebuildPreviewHeadingsFromRendered()
-		m.previewMatches = nil
-		m.preview.GotoTop()
-		return
-	}
-
-	private := notes.NoteIsPrivate(raw)
-
-	rendered := m.renderNotePreview(item.Note.RelPath, raw, item.Note.Tags)
-	if m.effectivePreviewPrivacy(private) {
-		rendered = blurRenderedText(rendered)
-	}
-
-	m.previewPrivacyForcedByNote = private
 	m.previewPath = item.Note.Path
-	m.previewBaseContent = rendered
-	m.previewMatchIndex = 0
-	m.previewMatches = buildPreviewMatches(rendered, strings.TrimSpace(m.searchInput.Value()))
-	highlighted := applyMatchHighlights(
-		rendered,
-		strings.TrimSpace(m.searchInput.Value()),
-		m.previewMatches,
-		m.previewMatchIndex,
-	)
-	m.previewContent = highlighted
-	m.preview.SetContent(highlighted)
-	m.rebuildPreviewHeadingsFromRendered()
-	if len(m.previewMatches) > 0 {
-		m.preview.SetYOffset(m.centeredOffset(m.previewMatches[0].line))
-	} else {
-		m.preview.GotoTop()
+	m.previewMatches = nil
+	m.pendingPreviewCmd = m.notePreviewCmd(item.Note.Path, item.Note.RelPath, item.Note.Tags)
+}
+
+func (m Model) notePreviewCmd(notePath, relPath string, tags []string) tea.Cmd {
+	return func() tea.Msg {
+		raw, err := notes.ReadAll(notePath)
+		if err != nil {
+			return previewRenderedMsg{
+				forPath:     notePath,
+				baseContent: "Failed to read note: " + err.Error(),
+			}
+		}
+		private := notes.NoteIsPrivate(raw)
+		rendered := m.renderNotePreview(relPath, raw, tags)
+		if m.effectivePreviewPrivacy(private) {
+			rendered = blurRenderedText(rendered)
+		}
+		return previewRenderedMsg{
+			forPath:             notePath,
+			baseContent:         rendered,
+			privacyForcedByNote: private,
+		}
 	}
 }
 
@@ -554,7 +471,10 @@ func applyMatchHighlights(content, query string, matches []previewMatch, activeI
 	return highlightMatchesInRendered(content, query, activeMatchLine, activeOccurrIdx)
 }
 
-func highlightMatchesInRendered(content, query string, activeMatchLine, activeOccurrIdx int) string {
+func highlightMatchesInRendered(
+	content, query string,
+	activeMatchLine, activeOccurrIdx int,
+) string {
 	if query == "" {
 		return content
 	}
