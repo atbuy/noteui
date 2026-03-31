@@ -24,6 +24,8 @@ type keyMap struct {
 	SortToggle           key.Binding
 	ScrollHalfPageUp     key.Binding
 	ScrollHalfPageDown   key.Binding
+	NextMatch            key.Binding
+	PrevMatch            key.Binding
 }
 
 var keys = keyMap{
@@ -102,5 +104,13 @@ var keys = keyMap{
 	ScrollHalfPageDown: key.NewBinding(
 		key.WithKeys("ctrl+d"),
 		key.WithHelp("ctrl+d", "Scroll half page down"),
+	),
+	NextMatch: key.NewBinding(
+		key.WithKeys("n"),
+		key.WithHelp("n", "Next match"),
+	),
+	PrevMatch: key.NewBinding(
+		key.WithKeys("N"),
+		key.WithHelp("N", "Previous match"),
 	),
 }

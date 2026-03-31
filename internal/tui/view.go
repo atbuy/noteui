@@ -880,6 +880,8 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("]/[", "Switch Notes / Temporary", innerWidth),
 		m.renderHelpLine("P", "Toggle Pins view", innerWidth),
 		m.renderHelpLine("/", "Search", innerWidth),
+		m.renderHelpLine("n / N", "Next / previous match in preview", innerWidth),
+		m.renderHelpLine("zz", "Center current match in preview", innerWidth),
 		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
 		m.renderHelpLine("n", "New note in current view", innerWidth),
 		m.renderHelpLine("N", "New temporary note", innerWidth),

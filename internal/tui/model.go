@@ -196,15 +196,19 @@ type Model struct {
 	watcher     interface{ Close() error }
 	watchEvents <-chan teaMsg
 
-	focus             paneFocus
-	pendingG          bool
-	pendingBracketDir string
-	previewHover      bool
-	previewPaneX      int
-	previewPaneY      int
-	previewPaneW      int
-	previewPaneH      int
-	previewHeadings   []int
+	focus              paneFocus
+	pendingG           bool
+	pendingZ           bool
+	pendingBracketDir  string
+	previewHover       bool
+	previewPaneX       int
+	previewPaneY       int
+	previewPaneW       int
+	previewPaneH       int
+	previewHeadings    []int
+	previewMatches     []previewMatch
+	previewMatchIndex  int
+	previewBaseContent string
 
 	state       state.State
 	pinnedNotes map[string]bool
@@ -738,6 +742,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searchInput.Blur()
 				m.status = "search applied"
 				return m, nil
+			case "tab":
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.focus = focusPreview
+				m.status = "preview focused"
+				return m, nil
 			case "up":
 				switch m.listMode {
 				case listModeTemporary:
@@ -762,6 +772,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			var cmd tea.Cmd
 			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.previewPath = ""
 			m.rebuildTree()
 			m.syncSelectedNote()
 			return m, cmd
@@ -875,6 +886,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMove &&
 			!m.showRename {
+			if msg.String() != "z" {
+				m.pendingZ = false
+			}
 			switch msg.String() {
 			case "esc":
 				m.focus = focusTree
@@ -964,6 +978,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pendingBracketDir = ""
 					return m, nil
 				}
+
+			case "n":
+				m.jumpToNextMatch()
+				return m, nil
+
+			case "N":
+				m.jumpToPrevMatch()
+				return m, nil
+
+			case "z":
+				if m.pendingZ {
+					m.centerCurrentMatch()
+					m.pendingZ = false
+					m.pendingG = false
+					m.pendingBracketDir = ""
+					return m, nil
+				}
+				m.pendingZ = true
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
 			}
 		}
 
