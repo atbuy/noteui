@@ -452,11 +452,17 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if m.pendingTodoCursor >= 0 {
 			m.previewTodoCursor = m.pendingTodoCursor
 			m.pendingTodoCursor = -1
+		} else if !m.previewTodoNavMode {
+			m.previewTodoCursor = -1
 		} else {
 			m.previewTodoCursor = 0
 		}
 		m.rebuildPreviewTodos(msg.rawContent, msg.baseContent)
-		m.reapplyTodoHighlight()
+		if m.previewTodoNavMode {
+			m.reapplyTodoHighlight()
+		} else {
+			m.preview.SetContent(m.previewContent)
+		}
 		if len(m.previewMatches) > 0 && query != "" {
 			m.scrollToMatchLine(m.previewMatches[0].line)
 		} else {
@@ -1240,8 +1246,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			switch {
 			case msg.String() == "esc" && m.previewTodoNavMode:
 				m.previewTodoNavMode = false
+				m.previewTodoCursor = -1
 				m.pendingBracketDir = ""
 				m.pendingT = false
+				m.preview.SetContent(m.previewContent)
 				m.status = "todo nav off"
 				return m, nil
 
@@ -1348,16 +1356,16 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 			case key.Matches(msg, keys.TodoKey):
 				if m.pendingBracketDir == "]" {
-					m.jumpToNextTodo()
 					m.previewTodoNavMode = true
+					m.jumpToNextTodo()
 					m.pendingBracketDir = ""
 					m.pendingT = false
 					m.status = "todo nav on"
 					return m, nil
 				}
 				if m.pendingBracketDir == "[" {
-					m.jumpToPrevTodo()
 					m.previewTodoNavMode = true
+					m.jumpToPrevTodo()
 					m.pendingBracketDir = ""
 					m.pendingT = false
 					m.status = "todo nav on"

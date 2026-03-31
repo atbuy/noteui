@@ -314,9 +314,7 @@ func (m *Model) rebuildPreviewTodos(raw, rendered string) {
 		}
 	}
 	if len(rawTodos) == 0 {
-		if m.previewTodoCursor >= 0 {
-			m.previewTodoCursor = 0
-		}
+		m.previewTodoCursor = -1
 		return
 	}
 
@@ -352,6 +350,9 @@ func (m *Model) rebuildPreviewTodos(raw, rendered string) {
 	if m.previewTodoCursor >= len(m.previewTodos) {
 		m.previewTodoCursor = max(0, len(m.previewTodos)-1)
 	}
+	if m.previewTodoCursor < 0 && !m.previewTodoNavMode {
+		m.previewTodoCursor = -1
+	}
 }
 
 func (m *Model) jumpToNextTodo() {
@@ -359,7 +360,11 @@ func (m *Model) jumpToNextTodo() {
 		m.status = "no todos"
 		return
 	}
-	m.previewTodoCursor = (m.previewTodoCursor + 1) % len(m.previewTodos)
+	if m.previewTodoCursor < 0 {
+		m.previewTodoCursor = 0
+	} else {
+		m.previewTodoCursor = (m.previewTodoCursor + 1) % len(m.previewTodos)
+	}
 	todo := m.previewTodos[m.previewTodoCursor]
 	if todo.rendLine >= 0 {
 		m.preview.SetYOffset(todo.rendLine)
@@ -373,7 +378,11 @@ func (m *Model) jumpToPrevTodo() {
 		m.status = "no todos"
 		return
 	}
-	m.previewTodoCursor = (m.previewTodoCursor - 1 + len(m.previewTodos)) % len(m.previewTodos)
+	if m.previewTodoCursor < 0 {
+		m.previewTodoCursor = len(m.previewTodos) - 1
+	} else {
+		m.previewTodoCursor = (m.previewTodoCursor - 1 + len(m.previewTodos)) % len(m.previewTodos)
+	}
 	todo := m.previewTodos[m.previewTodoCursor]
 	if todo.rendLine >= 0 {
 		m.preview.SetYOffset(todo.rendLine)
@@ -438,6 +447,10 @@ func renderSelectedTodoLine(plain string) string {
 }
 
 func (m *Model) reapplyTodoHighlight() {
+	if !m.previewTodoNavMode {
+		m.preview.SetContent(m.previewContent)
+		return
+	}
 	if len(m.previewTodos) == 0 || m.previewTodoCursor < 0 ||
 		m.previewTodoCursor >= len(m.previewTodos) {
 		m.preview.SetContent(m.previewContent)
