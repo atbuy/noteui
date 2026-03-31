@@ -22,6 +22,8 @@ type keyMap struct {
 	Pin                  key.Binding
 	TogglePreviewPrivacy key.Binding
 	SortToggle           key.Binding
+	ScrollHalfPageUp     key.Binding
+	ScrollHalfPageDown   key.Binding
 }
 
 var keys = keyMap{
@@ -92,5 +94,13 @@ var keys = keyMap{
 	SortToggle: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "Toggle sort order"),
+	),
+	ScrollHalfPageUp: key.NewBinding(
+		key.WithKeys("ctrl+u"),
+		key.WithHelp("ctrl+u", "Scroll half page up"),
+	),
+	ScrollHalfPageDown: key.NewBinding(
+		key.WithKeys("ctrl+d"),
+		key.WithHelp("ctrl+d", "Scroll half page down"),
 	),
 }

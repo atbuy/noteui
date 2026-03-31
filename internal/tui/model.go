@@ -913,6 +913,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.pendingBracketDir = ""
 				return m, nil
 
+			case "ctrl+u":
+				m.preview.ScrollUp(m.preview.Height / 2)
+				m.status = "preview focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "ctrl+d":
+				m.preview.ScrollDown(m.preview.Height / 2)
+				m.status = "preview focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+
 			case "G":
 				m.preview.GotoBottom()
 				m.status = "preview bottom"
@@ -997,6 +1011,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				} else {
 					m.pendingG = true
+				}
+				return m, nil
+
+			case "ctrl+u":
+				half := max(1, m.preview.Height/2)
+				switch m.listMode {
+				case listModeTemporary:
+					m.moveTempCursor(-half)
+				case listModePins:
+					m.movePinsCursor(-half)
+				default:
+					m.moveTreeCursor(-half)
+				}
+				return m, nil
+
+			case "ctrl+d":
+				half := max(1, m.preview.Height/2)
+				switch m.listMode {
+				case listModeTemporary:
+					m.moveTempCursor(half)
+				case listModePins:
+					m.movePinsCursor(half)
+				default:
+					m.moveTreeCursor(half)
 				}
 				return m, nil
 			}

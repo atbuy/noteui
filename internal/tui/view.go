@@ -852,6 +852,7 @@ func (m Model) renderHelpModal() string {
 
 	lines := []string{
 		m.renderHelpLine("j / k", "Move up and down", innerWidth),
+		m.renderHelpLine("ctrl+u / ctrl+d", "Scroll half page up / down", innerWidth),
 		m.renderHelpLine("enter / o", "Open note or jump from Pins", innerWidth),
 		m.renderHelpLine("h/l", "Collapse/Expand category", innerWidth),
 		m.renderHelpLine("]/[", "Switch Notes / Temporary", innerWidth),
