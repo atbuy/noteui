@@ -280,13 +280,14 @@ type Model struct {
 	deletePending  *deletePending
 	preserveCursor int
 
-	previewTodos      []previewTodoItem
-	previewTodoCursor int
-	pendingTodoCursor int
-	pendingT          bool
-	showTodoAdd       bool
-	showTodoEdit      bool
-	todoInput         textinput.Model
+	previewTodos       []previewTodoItem
+	previewTodoCursor  int
+	pendingTodoCursor  int
+	pendingT           bool
+	previewTodoNavMode bool
+	showTodoAdd        bool
+	showTodoEdit       bool
+	todoInput          textinput.Model
 
 	sessionPassphrase    string
 	showPassphraseModal  bool
@@ -1237,12 +1238,20 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingT = false
 			}
 			switch {
+			case msg.String() == "esc" && m.previewTodoNavMode:
+				m.previewTodoNavMode = false
+				m.pendingBracketDir = ""
+				m.pendingT = false
+				m.status = "todo nav off"
+				return m, nil
+
 			case msg.String() == "esc":
 				m.focus = focusTree
 				m.status = "tree focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				m.pendingT = false
+				m.previewTodoNavMode = false
 				return m, nil
 
 			case key.Matches(msg, keys.MoveDown):
@@ -1306,11 +1315,21 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.BracketForward):
+				if m.previewTodoNavMode {
+					m.jumpToNextTodo()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
 				m.pendingBracketDir = "]"
 				m.pendingG = false
 				return m, nil
 
 			case key.Matches(msg, keys.BracketBackward):
+				if m.previewTodoNavMode {
+					m.jumpToPrevTodo()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
 				m.pendingBracketDir = "["
 				m.pendingG = false
 				return m, nil
@@ -1330,14 +1349,18 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case key.Matches(msg, keys.TodoKey):
 				if m.pendingBracketDir == "]" {
 					m.jumpToNextTodo()
+					m.previewTodoNavMode = true
 					m.pendingBracketDir = ""
 					m.pendingT = false
+					m.status = "todo nav on"
 					return m, nil
 				}
 				if m.pendingBracketDir == "[" {
 					m.jumpToPrevTodo()
+					m.previewTodoNavMode = true
 					m.pendingBracketDir = ""
 					m.pendingT = false
+					m.status = "todo nav on"
 					return m, nil
 				}
 				if m.pendingT {
@@ -1466,6 +1489,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.pendingG = false
 		m.pendingBracketDir = ""
 		m.pendingT = false
+		if m.focus != focusPreview {
+			m.previewTodoNavMode = false
+		}
 
 		if key.Matches(msg, keys.Move) {
 			m.armMoveCurrent()

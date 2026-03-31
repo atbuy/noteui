@@ -391,12 +391,50 @@ func applyTodoLineHighlight(content string, rendLine int) string {
 		return content
 	}
 	plain := stripANSI(lines[rendLine])
-	lines[rendLine] = lipgloss.NewStyle().
+	lines[rendLine] = renderSelectedTodoLine(plain)
+	return strings.Join(lines, "\n")
+}
+
+func renderSelectedTodoLine(plain string) string {
+	base := lipgloss.NewStyle().
 		Background(selectedBgColor).
 		Foreground(selectedFgColor).
-		Bold(true).
-		Render(plain)
-	return strings.Join(lines, "\n")
+		Bold(true)
+
+	indentWidth := len(plain) - len(strings.TrimLeft(plain, " "))
+	indent := strings.Repeat(" ", indentWidth)
+	body := plain[indentWidth:]
+
+	switch {
+	case strings.HasPrefix(body, "[X] "), strings.HasPrefix(body, "[x] "):
+		rest := body[4:]
+		return lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			base.Render(indent),
+			lipgloss.NewStyle().
+				Background(selectedBgColor).
+				Foreground(successColor).
+				Bold(true).
+				Render("[X]"),
+			base.Render(" "),
+			base.Render(rest),
+		)
+	case strings.HasPrefix(body, "[ ] "):
+		rest := body[4:]
+		return lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			base.Render(indent),
+			lipgloss.NewStyle().
+				Background(selectedBgColor).
+				Foreground(errorColor).
+				Bold(true).
+				Render("[ ]"),
+			base.Render(" "),
+			base.Render(rest),
+		)
+	default:
+		return base.Render(plain)
+	}
 }
 
 func (m *Model) reapplyTodoHighlight() {
