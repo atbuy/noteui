@@ -499,3 +499,17 @@ func replaceOrInsertRootTitle(content, title string) string {
 	}
 	return "# " + title + "\n\n" + content
 }
+
+func WordCount(content string) int {
+	content = StripFrontMatter(content)
+	return len(strings.Fields(content))
+}
+
+func ReadingTimeMinutes(wordCount int) int {
+	// Average adult reading speed is ~200-250 words per minute.
+	const wordsPerMinute = 225
+	if wordCount <= 0 {
+		return 0
+	}
+	return max(1, (wordCount+wordsPerMinute-1)/wordsPerMinute)
+}

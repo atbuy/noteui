@@ -9,6 +9,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
+
+	"atbuy/noteui/internal/notes"
 )
 
 func (m Model) View() string {
@@ -774,36 +776,57 @@ func (m Model) renderPreviewSegment() string {
 		return ""
 	}
 
+	// Word count and reading time.
+	wordCount := 0
+	if m.selected != nil {
+		raw, err := notes.ReadAll(m.selected.Path)
+		if err == nil {
+			wordCount = notes.WordCount(raw)
+		}
+	}
+
+	wordPart := ""
+	if wordCount > 0 {
+		mins := notes.ReadingTimeMinutes(wordCount)
+		wordPart = fmt.Sprintf("%d words · ~%d min read", wordCount, mins)
+	}
+
+	// Scroll position.
 	atTop := m.preview.AtTop()
 	atBottom := m.preview.AtBottom()
 
+	scrollPart := ""
 	switch {
 	case atTop && atBottom:
-		return "preview: 100%"
+		scrollPart = "100%"
 	case atTop:
-		return "preview: top"
+		scrollPart = "top"
 	case atBottom:
-		return "preview: bottom"
+		scrollPart = "bottom"
+	default:
+		total := m.preview.TotalLineCount()
+		offset := m.preview.YOffset
+		height := m.preview.Height
+
+		maxOffset := total - height
+		if maxOffset > 0 {
+			pct := int(float64(offset) / float64(maxOffset) * 100.0)
+			pct = max(pct, 0)
+			pct = min(pct, 100)
+			scrollPart = fmt.Sprintf("%d%%", pct)
+		}
 	}
 
-	total := m.preview.TotalLineCount()
-	offset := m.preview.YOffset
-	height := m.preview.Height
-
-	if total <= 0 {
-		return ""
+	if wordPart != "" && scrollPart != "" {
+		return fmt.Sprintf("preview: %s · %s", wordPart, scrollPart)
 	}
-
-	maxOffset := total - height
-	if maxOffset <= 0 {
-		return "preview: 100%"
+	if wordPart != "" {
+		return "preview: " + wordPart
 	}
-
-	pct := int(float64(offset) / float64(maxOffset) * 100.0)
-	pct = max(pct, 0)
-	pct = min(pct, 100)
-
-	return fmt.Sprintf("preview: %d%%", pct)
+	if scrollPart != "" {
+		return "preview: " + scrollPart
+	}
+	return ""
 }
 
 func (m Model) renderPrivacySegment() string {
