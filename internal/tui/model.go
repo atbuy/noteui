@@ -583,7 +583,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, createTemporaryNoteCmd(m.rootDir)
 
 			case "1":
-				return m, m.openDashboardRecent(0)
+				cmd := m.openDashboardRecent(0)
+				if cmd != nil {
+					m.showDashboard = false
+					m.status = "opening recent note"
+				}
+				return m, cmd
 			case "2":
 				return m, m.openDashboardRecent(1)
 			case "3":
@@ -1112,12 +1117,8 @@ func (m Model) dashboardRecentNotes(limit int) []dashboardRecentNote {
 func (m Model) openDashboardRecent(index int) tea.Cmd {
 	items := m.dashboardRecentNotes(5)
 	if index < 0 || index >= len(items) {
-		m.status = "no recent note in that slot"
 		return nil
 	}
-
-	m.showDashboard = false
-	m.status = "opening recent note: " + items[index].Display
 	return editor.Open(items[index].Note.Path)
 }
 
