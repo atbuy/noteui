@@ -38,6 +38,7 @@ func main() {
 	}
 
 	tui.ApplyTheme(cfg)
+	tui.ApplyConfigKeys(cfg.Keys)
 
 	m := tui.New(root, startupError, cfg, buildinfo.Version)
 	p := tea.NewProgram(

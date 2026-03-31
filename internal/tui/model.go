@@ -663,46 +663,46 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.showDashboard {
-			switch msg.String() {
-			case "enter":
+			switch {
+			case msg.String() == "enter":
 				m.showDashboard = false
 				m.status = "workspace"
 				return m, nil
 
-			case "]":
+			case key.Matches(msg, keys.BracketForward):
 				m.showDashboard = false
 				m.switchToTemporaryMode()
 				m.status = "temporary"
 				return m, nil
 
-			case "P":
+			case key.Matches(msg, keys.ShowPins):
 				m.showDashboard = false
 				m.listMode = listModePins
 				m.status = "pins"
 				m.syncSelectedNote()
 				return m, nil
 
-			case "N":
+			case key.Matches(msg, keys.NewTemporaryNote):
 				m.showDashboard = false
 				return m, createTemporaryNoteCmd(m.rootDir)
 
-			case "1":
+			case msg.String() == "1":
 				cmd := m.openDashboardRecent(0)
 				if cmd != nil {
 					m.showDashboard = false
 					m.status = "opening recent note"
 				}
 				return m, cmd
-			case "2":
+			case msg.String() == "2":
 				return m, m.openDashboardRecent(1)
-			case "3":
+			case msg.String() == "3":
 				return m, m.openDashboardRecent(2)
-			case "4":
+			case msg.String() == "4":
 				return m, m.openDashboardRecent(3)
-			case "5":
+			case msg.String() == "5":
 				return m, m.openDashboardRecent(4)
 
-			case "q", "ctrl+c":
+			case key.Matches(msg, keys.Quit):
 				if m.watcher != nil {
 					_ = m.watcher.Close()
 				}
@@ -832,12 +832,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if m.deletePending != nil {
-			switch msg.String() {
-			case "esc":
+			switch {
+			case msg.String() == "esc":
 				m.deletePending = nil
 				m.status = "delete cancelled"
 				return m, nil
-			case "d":
+			case key.Matches(msg, keys.DeleteConfirm):
 				return m, m.confirmDeleteCurrent()
 			default:
 				m.deletePending = nil
@@ -1035,17 +1035,14 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMove &&
 			!m.showRename {
-			if msg.String() != "z" {
+			if !key.Matches(msg, keys.PendingZ) {
 				m.pendingZ = false
 			}
-			{
-				k := msg.String()
-				if m.pendingT && k != "t" && k != "a" && k != "d" && k != "e" {
-					m.pendingT = false
-				}
+			if m.pendingT && !key.Matches(msg, keys.TodoKey) && !key.Matches(msg, keys.TodoAdd) && !key.Matches(msg, keys.TodoDelete) && !key.Matches(msg, keys.TodoEdit) {
+				m.pendingT = false
 			}
-			switch msg.String() {
-			case "esc":
+			switch {
+			case msg.String() == "esc":
 				m.focus = focusTree
 				m.status = "tree focused"
 				m.pendingG = false
@@ -1053,56 +1050,56 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingT = false
 				return m, nil
 
-			case "j", "down":
+			case key.Matches(msg, keys.MoveDown):
 				m.preview.ScrollDown(1)
 				m.status = "preview focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "k", "up":
+			case key.Matches(msg, keys.MoveUp):
 				m.preview.ScrollUp(1)
 				m.status = "preview focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "pgdown", "ctrl+f":
+			case key.Matches(msg, keys.ScrollPageDown):
 				m.preview.PageDown()
 				m.status = "preview focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "pgup", "ctrl+b":
+			case key.Matches(msg, keys.ScrollPageUp):
 				m.preview.PageUp()
 				m.status = "preview focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "ctrl+u":
+			case key.Matches(msg, keys.ScrollHalfPageUp):
 				m.preview.ScrollUp(m.preview.Height / 2)
 				m.status = "preview focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "ctrl+d":
+			case key.Matches(msg, keys.ScrollHalfPageDown):
 				m.preview.ScrollDown(m.preview.Height / 2)
 				m.status = "preview focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "G":
+			case key.Matches(msg, keys.JumpBottom):
 				m.preview.GotoBottom()
 				m.status = "preview bottom"
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "g":
+			case key.Matches(msg, keys.PendingG):
 				if m.pendingG {
 					m.preview.GotoTop()
 					m.status = "preview top"
@@ -1113,17 +1110,17 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "]":
+			case key.Matches(msg, keys.BracketForward):
 				m.pendingBracketDir = "]"
 				m.pendingG = false
 				return m, nil
 
-			case "[":
+			case key.Matches(msg, keys.BracketBackward):
 				m.pendingBracketDir = "["
 				m.pendingG = false
 				return m, nil
 
-			case "h":
+			case key.Matches(msg, keys.HeadingJumpKey):
 				if m.pendingBracketDir == "]" {
 					m.jumpToNextHeading()
 					m.pendingBracketDir = ""
@@ -1135,7 +1132,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					return m, nil
 				}
 
-			case "t":
+			case key.Matches(msg, keys.TodoKey):
 				if m.pendingBracketDir == "]" {
 					m.jumpToNextTodo()
 					m.pendingBracketDir = ""
@@ -1156,42 +1153,36 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingBracketDir = ""
 				return m, nil
 
-			case "a":
-				if m.pendingT {
-					m.pendingT = false
-					path := m.previewPath
-					if path == "" {
-						m.status = "no note selected"
-						return m, nil
-					}
-					m.showTodoAdd = true
-					m.todoInput.SetValue("")
-					m.todoInput.Focus()
-					m.status = "add todo"
+			case key.Matches(msg, keys.TodoAdd) && m.pendingT:
+				m.pendingT = false
+				path := m.previewPath
+				if path == "" {
+					m.status = "no note selected"
 					return m, nil
 				}
+				m.showTodoAdd = true
+				m.todoInput.SetValue("")
+				m.todoInput.Focus()
+				m.status = "add todo"
+				return m, nil
 
-			case "d":
-				if m.pendingT {
-					m.pendingT = false
-					return m, m.deleteCurrentPreviewTodo()
-				}
+			case key.Matches(msg, keys.TodoDelete) && m.pendingT:
+				m.pendingT = false
+				return m, m.deleteCurrentPreviewTodo()
 
-			case "e":
-				if m.pendingT {
-					m.pendingT = false
-					return m, m.armEditCurrentPreviewTodo()
-				}
+			case key.Matches(msg, keys.TodoEdit) && m.pendingT:
+				m.pendingT = false
+				return m, m.armEditCurrentPreviewTodo()
 
-			case "n":
+			case key.Matches(msg, keys.NextMatch):
 				m.jumpToNextMatch()
 				return m, nil
 
-			case "N":
+			case key.Matches(msg, keys.PrevMatch):
 				m.jumpToPrevMatch()
 				return m, nil
 
-			case "z":
+			case key.Matches(msg, keys.PendingZ):
 				if m.pendingZ {
 					m.centerCurrentMatch()
 					m.pendingZ = false
@@ -1208,8 +1199,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		// Tree navigation: gg and G.
 		if m.focus == focusTree {
-			switch msg.String() {
-			case "G":
+			switch {
+			case key.Matches(msg, keys.JumpBottom):
 				switch m.listMode {
 				case listModeTemporary:
 					items := m.filteredTempNotes()
@@ -1232,7 +1223,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingG = false
 				return m, nil
 
-			case "g":
+			case key.Matches(msg, keys.PendingG):
 				if m.pendingG {
 					m.pendingG = false
 					switch m.listMode {
@@ -1251,7 +1242,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				return m, nil
 
-			case "ctrl+u":
+			case key.Matches(msg, keys.ScrollHalfPageUp):
 				half := max(1, m.preview.Height/2)
 				switch m.listMode {
 				case listModeTemporary:
@@ -1263,7 +1254,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				return m, nil
 
-			case "ctrl+d":
+			case key.Matches(msg, keys.ScrollHalfPageDown):
 				half := max(1, m.preview.Height/2)
 				switch m.listMode {
 				case listModeTemporary:
@@ -1363,8 +1354,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		switch msg.String() {
-		case "[":
+		switch {
+		case key.Matches(msg, keys.BracketBackward):
 			if m.listMode == listModePins {
 				m.switchToNotesMode()
 			} else {
@@ -1372,7 +1363,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "]":
+		case key.Matches(msg, keys.BracketForward):
 			if m.listMode == listModePins {
 				m.switchToTemporaryMode()
 			} else {
@@ -1380,7 +1371,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "up", "k":
+		case key.Matches(msg, keys.MoveUp):
 			switch m.listMode {
 			case listModeTemporary:
 				m.moveTempCursor(-1)
@@ -1391,7 +1382,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "down", "j":
+		case key.Matches(msg, keys.MoveDown):
 			switch m.listMode {
 			case listModeTemporary:
 				m.moveTempCursor(1)
@@ -1402,13 +1393,13 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "right", "l":
+		case key.Matches(msg, keys.ExpandCategory):
 			if m.listMode == listModeNotes {
 				m.expandCurrentCategory()
 			}
 			return m, nil
 
-		case "left", "h":
+		case key.Matches(msg, keys.CollapseCategory):
 			if m.listMode == listModeNotes {
 				m.collapseCurrentCategory()
 			}

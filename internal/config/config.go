@@ -18,6 +18,7 @@ type Config struct {
 	Icons      IconsConfig      `toml:"icons"`
 	Modal      ModalConfig      `toml:"modal"`
 	Preview    PreviewConfig    `toml:"preview"`
+	Keys       KeysConfig       `toml:"keys"`
 }
 
 type ThemeConfig struct {
@@ -80,6 +81,48 @@ type PreviewConfig struct {
 	SyntaxHighlight bool     `toml:"syntax_highlight"`
 	CodeStyle       string   `toml:"code_style"`
 	Privacy         bool     `toml:"privacy"`
+}
+
+type KeysConfig struct {
+	Open                 []string `toml:"open"`
+	Refresh              []string `toml:"refresh"`
+	Quit                 []string `toml:"quit"`
+	Focus                []string `toml:"focus"`
+	NewNote              []string `toml:"new_note"`
+	NewTemporaryNote     []string `toml:"new_temporary_note"`
+	NewTodoList          []string `toml:"new_todo_list"`
+	Search               []string `toml:"search"`
+	ShowHelp             []string `toml:"show_help"`
+	ShowPins             []string `toml:"show_pins"`
+	CreateCategory       []string `toml:"create_category"`
+	ToggleCategory       []string `toml:"toggle_category"`
+	Delete               []string `toml:"delete"`
+	Move                 []string `toml:"move"`
+	Rename               []string `toml:"rename"`
+	Pin                  []string `toml:"pin"`
+	TogglePreviewPrivacy []string `toml:"toggle_preview_privacy"`
+	SortToggle           []string `toml:"sort_toggle"`
+	ScrollHalfPageUp     []string `toml:"scroll_half_page_up"`
+	ScrollHalfPageDown   []string `toml:"scroll_half_page_down"`
+	NextMatch            []string `toml:"next_match"`
+	PrevMatch            []string `toml:"prev_match"`
+	MoveUp               []string `toml:"move_up"`
+	MoveDown             []string `toml:"move_down"`
+	CollapseCategory     []string `toml:"collapse_category"`
+	ExpandCategory       []string `toml:"expand_category"`
+	JumpBottom           []string `toml:"jump_bottom"`
+	PendingG             []string `toml:"pending_g"`
+	BracketForward       []string `toml:"bracket_forward"`
+	BracketBackward      []string `toml:"bracket_backward"`
+	HeadingJumpKey       []string `toml:"heading_jump_key"`
+	TodoKey              []string `toml:"todo_key"`
+	TodoAdd              []string `toml:"todo_add"`
+	TodoDelete           []string `toml:"todo_delete"`
+	TodoEdit             []string `toml:"todo_edit"`
+	PendingZ             []string `toml:"pending_z"`
+	DeleteConfirm        []string `toml:"delete_confirm"`
+	ScrollPageDown       []string `toml:"scroll_page_down"`
+	ScrollPageUp         []string `toml:"scroll_page_up"`
 }
 
 func Default() Config {

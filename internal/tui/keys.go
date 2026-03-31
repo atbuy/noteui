@@ -1,7 +1,11 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/key"
+
+	"atbuy/noteui/internal/config"
 )
 
 type keyMap struct {
@@ -27,6 +31,24 @@ type keyMap struct {
 	ScrollHalfPageDown   key.Binding
 	NextMatch            key.Binding
 	PrevMatch            key.Binding
+
+	MoveUp           key.Binding
+	MoveDown         key.Binding
+	CollapseCategory key.Binding
+	ExpandCategory   key.Binding
+	JumpBottom       key.Binding
+	PendingG         key.Binding
+	BracketForward   key.Binding
+	BracketBackward  key.Binding
+	HeadingJumpKey   key.Binding
+	TodoKey          key.Binding
+	TodoAdd          key.Binding
+	TodoDelete       key.Binding
+	TodoEdit         key.Binding
+	PendingZ         key.Binding
+	DeleteConfirm    key.Binding
+	ScrollPageDown   key.Binding
+	ScrollPageUp     key.Binding
 }
 
 var keys = keyMap{
@@ -118,4 +140,126 @@ var keys = keyMap{
 		key.WithKeys("N"),
 		key.WithHelp("N", "Previous match"),
 	),
+
+	MoveUp: key.NewBinding(
+		key.WithKeys("k", "up"),
+		key.WithHelp("k/up", "Move up"),
+	),
+	MoveDown: key.NewBinding(
+		key.WithKeys("j", "down"),
+		key.WithHelp("j/down", "Move down"),
+	),
+	CollapseCategory: key.NewBinding(
+		key.WithKeys("h", "left"),
+		key.WithHelp("h/left", "Collapse category"),
+	),
+	ExpandCategory: key.NewBinding(
+		key.WithKeys("l", "right"),
+		key.WithHelp("l/right", "Expand category"),
+	),
+	JumpBottom: key.NewBinding(
+		key.WithKeys("G"),
+		key.WithHelp("G", "Jump to bottom"),
+	),
+	PendingG: key.NewBinding(
+		key.WithKeys("g"),
+		key.WithHelp("g", "Jump to top (gg)"),
+	),
+	BracketForward: key.NewBinding(
+		key.WithKeys("]"),
+		key.WithHelp("]", "Next / temporary mode"),
+	),
+	BracketBackward: key.NewBinding(
+		key.WithKeys("["),
+		key.WithHelp("[", "Prev / notes mode"),
+	),
+	HeadingJumpKey: key.NewBinding(
+		key.WithKeys("h"),
+		key.WithHelp("h", "Heading jump key"),
+	),
+	TodoKey: key.NewBinding(
+		key.WithKeys("t"),
+		key.WithHelp("t", "Todo action key"),
+	),
+	TodoAdd: key.NewBinding(
+		key.WithKeys("a"),
+		key.WithHelp("a", "Todo add key"),
+	),
+	TodoDelete: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "Todo delete key"),
+	),
+	TodoEdit: key.NewBinding(
+		key.WithKeys("e"),
+		key.WithHelp("e", "Todo edit key"),
+	),
+	PendingZ: key.NewBinding(
+		key.WithKeys("z"),
+		key.WithHelp("z", "Center (zz)"),
+	),
+	DeleteConfirm: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "Confirm delete"),
+	),
+	ScrollPageDown: key.NewBinding(
+		key.WithKeys("ctrl+f", "pgdown"),
+		key.WithHelp("ctrl+f/pgdn", "Page down"),
+	),
+	ScrollPageUp: key.NewBinding(
+		key.WithKeys("ctrl+b", "pgup"),
+		key.WithHelp("ctrl+b/pgup", "Page up"),
+	),
+}
+
+// ApplyConfigKeys overwrites key bindings with user-provided overrides from config.
+// Fields with empty slices are left at their defaults.
+func ApplyConfigKeys(cfg config.KeysConfig) {
+	apply := func(b *key.Binding, override []string) {
+		if len(override) == 0 {
+			return
+		}
+		*b = key.NewBinding(
+			key.WithKeys(override...),
+			key.WithHelp(strings.Join(override, "/"), b.Help().Desc),
+		)
+	}
+	apply(&keys.Open, cfg.Open)
+	apply(&keys.Refresh, cfg.Refresh)
+	apply(&keys.Quit, cfg.Quit)
+	apply(&keys.Focus, cfg.Focus)
+	apply(&keys.NewNote, cfg.NewNote)
+	apply(&keys.NewTemporaryNote, cfg.NewTemporaryNote)
+	apply(&keys.NewTodoList, cfg.NewTodoList)
+	apply(&keys.Search, cfg.Search)
+	apply(&keys.ShowHelp, cfg.ShowHelp)
+	apply(&keys.ShowPins, cfg.ShowPins)
+	apply(&keys.CreateCategory, cfg.CreateCategory)
+	apply(&keys.ToggleCategory, cfg.ToggleCategory)
+	apply(&keys.Delete, cfg.Delete)
+	apply(&keys.Move, cfg.Move)
+	apply(&keys.Rename, cfg.Rename)
+	apply(&keys.Pin, cfg.Pin)
+	apply(&keys.TogglePreviewPrivacy, cfg.TogglePreviewPrivacy)
+	apply(&keys.SortToggle, cfg.SortToggle)
+	apply(&keys.ScrollHalfPageUp, cfg.ScrollHalfPageUp)
+	apply(&keys.ScrollHalfPageDown, cfg.ScrollHalfPageDown)
+	apply(&keys.NextMatch, cfg.NextMatch)
+	apply(&keys.PrevMatch, cfg.PrevMatch)
+	apply(&keys.MoveUp, cfg.MoveUp)
+	apply(&keys.MoveDown, cfg.MoveDown)
+	apply(&keys.CollapseCategory, cfg.CollapseCategory)
+	apply(&keys.ExpandCategory, cfg.ExpandCategory)
+	apply(&keys.JumpBottom, cfg.JumpBottom)
+	apply(&keys.PendingG, cfg.PendingG)
+	apply(&keys.BracketForward, cfg.BracketForward)
+	apply(&keys.BracketBackward, cfg.BracketBackward)
+	apply(&keys.HeadingJumpKey, cfg.HeadingJumpKey)
+	apply(&keys.TodoKey, cfg.TodoKey)
+	apply(&keys.TodoAdd, cfg.TodoAdd)
+	apply(&keys.TodoDelete, cfg.TodoDelete)
+	apply(&keys.TodoEdit, cfg.TodoEdit)
+	apply(&keys.PendingZ, cfg.PendingZ)
+	apply(&keys.DeleteConfirm, cfg.DeleteConfirm)
+	apply(&keys.ScrollPageDown, cfg.ScrollPageDown)
+	apply(&keys.ScrollPageUp, cfg.ScrollPageUp)
 }
