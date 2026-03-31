@@ -693,7 +693,7 @@ func highlightMatchesInRendered(
 			activeOccurr = activeOccurrIdx
 		}
 		lines[i] = fillWidthBackground(
-			highlightTermsInLine(plainLine, terms, activeOccurr),
+			highlightTermsInLine(plainLine, terms, activeOccurr, previewLineForeground(plainLine)),
 			lipgloss.Width(plainLine),
 			bgSoftColor,
 		)
@@ -702,13 +702,26 @@ func highlightMatchesInRendered(
 	return strings.Join(lines, "\n")
 }
 
-func highlightTermsInLine(line string, terms []string, activeOccurrIdx int) string {
+func previewLineForeground(line string) lipgloss.Color {
+	trimmed := strings.TrimSpace(line)
+	if strings.HasPrefix(trimmed, "~/notes") {
+		return accentColor
+	}
+	return textColor
+}
+
+func highlightTermsInLine(
+	line string,
+	terms []string,
+	activeOccurrIdx int,
+	fg lipgloss.Color,
+) string {
 	if line == "" {
 		return line
 	}
 
 	base := lipgloss.NewStyle().
-		Foreground(textColor).
+		Foreground(fg).
 		Background(bgSoftColor)
 
 	type interval struct{ start, end int }

@@ -1653,7 +1653,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) lockedPreviewText() string {
-	return "[encrypted]\n\nThis note is encrypted.\nPress E to enter your passphrase."
+	return m.renderPreviewMarkdown("<encrypted>", strings.Join([]string{
+		"# <encrypted>",
+		"",
+		"This note is encrypted.",
+		"Press E to enter your passphrase.",
+	}, "\n"))
 }
 
 func (m Model) modalDimensions(minWidth, maxWidth int) (int, int) {

@@ -12,21 +12,23 @@ import (
 )
 
 var (
-	borderColor      lipgloss.Color
-	focusBorderColor lipgloss.Color
-	accentColor      lipgloss.Color
-	accentSoftColor  lipgloss.Color
-	mutedColor       lipgloss.Color
-	bgSoftColor      lipgloss.Color
-	textColor        lipgloss.Color
-	errorColor       lipgloss.Color
-	successColor     lipgloss.Color
-	bgColor          lipgloss.Color
-	subtleColor      lipgloss.Color
-	chipBgColor      lipgloss.Color
-	selectedBgColor  lipgloss.Color
-	selectedFgColor  lipgloss.Color
-	highlightBgColor lipgloss.Color
+	borderColor       lipgloss.Color
+	focusBorderColor  lipgloss.Color
+	accentColor       lipgloss.Color
+	accentSoftColor   lipgloss.Color
+	mutedColor        lipgloss.Color
+	bgSoftColor       lipgloss.Color
+	textColor         lipgloss.Color
+	errorColor        lipgloss.Color
+	successColor      lipgloss.Color
+	bgColor           lipgloss.Color
+	subtleColor       lipgloss.Color
+	chipBgColor       lipgloss.Color
+	inlineCodeBgColor lipgloss.Color
+	pinnedNoteColor   lipgloss.Color
+	selectedBgColor   lipgloss.Color
+	selectedFgColor   lipgloss.Color
+	highlightBgColor  lipgloss.Color
 
 	modalBgColor     lipgloss.Color
 	modalBorderColor lipgloss.Color
@@ -79,21 +81,23 @@ var (
 )
 
 type themePalette struct {
-	BgColor          string
-	PanelBgColor     string
-	BorderColor      string
-	FocusBorderColor string
-	AccentColor      string
-	AccentSoftColor  string
-	TextColor        string
-	MutedColor       string
-	SubtleColor      string
-	ChipBgColor      string
-	ErrorColor       string
-	SuccessColor     string
-	SelectedBgColor  string
-	SelectedFgColor  string
-	HighlightBgColor string
+	BgColor           string
+	PanelBgColor      string
+	BorderColor       string
+	FocusBorderColor  string
+	AccentColor       string
+	AccentSoftColor   string
+	TextColor         string
+	MutedColor        string
+	SubtleColor       string
+	ChipBgColor       string
+	InlineCodeBgColor string
+	PinnedNoteColor   string
+	ErrorColor        string
+	SuccessColor      string
+	SelectedBgColor   string
+	SelectedFgColor   string
+	HighlightBgColor  string
 }
 
 func ApplyTheme(cfg config.Config) {
@@ -115,6 +119,8 @@ func ApplyTheme(cfg config.Config) {
 	override(&p.MutedColor, cfg.Theme.MutedColor)
 	override(&p.SubtleColor, cfg.Theme.SubtleColor)
 	override(&p.ChipBgColor, cfg.Theme.ChipBgColor)
+	override(&p.InlineCodeBgColor, cfg.Theme.InlineCodeBgColor)
+	override(&p.PinnedNoteColor, cfg.Theme.PinnedNoteColor)
 	override(&p.ErrorColor, cfg.Theme.ErrorColor)
 	override(&p.SuccessColor, cfg.Theme.SuccessColor)
 	override(&p.SelectedBgColor, cfg.Theme.SelectedBgColor)
@@ -122,6 +128,12 @@ func ApplyTheme(cfg config.Config) {
 	override(&p.HighlightBgColor, cfg.Theme.HighlightBgColor)
 
 	p = normalizePaletteAccessibility(p)
+	if strings.TrimSpace(p.InlineCodeBgColor) == "" {
+		p.InlineCodeBgColor = deriveInlineCodeBgColor(p.PanelBgColor, p.ChipBgColor)
+	}
+	if strings.TrimSpace(p.PinnedNoteColor) == "" {
+		p.PinnedNoteColor = p.SuccessColor
+	}
 
 	bgColor = lipgloss.Color(p.BgColor)
 	bgSoftColor = lipgloss.Color(p.PanelBgColor)
@@ -133,6 +145,8 @@ func ApplyTheme(cfg config.Config) {
 	mutedColor = lipgloss.Color(p.MutedColor)
 	subtleColor = lipgloss.Color(p.SubtleColor)
 	chipBgColor = lipgloss.Color(p.ChipBgColor)
+	inlineCodeBgColor = lipgloss.Color(p.InlineCodeBgColor)
+	pinnedNoteColor = lipgloss.Color(p.PinnedNoteColor)
 	errorColor = lipgloss.Color(p.ErrorColor)
 	successColor = lipgloss.Color(p.SuccessColor)
 	selectedBgColor = lipgloss.Color(p.SelectedBgColor)
@@ -386,21 +400,22 @@ func builtinTheme(name string) themePalette {
 
 	case "onedark":
 		return themePalette{
-			BgColor:          "#1E2127",
-			PanelBgColor:     "#282C34",
-			BorderColor:      "#3A404C",
-			FocusBorderColor: "#61AFEF",
-			AccentColor:      "#61AFEF",
-			AccentSoftColor:  "#C678DD",
-			TextColor:        "#ABB2BF",
-			MutedColor:       "#828997",
-			SubtleColor:      "#3A404C",
-			ChipBgColor:      "#2C313A",
-			ErrorColor:       "#E06C75",
-			SuccessColor:     "#98C379",
-			SelectedBgColor:  "#353B45",
-			SelectedFgColor:  "#E6EAF2",
-			HighlightBgColor: "#2B4A63",
+			BgColor:           "#1E2127",
+			PanelBgColor:      "#282C34",
+			BorderColor:       "#3A404C",
+			FocusBorderColor:  "#61AFEF",
+			AccentColor:       "#61AFEF",
+			AccentSoftColor:   "#C678DD",
+			TextColor:         "#ABB2BF",
+			MutedColor:        "#828997",
+			SubtleColor:       "#3A404C",
+			ChipBgColor:       "#2C313A",
+			InlineCodeBgColor: "#1B1F26",
+			ErrorColor:        "#E06C75",
+			SuccessColor:      "#98C379",
+			SelectedBgColor:   "#353B45",
+			SelectedFgColor:   "#E6EAF2",
+			HighlightBgColor:  "#2B4A63",
 		}
 
 	case "kanagawa":
@@ -487,8 +502,8 @@ func builtinTheme(name string) themePalette {
 			FocusBorderColor: "#0550AE",
 			AccentColor:      "#0550AE",
 			AccentSoftColor:  "#0349A5",
-			TextColor:        "#24292F",
-			MutedColor:       "#57606A",
+			TextColor:        "#1F2328",
+			MutedColor:       "#4B5563",
 			SubtleColor:      "#AFB8C1",
 			ChipBgColor:      "#EAEEF2",
 			ErrorColor:       "#A40E26",
@@ -673,6 +688,24 @@ func mixColor(a, b rgbColor, t float64) rgbColor {
 		g: a.g + (b.g-a.g)*t,
 		b: a.b + (b.b-a.b)*t,
 	}
+}
+
+func deriveInlineCodeBgColor(panelHex, chipHex string) string {
+	panel, ok := parseHexColor(panelHex)
+	if !ok {
+		return chipHex
+	}
+	chip, ok := parseHexColor(chipHex)
+	if !ok {
+		return chipHex
+	}
+
+	amount := 0.24
+	if relativeLuminance(panel) > 0.45 {
+		amount = 0.30
+	}
+
+	return formatHexColor(mixColor(chip, rgbColor{}, amount))
 }
 
 func colorDistanceSq(a, b rgbColor) float64 {

@@ -403,7 +403,7 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 	switch n := node.(type) {
 	case *ast.Text:
 		s := string(n.Segment.Value(r.source))
-		base := lipgloss.NewStyle().Background(bgSoftColor)
+		base := lipgloss.NewStyle().Foreground(textColor).Background(bgSoftColor)
 		switch {
 		case n.HardLineBreak():
 			return base.Render(s) + "\n"
@@ -414,21 +414,32 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		}
 
 	case *ast.String:
-		return lipgloss.NewStyle().Background(bgSoftColor).Render(string(n.Value))
+		return lipgloss.NewStyle().
+			Foreground(textColor).
+			Background(bgSoftColor).
+			Render(string(n.Value))
 
 	case *ast.Emphasis:
 		content := r.renderInlineChildren(n)
 		if n.Level == 2 {
-			return lipgloss.NewStyle().Bold(true).Background(bgSoftColor).Render(content)
+			return lipgloss.NewStyle().
+				Bold(true).
+				Foreground(textColor).
+				Background(bgSoftColor).
+				Render(content)
 		}
-		return lipgloss.NewStyle().Italic(true).Background(bgSoftColor).Render(content)
+		return lipgloss.NewStyle().
+			Italic(true).
+			Foreground(textColor).
+			Background(bgSoftColor).
+			Render(content)
 
 	case *ast.CodeSpan:
 		content := strings.TrimSpace(string(n.Text(r.source)))
 		return lipgloss.NewStyle().
 			Foreground(accentSoftColor).
-			Background(bgSoftColor).
-			Render("`" + content + "`")
+			Background(inlineCodeBgColor).
+			Render(content)
 
 	case *ast.Link:
 		label := strings.TrimSpace(r.renderInlineChildren(n))
@@ -476,7 +487,10 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		if node.FirstChild() != nil {
 			return r.renderInlineChildren(node)
 		}
-		return lipgloss.NewStyle().Background(bgSoftColor).Render(string(node.Text(r.source)))
+		return lipgloss.NewStyle().
+			Foreground(textColor).
+			Background(bgSoftColor).
+			Render(string(node.Text(r.source)))
 	}
 }
 
@@ -497,6 +511,7 @@ func (r markdownPreviewRenderer) wrap(text string, indent int) string {
 	width := max(10, r.width-indent)
 	rendered := lipgloss.NewStyle().
 		Width(width).
+		Foreground(textColor).
 		Background(bgSoftColor).
 		Render(text)
 
