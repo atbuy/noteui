@@ -76,7 +76,7 @@ func DiscoverTemporary(root string) ([]Note, error) {
 			category = ""
 		}
 
-		preview, _ := ReadPreview(path)
+		preview, _ := ReadFull(path)
 		title := ExtractTitle(preview)
 		if title == "" {
 			title = fallbackTitleFromFilename(filepath.Base(path))
@@ -176,7 +176,7 @@ func Discover(root string) ([]Note, error) {
 			category = "uncategorized"
 		}
 
-		preview, _ := ReadPreview(path)
+		preview, _ := ReadFull(path)
 		title := ExtractTitle(preview)
 		if title == "" {
 			title = fallbackTitleFromFilename(filepath.Base(path))
@@ -228,6 +228,16 @@ func ReadPreview(path string) (string, error) {
 	}
 
 	text := string(buf[:n])
+	text = strings.ReplaceAll(text, "\t", "    ")
+	return strings.TrimSpace(text), nil
+}
+
+func ReadFull(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	text := string(b)
 	text = strings.ReplaceAll(text, "\t", "    ")
 	return strings.TrimSpace(text), nil
 }

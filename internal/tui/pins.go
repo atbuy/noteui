@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"atbuy/noteui/internal/notes"
 	"atbuy/noteui/internal/state"
 )
 
@@ -298,6 +299,24 @@ func (m Model) pinnedItems() []pinItem {
 	return out
 }
 
+func (m Model) findNoteByRelPath(relPath string) *notes.Note {
+	for i := range m.notes {
+		if m.notes[i].RelPath == relPath {
+			return &m.notes[i]
+		}
+	}
+	return nil
+}
+
+func (m Model) findTempNoteByRelPath(relPath string) *notes.Note {
+	for i := range m.tempNotes {
+		if m.tempNotes[i].RelPath == relPath {
+			return &m.tempNotes[i]
+		}
+	}
+	return nil
+}
+
 func (m Model) filteredPinnedItems() []pinItem {
 	query := strings.TrimSpace(strings.ToLower(m.searchInput.Value()))
 	items := m.pinnedItems()
@@ -307,20 +326,20 @@ func (m Model) filteredPinnedItems() []pinItem {
 
 	out := make([]pinItem, 0, len(items))
 	for _, item := range items {
-		typeText := ""
 		switch item.Kind {
 		case pinItemCategory:
-			typeText = "category"
+			if strings.Contains(strings.ToLower(item.Name), query) ||
+				strings.Contains(strings.ToLower(item.RelPath), query) {
+				out = append(out, item)
+			}
 		case pinItemNote:
-			typeText = "note"
+			if n := m.findNoteByRelPath(item.RelPath); n != nil && m.noteMatches(*n, query) {
+				out = append(out, item)
+			}
 		case pinItemTemporaryNote:
-			typeText = "temporary"
-		}
-
-		if strings.Contains(strings.ToLower(item.Name), query) ||
-			strings.Contains(strings.ToLower(item.RelPath), query) ||
-			strings.Contains(typeText, query) {
-			out = append(out, item)
+			if n := m.findTempNoteByRelPath(item.RelPath); n != nil && m.noteMatches(*n, query) {
+				out = append(out, item)
+			}
 		}
 	}
 

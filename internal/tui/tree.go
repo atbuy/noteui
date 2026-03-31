@@ -629,24 +629,46 @@ func findMatchExcerpt(n notes.Note, query string) string {
 	}
 
 	terms := strings.Fields(q)
-
 	content := notes.StripFrontMatter(n.Preview)
-	lines := strings.SplitSeq(content, "\n")
+	lines := strings.Split(content, "\n")
 
-	for line := range lines {
+	lastSection := ""
+	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
 		}
+
+		// Track nearest section heading for context
 		if strings.HasPrefix(trimmed, "# ") {
+			lastSection = ""
 			continue
 		}
+		if after, ok := strings.CutPrefix(trimmed, "### "); ok {
+			lastSection = strings.TrimSpace(after)
+		} else if after, ok := strings.CutPrefix(trimmed, "## "); ok {
+			lastSection = strings.TrimSpace(after)
+		}
+
 		lower := strings.ToLower(trimmed)
+		matched := false
 		for _, term := range terms {
 			if strings.Contains(lower, term) {
-				return trimmed
+				matched = true
+				break
 			}
 		}
+		if !matched {
+			continue
+		}
+
+		// Strip leading # markers for display
+		displayLine := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+
+		if lastSection != "" && displayLine != lastSection {
+			return lastSection + " › " + displayLine
+		}
+		return displayLine
 	}
 
 	return ""
