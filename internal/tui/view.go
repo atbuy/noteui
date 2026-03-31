@@ -955,11 +955,12 @@ func (m Model) previewView() string {
 func (m Model) leftPanelTitle() string {
 	switch m.listMode {
 	case listModeTemporary:
-		return "Temporary"
+		return fmt.Sprintf("Temporary (%d)", len(m.filteredTempNotes()))
 	case listModePins:
-		return "Pins"
+		return fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
 	default:
-		return "Tree"
+		count := max(0, len(m.treeItems)-1)
+		return fmt.Sprintf("Tree (%d)", count)
 	}
 }
 
