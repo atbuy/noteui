@@ -13,6 +13,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	extast "github.com/yuin/goldmark/extension/ast"
 	gmtext "github.com/yuin/goldmark/text"
 )
 
@@ -81,7 +82,7 @@ func (r markdownPreviewRenderer) renderBlock(node ast.Node, indent int) string {
 		return r.wrap(text, indent)
 
 	case *ast.TextBlock:
-		text := strings.TrimSpace(r.linesText(n.Lines()))
+		text := strings.TrimSpace(r.renderInlineChildren(n))
 		if text == "" {
 			return ""
 		}
@@ -209,11 +210,28 @@ func (r markdownPreviewRenderer) renderListItem(
 	indent int,
 ) string {
 	marker := "• "
+	markerWidth := lipgloss.Width(marker)
 	if ordered {
 		marker = fmt.Sprintf("%d. ", index+1)
+		markerWidth = lipgloss.Width(marker)
 	}
 
-	itemIndent := indent + len(marker)
+	if !ordered {
+		if firstBlock := item.FirstChild(); firstBlock != nil {
+			if firstInline := firstBlock.FirstChild(); firstInline != nil {
+				if cb, ok := firstInline.(*extast.TaskCheckBox); ok {
+					if cb.IsChecked {
+						marker = lipgloss.NewStyle().Foreground(successColor).Render("[X]") + " "
+					} else {
+						marker = lipgloss.NewStyle().Foreground(errorColor).Render("[ ]") + " "
+					}
+					markerWidth = 4
+				}
+			}
+		}
+	}
+
+	itemIndent := indent + markerWidth
 	var blocks []string
 
 	for child := item.FirstChild(); child != nil; child = child.NextSibling() {
@@ -429,6 +447,9 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 			alt = "image"
 		}
 		return mutedStyle.Render("[image: " + alt + "]")
+
+	case *extast.TaskCheckBox:
+		return ""
 
 	default:
 		if node.FirstChild() != nil {

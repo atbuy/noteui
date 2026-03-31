@@ -110,6 +110,41 @@ func renameCategoryCmd(root, oldRelPath, newRelPath string) tea.Cmd {
 	}
 }
 
+func createTodoNoteCmd(root, relDir string) tea.Cmd {
+	return func() tea.Msg {
+		path, err := notes.CreateTodoNote(root, relDir)
+		return noteCreatedMsg{path: path, err: err}
+	}
+}
+
+func toggleTodoCmd(path string, lineIdx int) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.ToggleTodoLine(path, lineIdx)
+		return todoModifiedMsg{path: path, err: err}
+	}
+}
+
+func addTodoCmd(path, text string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.AddTodoItem(path, text)
+		return todoModifiedMsg{path: path, err: err}
+	}
+}
+
+func deleteTodoCmd(path string, lineIdx int) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.DeleteTodoLine(path, lineIdx)
+		return todoModifiedMsg{path: path, err: err}
+	}
+}
+
+func editTodoCmd(path string, lineIdx int, newText string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.EditTodoLine(path, lineIdx, newText)
+		return todoModifiedMsg{path: path, err: err}
+	}
+}
+
 func startWatchTeaCmd(root string) tea.Cmd {
 	return func() tea.Msg {
 		return startWatchCmd(root)()

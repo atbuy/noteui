@@ -166,6 +166,7 @@ func (m Model) notePreviewCmd(notePath, relPath string, tags []string) tea.Cmd {
 		return previewRenderedMsg{
 			forPath:             notePath,
 			baseContent:         rendered,
+			rawContent:          notes.StripFrontMatter(raw),
 			privacyForcedByNote: private,
 		}
 	}
@@ -276,6 +277,121 @@ func (m *Model) jumpToPrevHeading() {
 
 	m.preview.SetYOffset(prev)
 	m.status = "previous heading"
+}
+
+func (m *Model) rebuildPreviewTodos(raw, rendered string) {
+	m.previewTodos = m.previewTodos[:0]
+
+	rawLines := strings.Split(raw, "\n")
+	type rawTodo struct {
+		lineIdx int
+		checked bool
+		text    string
+	}
+	var rawTodos []rawTodo
+	for i, line := range rawLines {
+		trimmed := strings.TrimLeft(line, " \t")
+		switch {
+		case strings.HasPrefix(trimmed, "- [ ] "):
+			rawTodos = append(rawTodos, rawTodo{i, false, trimmed[6:]})
+		case strings.HasPrefix(trimmed, "- [x] "), strings.HasPrefix(trimmed, "- [X] "):
+			rawTodos = append(rawTodos, rawTodo{i, true, trimmed[6:]})
+		}
+	}
+	if len(rawTodos) == 0 {
+		if m.previewTodoCursor >= 0 {
+			m.previewTodoCursor = 0
+		}
+		return
+	}
+
+	rendLines := strings.Split(stripANSI(rendered), "\n")
+	var rendTodoLines []int
+	for i, line := range rendLines {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "[ ]") || strings.HasPrefix(t, "[X]") ||
+			strings.HasPrefix(t, "[x]") {
+			rendTodoLines = append(rendTodoLines, i)
+		}
+	}
+
+	limit := min(len(rawTodos), len(rendTodoLines))
+	for i := range limit {
+		m.previewTodos = append(m.previewTodos, previewTodoItem{
+			rawLine:  rawTodos[i].lineIdx,
+			rendLine: rendTodoLines[i],
+			checked:  rawTodos[i].checked,
+			text:     rawTodos[i].text,
+		})
+	}
+
+	for i := limit; i < len(rawTodos); i++ {
+		m.previewTodos = append(m.previewTodos, previewTodoItem{
+			rawLine:  rawTodos[i].lineIdx,
+			rendLine: -1,
+			checked:  rawTodos[i].checked,
+			text:     rawTodos[i].text,
+		})
+	}
+
+	if m.previewTodoCursor >= len(m.previewTodos) {
+		m.previewTodoCursor = max(0, len(m.previewTodos)-1)
+	}
+}
+
+func (m *Model) jumpToNextTodo() {
+	if len(m.previewTodos) == 0 {
+		m.status = "no todos"
+		return
+	}
+	m.previewTodoCursor = (m.previewTodoCursor + 1) % len(m.previewTodos)
+	todo := m.previewTodos[m.previewTodoCursor]
+	if todo.rendLine >= 0 {
+		m.preview.SetYOffset(todo.rendLine)
+	}
+	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
+	m.reapplyTodoHighlight()
+}
+
+func (m *Model) jumpToPrevTodo() {
+	if len(m.previewTodos) == 0 {
+		m.status = "no todos"
+		return
+	}
+	m.previewTodoCursor = (m.previewTodoCursor - 1 + len(m.previewTodos)) % len(m.previewTodos)
+	todo := m.previewTodos[m.previewTodoCursor]
+	if todo.rendLine >= 0 {
+		m.preview.SetYOffset(todo.rendLine)
+	}
+	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
+	m.reapplyTodoHighlight()
+}
+
+func applyTodoLineHighlight(content string, rendLine int) string {
+	if rendLine < 0 {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	if rendLine >= len(lines) {
+		return content
+	}
+	plain := stripANSI(lines[rendLine])
+	lines[rendLine] = lipgloss.NewStyle().
+		Background(selectedBgColor).
+		Foreground(selectedFgColor).
+		Bold(true).
+		Render(plain)
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) reapplyTodoHighlight() {
+	if len(m.previewTodos) == 0 || m.previewTodoCursor < 0 ||
+		m.previewTodoCursor >= len(m.previewTodos) {
+		m.preview.SetContent(m.previewContent)
+		return
+	}
+	todo := m.previewTodos[m.previewTodoCursor]
+	m.preview.SetContent(applyTodoLineHighlight(m.previewContent, todo.rendLine))
 }
 
 func (m Model) mouseInPreview(x, y int) bool {
@@ -638,7 +754,7 @@ func (m *Model) reapplyPreviewHighlights() {
 		m.previewMatchIndex,
 	)
 	m.previewContent = highlighted
-	m.preview.SetContent(highlighted)
+	m.reapplyTodoHighlight()
 }
 
 func (m Model) centeredOffset(line int) int {

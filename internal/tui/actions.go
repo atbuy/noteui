@@ -311,6 +311,47 @@ func (m *Model) armRenameCurrent() {
 	}
 }
 
+func (m Model) toggleCurrentPreviewTodo() tea.Cmd {
+	if len(m.previewTodos) == 0 {
+		m.status = "no todos"
+		return nil
+	}
+	if m.previewTodoCursor < 0 || m.previewTodoCursor >= len(m.previewTodos) {
+		return nil
+	}
+	todo := m.previewTodos[m.previewTodoCursor]
+	return toggleTodoCmd(m.previewPath, todo.rawLine)
+}
+
+func (m Model) deleteCurrentPreviewTodo() tea.Cmd {
+	if len(m.previewTodos) == 0 {
+		m.status = "no todos"
+		return nil
+	}
+	if m.previewTodoCursor < 0 || m.previewTodoCursor >= len(m.previewTodos) {
+		return nil
+	}
+	todo := m.previewTodos[m.previewTodoCursor]
+	return deleteTodoCmd(m.previewPath, todo.rawLine)
+}
+
+func (m *Model) armEditCurrentPreviewTodo() tea.Cmd {
+	if len(m.previewTodos) == 0 {
+		m.status = "no todos"
+		return nil
+	}
+	if m.previewTodoCursor < 0 || m.previewTodoCursor >= len(m.previewTodos) {
+		return nil
+	}
+	todo := m.previewTodos[m.previewTodoCursor]
+	m.showTodoEdit = true
+	m.todoInput.SetValue(todo.text)
+	m.todoInput.Focus()
+	m.todoInput.CursorEnd()
+	m.status = "edit todo"
+	return nil
+}
+
 func (m *Model) toggleNotesTemporaryMode() {
 	if m.listMode == listModeTemporary {
 		m.switchToNotesMode()

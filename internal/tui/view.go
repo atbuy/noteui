@@ -106,6 +106,26 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showTodoAdd {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderTodoAddModal(),
+		)
+	}
+
+	if m.showTodoEdit {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderTodoEditModal(),
+		)
+	}
+
 	return base
 }
 
@@ -688,7 +708,8 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "delete failed:"),
 		strings.HasPrefix(m.status, "rename failed:"),
 		strings.HasPrefix(m.status, "move failed:"),
-		strings.HasPrefix(m.status, "pin failed:"):
+		strings.HasPrefix(m.status, "pin failed:"),
+		strings.HasPrefix(m.status, "todo error:"):
 		return statusErrStyle.Render(line)
 	default:
 		return statusOKStyle.Render(line)
@@ -707,6 +728,10 @@ func (m Model) renderModeSegment() string {
 		return "MOVE"
 	case m.showRename:
 		return "RENAME"
+	case m.showTodoAdd:
+		return "ADD TODO"
+	case m.showTodoEdit:
+		return "EDIT TODO"
 	case m.searchMode:
 		switch m.listMode {
 		case listModeTemporary:
@@ -897,6 +922,13 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("gg / G", "Jump to top / bottom of list", innerWidth),
 		m.renderHelpLine("s", "Toggle sort (alpha / modified)", innerWidth),
 		m.renderHelpLine("#tag", "Filter by tag in search", innerWidth),
+		m.renderHelpLine("T", "New todo list (tree focus)", innerWidth),
+		m.renderHelpLine("]h / [h", "Next / prev heading in preview", innerWidth),
+		m.renderHelpLine("]t / [t", "Next / prev todo in preview", innerWidth),
+		m.renderHelpLine("tt", "Toggle current todo checkbox", innerWidth),
+		m.renderHelpLine("ta", "Add new todo item", innerWidth),
+		m.renderHelpLine("td", "Delete current todo item", innerWidth),
+		m.renderHelpLine("te", "Edit current todo item", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -1006,6 +1038,26 @@ func (m Model) renderCreateCategoryModal() string {
 		"Category",
 		m.categoryInput,
 		"Enter to create • Esc to cancel",
+	)
+}
+
+func (m Model) renderTodoAddModal() string {
+	return m.renderStandardModal(
+		"Add todo item",
+		"Type the text for your new todo item.",
+		"Todo",
+		m.todoInput,
+		"Enter to add • Esc to cancel",
+	)
+}
+
+func (m Model) renderTodoEditModal() string {
+	return m.renderStandardModal(
+		"Edit todo item",
+		"Edit the text of the selected todo item.",
+		"Todo",
+		m.todoInput,
+		"Enter to save • Esc to cancel",
 	)
 }
 

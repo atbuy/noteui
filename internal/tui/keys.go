@@ -11,6 +11,7 @@ type keyMap struct {
 	Focus                key.Binding
 	NewNote              key.Binding
 	NewTemporaryNote     key.Binding
+	NewTodoList          key.Binding
 	Search               key.Binding
 	ShowHelp             key.Binding
 	ShowPins             key.Binding
@@ -56,6 +57,10 @@ var keys = keyMap{
 	NewTemporaryNote: key.NewBinding(
 		key.WithKeys("N"),
 		key.WithHelp("N", "New temporary note"),
+	),
+	NewTodoList: key.NewBinding(
+		key.WithKeys("T"),
+		key.WithHelp("T", "New todo list"),
 	),
 	TogglePreviewPrivacy: key.NewBinding(
 		key.WithKeys("B"),

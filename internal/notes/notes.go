@@ -523,3 +523,98 @@ func ReadingTimeMinutes(wordCount int) int {
 	}
 	return max(1, (wordCount+wordsPerMinute-1)/wordsPerMinute)
 }
+
+func CreateTodoNote(root, relDir string) (string, error) {
+	relDir = strings.TrimSpace(relDir)
+	if relDir == "." {
+		relDir = ""
+	}
+
+	targetDir := root
+	if relDir != "" {
+		targetDir = filepath.Join(root, relDir)
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return "", err
+	}
+
+	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
+	path := filepath.Join(targetDir, name)
+
+	template := "# Todo\n\n- [ ] \n"
+	if err := os.WriteFile(path, []byte(template), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func ToggleTodoLine(path string, lineIdx int) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(content), "\n")
+	if lineIdx < 0 || lineIdx >= len(lines) {
+		return fmt.Errorf("line index %d out of range", lineIdx)
+	}
+	line := lines[lineIdx]
+	trimmed := strings.TrimLeft(line, " \t")
+	indent := line[:len(line)-len(trimmed)]
+
+	switch {
+	case strings.HasPrefix(trimmed, "- [ ] "):
+		lines[lineIdx] = indent + "- [x] " + trimmed[6:]
+	case strings.HasPrefix(trimmed, "- [x] "), strings.HasPrefix(trimmed, "- [X] "):
+		lines[lineIdx] = indent + "- [ ] " + trimmed[6:]
+	default:
+		return fmt.Errorf("line %d is not a todo item", lineIdx)
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+func AddTodoItem(path, text string) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	raw := string(content)
+	if !strings.HasSuffix(raw, "\n") {
+		raw += "\n"
+	}
+	raw += "- [ ] " + text + "\n"
+	return os.WriteFile(path, []byte(raw), 0o644)
+}
+
+func DeleteTodoLine(path string, lineIdx int) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(content), "\n")
+	if lineIdx < 0 || lineIdx >= len(lines) {
+		return fmt.Errorf("line index %d out of range", lineIdx)
+	}
+	lines = append(lines[:lineIdx], lines[lineIdx+1:]...)
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+func EditTodoLine(path string, lineIdx int, newText string) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(content), "\n")
+	if lineIdx < 0 || lineIdx >= len(lines) {
+		return fmt.Errorf("line index %d out of range", lineIdx)
+	}
+	line := lines[lineIdx]
+	trimmed := strings.TrimLeft(line, " \t")
+	indent := line[:len(line)-len(trimmed)]
+
+	prefix := "- [ ] "
+	if strings.HasPrefix(trimmed, "- [x] ") || strings.HasPrefix(trimmed, "- [X] ") {
+		prefix = "- [x] "
+	}
+	lines[lineIdx] = indent + prefix + newText
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+}

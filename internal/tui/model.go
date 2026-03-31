@@ -137,7 +137,20 @@ type categoryDeletedMsg struct {
 type previewRenderedMsg struct {
 	forPath             string
 	baseContent         string
+	rawContent          string
 	privacyForcedByNote bool
+}
+
+type todoModifiedMsg struct {
+	path string
+	err  error
+}
+
+type previewTodoItem struct {
+	rawLine  int
+	rendLine int
+	checked  bool
+	text     string
 }
 
 type treeItem struct {
@@ -241,6 +254,14 @@ type Model struct {
 	deletePending  *deletePending
 	preserveCursor int
 
+	previewTodos        []previewTodoItem
+	previewTodoCursor   int
+	pendingTodoCursor   int
+	pendingT            bool
+	showTodoAdd         bool
+	showTodoEdit        bool
+	todoInput           textinput.Model
+
 	startupError string
 
 	sortByModTime bool
@@ -288,6 +309,12 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	renameInput.CharLimit = 300
 	renameInput.Width = 48
 
+	todoInput := textinput.New()
+	todoInput.Placeholder = "Todo item text"
+	todoInput.Prompt = ""
+	todoInput.CharLimit = 300
+	todoInput.Width = 48
+
 	vp := viewport.New(0, 0)
 
 	st, _ := state.Load()
@@ -318,7 +345,9 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		searchInput:           searchInput,
 		moveInput:             moveInput,
 		renameInput:           renameInput,
+		todoInput:             todoInput,
 		preserveCursor:        -1,
+		pendingTodoCursor:     -1,
 		startupError:          startupError,
 		cfg:                   cfg,
 		preview:               vp,
@@ -370,14 +399,31 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.previewMatchIndex = 0
 		highlighted := applyMatchHighlights(msg.baseContent, query, m.previewMatches, 0)
 		m.previewContent = highlighted
-		m.preview.SetContent(highlighted)
 		m.rebuildPreviewHeadingsFromRendered()
+		if m.pendingTodoCursor >= 0 {
+			m.previewTodoCursor = m.pendingTodoCursor
+			m.pendingTodoCursor = -1
+		} else {
+			m.previewTodoCursor = 0
+		}
+		m.rebuildPreviewTodos(msg.rawContent, msg.baseContent)
+		m.reapplyTodoHighlight()
 		if len(m.previewMatches) > 0 && query != "" {
 			m.scrollToMatchLine(m.previewMatches[0].line)
 		} else {
 			m.preview.GotoTop()
 		}
 		return m, nil
+
+	case todoModifiedMsg:
+		if msg.err != nil {
+			m.status = "todo error: " + msg.err.Error()
+			return m, nil
+		}
+		m.pendingTodoCursor = m.previewTodoCursor
+		m.previewPath = ""
+		m.status = "todo updated"
+		return m, refreshAllCmd(m.rootDir)
 
 	case tea.MouseMsg:
 		m.previewHover = m.mouseInPreview(msg.X, msg.Y)
@@ -404,6 +450,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.categoryInput.Width = max(24, min(50, m.width-16))
 		m.moveInput.Width = max(24, min(60, m.width-16))
 		m.renameInput.Width = max(24, min(60, m.width-16))
+		m.todoInput.Width = max(24, min(60, m.width-16))
 
 		previewInnerWidth := max(20, rightWidth-8)
 		previewInnerHeight := max(6, msg.Height-14)
@@ -595,6 +642,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 	case watchRefreshMsg:
 		m.status = "auto refresh"
+		m.pendingTodoCursor = m.previewTodoCursor
 		m.previewPath = ""
 		if m.watchEvents != nil {
 			return m, tea.Batch(
@@ -662,6 +710,65 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 
 			return m, nil
+		}
+
+		if m.showTodoAdd {
+			switch msg.String() {
+			case "esc":
+				m.showTodoAdd = false
+				m.todoInput.Blur()
+				m.todoInput.SetValue("")
+				m.status = "todo add cancelled"
+				return m, nil
+			case "enter":
+				text := strings.TrimSpace(m.todoInput.Value())
+				m.showTodoAdd = false
+				m.todoInput.Blur()
+				m.todoInput.SetValue("")
+				if text == "" {
+					m.status = "todo add cancelled"
+					return m, nil
+				}
+				path := m.previewPath
+				if path == "" {
+					m.status = "no note selected"
+					return m, nil
+				}
+				return m, addTodoCmd(path, text)
+			}
+			var cmd tea.Cmd
+			m.todoInput, cmd = m.todoInput.Update(msg)
+			return m, cmd
+		}
+
+		if m.showTodoEdit {
+			switch msg.String() {
+			case "esc":
+				m.showTodoEdit = false
+				m.todoInput.Blur()
+				m.todoInput.SetValue("")
+				m.status = "todo edit cancelled"
+				return m, nil
+			case "enter":
+				text := strings.TrimSpace(m.todoInput.Value())
+				m.showTodoEdit = false
+				m.todoInput.Blur()
+				m.todoInput.SetValue("")
+				if text == "" {
+					m.status = "todo edit cancelled"
+					return m, nil
+				}
+				path := m.previewPath
+				if path == "" || m.previewTodoCursor >= len(m.previewTodos) {
+					m.status = "no todo selected"
+					return m, nil
+				}
+				rawLine := m.previewTodos[m.previewTodoCursor].rawLine
+				return m, editTodoCmd(path, rawLine, text)
+			}
+			var cmd tea.Cmd
+			m.todoInput, cmd = m.todoInput.Update(msg)
+			return m, cmd
 		}
 
 		if m.showMove {
@@ -931,12 +1038,19 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			if msg.String() != "z" {
 				m.pendingZ = false
 			}
+			{
+				k := msg.String()
+				if m.pendingT && k != "t" && k != "a" && k != "d" && k != "e" {
+					m.pendingT = false
+				}
+			}
 			switch msg.String() {
 			case "esc":
 				m.focus = focusTree
 				m.status = "tree focused"
 				m.pendingG = false
 				m.pendingBracketDir = ""
+				m.pendingT = false
 				return m, nil
 
 			case "j", "down":
@@ -1019,6 +1133,54 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.jumpToPrevHeading()
 					m.pendingBracketDir = ""
 					return m, nil
+				}
+
+			case "t":
+				if m.pendingBracketDir == "]" {
+					m.jumpToNextTodo()
+					m.pendingBracketDir = ""
+					m.pendingT = false
+					return m, nil
+				}
+				if m.pendingBracketDir == "[" {
+					m.jumpToPrevTodo()
+					m.pendingBracketDir = ""
+					m.pendingT = false
+					return m, nil
+				}
+				if m.pendingT {
+					m.pendingT = false
+					return m, m.toggleCurrentPreviewTodo()
+				}
+				m.pendingT = true
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case "a":
+				if m.pendingT {
+					m.pendingT = false
+					path := m.previewPath
+					if path == "" {
+						m.status = "no note selected"
+						return m, nil
+					}
+					m.showTodoAdd = true
+					m.todoInput.SetValue("")
+					m.todoInput.Focus()
+					m.status = "add todo"
+					return m, nil
+				}
+
+			case "d":
+				if m.pendingT {
+					m.pendingT = false
+					return m, m.deleteCurrentPreviewTodo()
+				}
+
+			case "e":
+				if m.pendingT {
+					m.pendingT = false
+					return m, m.armEditCurrentPreviewTodo()
 				}
 
 			case "n":
@@ -1117,6 +1279,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		m.pendingG = false
 		m.pendingBracketDir = ""
+		m.pendingT = false
 
 		if key.Matches(msg, keys.Move) {
 			m.armMoveCurrent()
@@ -1160,6 +1323,14 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.NewTemporaryNote) {
 			return m, createTemporaryNoteCmd(m.rootDir)
+		}
+
+		if key.Matches(msg, keys.NewTodoList) {
+			if m.listMode == listModeTemporary || m.listMode == listModePins {
+				m.status = "todo lists only available in notes tree"
+				return m, nil
+			}
+			return m, createTodoNoteCmd(m.rootDir, m.currentTargetDir())
 		}
 
 		if key.Matches(msg, keys.NewNote) {
