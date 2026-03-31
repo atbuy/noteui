@@ -726,6 +726,47 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.searchMode {
+			switch msg.String() {
+			case "esc":
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
+				return m, nil
+			case "enter":
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
+				return m, nil
+			case "up":
+				switch m.listMode {
+				case listModeTemporary:
+					m.moveTempCursor(-1)
+				case listModePins:
+					m.movePinsCursor(-1)
+				default:
+					m.moveTreeCursor(-1)
+				}
+				return m, nil
+			case "down":
+				switch m.listMode {
+				case listModeTemporary:
+					m.moveTempCursor(1)
+				case listModePins:
+					m.movePinsCursor(1)
+				default:
+					m.moveTreeCursor(1)
+				}
+				return m, nil
+			}
+
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.rebuildTree()
+			m.syncSelectedNote()
+			return m, cmd
+		}
+
 		if key.Matches(msg, keys.ShowPins) {
 			m.togglePinsMode()
 			return m, nil
@@ -800,50 +841,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showHelp = true
 			m.status = "help"
 			return m, nil
-		}
-
-		if m.searchMode {
-			switch msg.String() {
-			case "esc":
-				m.searchMode = false
-				m.searchInput.Blur()
-				m.status = "search applied"
-				return m, nil
-
-			case "enter":
-				m.searchMode = false
-				m.searchInput.Blur()
-				m.status = "search applied"
-				return m, nil
-
-			case "up":
-				switch m.listMode {
-				case listModeTemporary:
-					m.moveTempCursor(-1)
-				case listModePins:
-					m.movePinsCursor(-1)
-				default:
-					m.moveTreeCursor(-1)
-				}
-				return m, nil
-
-			case "down":
-				switch m.listMode {
-				case listModeTemporary:
-					m.moveTempCursor(1)
-				case listModePins:
-					m.movePinsCursor(1)
-				default:
-					m.moveTreeCursor(1)
-				}
-				return m, nil
-			}
-
-			var cmd tea.Cmd
-			m.searchInput, cmd = m.searchInput.Update(msg)
-			m.rebuildTree()
-			m.syncSelectedNote()
-			return m, cmd
 		}
 
 		if key.Matches(msg, keys.Search) {
