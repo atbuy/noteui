@@ -151,6 +151,7 @@ func (m *Model) syncStateFromExpanded() {
 func (m *Model) saveTreeState() error {
 	m.syncStateFromPins()
 	m.syncStateFromExpanded()
+	m.state.SortByModTime = m.sortByModTime
 	return state.Save(m.state)
 }
 

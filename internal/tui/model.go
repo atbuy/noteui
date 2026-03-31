@@ -230,6 +230,8 @@ type Model struct {
 	preserveCursor int
 
 	startupError string
+
+	sortByModTime bool
 }
 
 type dataLoadedMsg struct {
@@ -318,6 +320,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		pinsCursor:            0,
 		previewPrivacyEnabled: cfg.Preview.Privacy,
 		showDashboard:         cfg.Dashboard,
+		sortByModTime:         st.SortByModTime,
 	}
 }
 
@@ -778,6 +781,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = m.watcher.Close()
 			}
 			return m, tea.Quit
+		}
+
+		if key.Matches(msg, keys.SortToggle) {
+			m.sortByModTime = !m.sortByModTime
+			_ = m.saveTreeState()
+			m.rebuildTree()
+			if m.sortByModTime {
+				m.status = "sorting by modified time"
+			} else {
+				m.status = "sorting alphabetically"
+			}
+			return m, nil
 		}
 
 		if key.Matches(msg, keys.ShowHelp) {

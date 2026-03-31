@@ -12,6 +12,7 @@ type State struct {
 	PinnedNotes         []string `json:"pinned_notes"`
 	PinnedCategories    []string `json:"pinned_categories"`
 	CollapsedCategories []string `json:"collapsed_categories"`
+	SortByModTime       bool     `json:"sort_by_mod_time"`
 }
 
 func Load() (State, error) {

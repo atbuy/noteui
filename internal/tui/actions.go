@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -377,15 +378,24 @@ func (m *Model) moveTempCursor(delta int) {
 
 func (m Model) filteredTempNotes() []notes.Note {
 	query := strings.TrimSpace(strings.ToLower(m.searchInput.Value()))
+
+	var out []notes.Note
 	if query == "" {
-		return m.tempNotes
+		out = make([]notes.Note, len(m.tempNotes))
+		copy(out, m.tempNotes)
+	} else {
+		out = make([]notes.Note, 0, len(m.tempNotes))
+		for _, n := range m.tempNotes {
+			if m.noteMatches(n, query) {
+				out = append(out, n)
+			}
+		}
 	}
 
-	out := make([]notes.Note, 0, len(m.tempNotes))
-	for _, n := range m.tempNotes {
-		if m.noteMatches(n, query) || strings.Contains(strings.ToLower(n.Title()), query) {
-			out = append(out, n)
-		}
+	if m.sortByModTime {
+		sort.SliceStable(out, func(i, j int) bool {
+			return out[i].ModTime.After(out[j].ModTime)
+		})
 	}
 
 	return out

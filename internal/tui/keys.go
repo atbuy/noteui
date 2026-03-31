@@ -21,6 +21,7 @@ type keyMap struct {
 	Rename               key.Binding
 	Pin                  key.Binding
 	TogglePreviewPrivacy key.Binding
+	SortToggle           key.Binding
 }
 
 var keys = keyMap{
@@ -87,5 +88,9 @@ var keys = keyMap{
 	Pin: key.NewBinding(
 		key.WithKeys("p"),
 		key.WithHelp("p", "Pin"),
+	),
+	SortToggle: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "Toggle sort order"),
 	),
 }

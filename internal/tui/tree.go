@@ -121,6 +121,33 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 	}
 }
 
+func (m Model) directChildNotes(parent string) []notes.Note {
+	out := make([]notes.Note, 0)
+	for _, n := range m.notes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == parent {
+			out = append(out, n)
+		}
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		pi := m.isPinnedNote(out[i].RelPath)
+		pj := m.isPinnedNote(out[j].RelPath)
+		if pi != pj {
+			return pi
+		}
+		if m.sortByModTime {
+			return out[i].ModTime.After(out[j].ModTime)
+		}
+		return out[i].RelPath < out[j].RelPath
+	})
+
+	return out
+}
+
 func (m Model) directChildCategories(parent string) []notes.Category {
 	out := make([]notes.Category, 0)
 	for _, c := range m.categories {
@@ -142,30 +169,8 @@ func (m Model) directChildCategories(parent string) []notes.Category {
 		if pi != pj {
 			return pi
 		}
-		return out[i].RelPath < out[j].RelPath
-	})
-
-	return out
-}
-
-func (m Model) directChildNotes(parent string) []notes.Note {
-	out := make([]notes.Note, 0)
-	for _, n := range m.notes {
-		dir := filepath.Dir(n.RelPath)
-		if dir == "." {
-			dir = ""
-		}
-		if dir == parent {
-			out = append(out, n)
-		}
-	}
-
-	sort.SliceStable(out, func(i, j int) bool {
-		pi := m.isPinnedNote(out[i].RelPath)
-		pj := m.isPinnedNote(out[j].RelPath)
-		if pi != pj {
-			return pi
-		}
+		// Categories always sort alphabetically regardless of sort mode
+		// since they don't have a meaningful mod time.
 		return out[i].RelPath < out[j].RelPath
 	})
 

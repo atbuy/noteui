@@ -723,6 +723,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("R", "Rename note/category", innerWidth),
 		m.renderHelpLine("p", "Pin or unpin current item", innerWidth),
 		m.renderHelpLine("gg / G", "Jump to top / bottom of list", innerWidth),
+		m.renderHelpLine("s", "Toggle sort (alpha / modified)", innerWidth),
 	}
 
 	body := lipgloss.NewStyle().
@@ -953,14 +954,19 @@ func (m Model) previewView() string {
 }
 
 func (m Model) leftPanelTitle() string {
+	sortIndicator := ""
+	if m.sortByModTime {
+		sortIndicator = " ⏱"
+	}
+
 	switch m.listMode {
 	case listModeTemporary:
-		return fmt.Sprintf("Temporary (%d)", len(m.filteredTempNotes()))
+		return fmt.Sprintf("Temporary (%d)%s", len(m.filteredTempNotes()), sortIndicator)
 	case listModePins:
 		return fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
 	default:
 		count := max(0, len(m.treeItems)-1)
-		return fmt.Sprintf("Tree (%d)", count)
+		return fmt.Sprintf("Tree (%d)%s", count, sortIndicator)
 	}
 }
 
