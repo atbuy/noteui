@@ -1,4 +1,4 @@
-.PHONY: build run install clean version
+.PHONY: build run install test clean version
 
 VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 BUILDINFO_PKG := atbuy/noteui/internal/buildinfo
@@ -14,6 +14,9 @@ run: build
 
 install:
 	go install -ldflags=$(LDFLAGS) ./cmd/$(OUTBIN)
+
+test:
+	go test ./...
 
 clean:
 	rm -rf ./bin/$(OUTBIN)
