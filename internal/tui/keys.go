@@ -9,28 +9,29 @@ import (
 )
 
 type keyMap struct {
-	Open                 key.Binding
-	Refresh              key.Binding
-	Quit                 key.Binding
-	Focus                key.Binding
-	NewNote              key.Binding
-	NewTemporaryNote     key.Binding
-	NewTodoList          key.Binding
-	Search               key.Binding
-	ShowHelp             key.Binding
-	ShowPins             key.Binding
-	CreateCategory       key.Binding
-	ToggleCategory       key.Binding
-	Delete               key.Binding
-	Move                 key.Binding
-	Rename               key.Binding
-	Pin                  key.Binding
-	TogglePreviewPrivacy key.Binding
-	SortToggle           key.Binding
-	ScrollHalfPageUp     key.Binding
-	ScrollHalfPageDown   key.Binding
-	NextMatch            key.Binding
-	PrevMatch            key.Binding
+	Open                     key.Binding
+	Refresh                  key.Binding
+	Quit                     key.Binding
+	Focus                    key.Binding
+	NewNote                  key.Binding
+	NewTemporaryNote         key.Binding
+	NewTodoList              key.Binding
+	Search                   key.Binding
+	ShowHelp                 key.Binding
+	ShowPins                 key.Binding
+	CreateCategory           key.Binding
+	ToggleCategory           key.Binding
+	Delete                   key.Binding
+	Move                     key.Binding
+	Rename                   key.Binding
+	Pin                      key.Binding
+	TogglePreviewPrivacy     key.Binding
+	TogglePreviewLineNumbers key.Binding
+	SortToggle               key.Binding
+	ScrollHalfPageUp         key.Binding
+	ScrollHalfPageDown       key.Binding
+	NextMatch                key.Binding
+	PrevMatch                key.Binding
 
 	MoveUp           key.Binding
 	MoveDown         key.Binding
@@ -88,6 +89,10 @@ var keys = keyMap{
 	TogglePreviewPrivacy: key.NewBinding(
 		key.WithKeys("B"),
 		key.WithHelp("B", "Toggle preview privacy"),
+	),
+	TogglePreviewLineNumbers: key.NewBinding(
+		key.WithKeys("L"),
+		key.WithHelp("L", "Toggle preview line numbers"),
 	),
 	ShowHelp: key.NewBinding(
 		key.WithKeys("?"),
@@ -245,6 +250,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.Rename, cfg.Rename)
 	apply(&keys.Pin, cfg.Pin)
 	apply(&keys.TogglePreviewPrivacy, cfg.TogglePreviewPrivacy)
+	apply(&keys.TogglePreviewLineNumbers, cfg.TogglePreviewLineNumbers)
 	apply(&keys.SortToggle, cfg.SortToggle)
 	apply(&keys.ScrollHalfPageUp, cfg.ScrollHalfPageUp)
 	apply(&keys.ScrollHalfPageDown, cfg.ScrollHalfPageDown)

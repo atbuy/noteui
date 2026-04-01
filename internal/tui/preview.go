@@ -20,7 +20,8 @@ func (m *Model) refreshPreview() {
 			m.previewPath = ""
 			m.previewContent = "No pinned item selected"
 			m.previewPrivacyForcedByNote = false
-			m.preview.SetContent(m.previewContent)
+			m.previewLineNumberStart = 0
+			m.setPreviewViewportContent(m.previewContent)
 			m.rebuildPreviewHeadingsFromRendered()
 			m.previewMatches = nil
 			m.preview.GotoTop()
@@ -46,7 +47,8 @@ func (m *Model) refreshPreview() {
 			m.previewPath = "pinned-category:" + item.RelPath
 			m.previewContent = rendered
 			m.previewPrivacyForcedByNote = false
-			m.preview.SetContent(rendered)
+			m.previewLineNumberStart = 0
+			m.setPreviewViewportContent(rendered)
 			m.rebuildPreviewHeadingsFromRendered()
 			m.previewMatches = nil
 			m.preview.GotoTop()
@@ -72,7 +74,8 @@ func (m *Model) refreshPreview() {
 		if n == nil {
 			m.previewPath = ""
 			m.previewContent = "No temporary note selected"
-			m.preview.SetContent(m.previewContent)
+			m.previewLineNumberStart = 0
+			m.setPreviewViewportContent(m.previewContent)
 			m.rebuildPreviewHeadingsFromRendered()
 			m.previewMatches = nil
 			m.preview.GotoTop()
@@ -93,7 +96,8 @@ func (m *Model) refreshPreview() {
 		m.previewPath = ""
 		m.previewContent = "Nothing selected"
 		m.previewPrivacyForcedByNote = false
-		m.preview.SetContent(m.previewContent)
+		m.previewLineNumberStart = 0
+		m.setPreviewViewportContent(m.previewContent)
 		m.rebuildPreviewHeadingsFromRendered()
 		m.previewMatches = nil
 		m.preview.GotoTop()
@@ -124,7 +128,8 @@ func (m *Model) refreshPreview() {
 		m.previewPath = "category:" + item.RelPath
 		m.previewContent = rendered
 		m.previewPrivacyForcedByNote = false
-		m.preview.SetContent(rendered)
+		m.previewLineNumberStart = 0
+		m.setPreviewViewportContent(rendered)
 		m.rebuildPreviewHeadingsFromRendered()
 		m.previewMatches = nil
 		m.preview.GotoTop()
@@ -134,7 +139,8 @@ func (m *Model) refreshPreview() {
 	if item.Note == nil {
 		m.previewPath = ""
 		m.previewContent = "No note selected"
-		m.preview.SetContent(m.previewContent)
+		m.previewLineNumberStart = 0
+		m.setPreviewViewportContent(m.previewContent)
 		m.rebuildPreviewHeadingsFromRendered()
 		m.previewMatches = nil
 		m.preview.GotoTop()
@@ -174,15 +180,18 @@ func (m Model) notePreviewCmd(notePath, relPath string, tags []string) tea.Cmd {
 		}
 
 		private := notes.NoteIsPrivate(raw)
-		rendered := m.renderNotePreview(relPath, raw, tags)
+		rendered, lineNumberStart := m.renderNotePreview(relPath, raw, tags)
+		body := notes.StripFrontMatter(raw)
 		if m.effectivePreviewPrivacy(private) {
 			rendered = blurRenderedText(rendered)
 		}
 		return previewRenderedMsg{
 			forPath:             notePath,
 			baseContent:         rendered,
-			rawContent:          notes.StripFrontMatter(raw),
+			rawContent:          body,
 			privacyForcedByNote: private,
+			lineNumberStart:     lineNumberStart,
+			todoLineOffset:      previewBodyLineOffset(raw, body),
 		}
 	}
 }
@@ -192,18 +201,99 @@ func (m Model) renderPreviewMarkdown(relPath, raw string) string {
 		return raw
 	}
 
-	width := m.preview.Width
-	if width <= 0 {
-		width = max(20, m.previewWidth-8)
-	}
-
+	width := m.previewContentWidth()
 	opts := markdownRenderOptions{
 		Width:           width,
 		SyntaxHighlight: m.cfg.Preview.SyntaxHighlight,
 		CodeStyle:       m.cfg.Preview.CodeStyle,
 	}
 
-	return renderMarkdownTerminal(raw, opts)
+	rendered := renderMarkdownTerminal(raw, opts)
+	if !m.previewLineNumbersEnabled {
+		return rendered
+	}
+
+	for range 2 {
+		adjustedWidth := max(12, m.previewContentWidth()-previewLineNumberGutterWidth(rendered))
+		if adjustedWidth == opts.Width {
+			break
+		}
+		opts.Width = adjustedWidth
+		rendered = renderMarkdownTerminal(raw, opts)
+	}
+
+	return rendered
+}
+
+func (m Model) previewContentWidth() int {
+	width := m.preview.Width
+	if width <= 0 {
+		width = max(20, m.previewWidth-8)
+	}
+	if !m.previewLineNumbersEnabled {
+		return width
+	}
+	return max(12, width-4)
+}
+
+func previewLineNumberGutterWidth(content string) int {
+	lines := strings.Split(content, "\n")
+	count := len(lines)
+	if count == 0 {
+		count = 1
+	}
+	return len(fmt.Sprintf("%d", count)) + 1
+}
+
+func (m Model) formatPreviewForDisplay(content string) string {
+	if !m.previewLineNumbersEnabled {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	count := len(lines)
+	if count == 0 {
+		count = 1
+	}
+	start := min(max(0, m.previewLineNumberStart), count)
+	numberedCount := max(1, count-start)
+	digits := len(fmt.Sprintf("%d", numberedCount))
+	gutter := lipgloss.NewStyle().
+		Foreground(mutedColor).
+		Background(bgSoftColor)
+	row := lipgloss.NewStyle().Background(bgSoftColor)
+	emptyGutter := gutter.Render(strings.Repeat(" ", digits+1))
+
+	formatted := make([]string, 0, len(lines))
+	for i, line := range lines {
+		label := emptyGutter
+		if i >= start {
+			label = gutter.Render(fmt.Sprintf("%*d ", digits, i-start+1))
+		}
+		formatted = append(formatted, row.Render(lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			label,
+			line,
+		)))
+	}
+
+	return strings.Join(formatted, "\n")
+}
+
+func (m *Model) setPreviewViewportContent(content string) {
+	m.preview.SetContent(m.formatPreviewForDisplay(content))
+}
+
+func previewBodyLineOffset(raw, body string) int {
+	normalizedRaw := strings.ReplaceAll(raw, "\r\n", "\n")
+	if normalizedRaw == body {
+		return 0
+	}
+	prefixLen := len(normalizedRaw) - len(body)
+	if prefixLen <= 0 || prefixLen > len(normalizedRaw) {
+		return 0
+	}
+	return strings.Count(normalizedRaw[:prefixLen], "\n")
 }
 
 func (m Model) previewMarkdownDisabledFor(relPath string) bool {
@@ -294,7 +384,7 @@ func (m *Model) jumpToPrevHeading() {
 	m.status = "previous heading"
 }
 
-func (m *Model) rebuildPreviewTodos(raw, rendered string) {
+func (m *Model) rebuildPreviewTodos(raw, rendered string, rawLineOffset int) {
 	m.previewTodos = m.previewTodos[:0]
 
 	rawLines := strings.Split(raw, "\n")
@@ -331,7 +421,7 @@ func (m *Model) rebuildPreviewTodos(raw, rendered string) {
 	limit := min(len(rawTodos), len(rendTodoLines))
 	for i := range limit {
 		m.previewTodos = append(m.previewTodos, previewTodoItem{
-			rawLine:  rawTodos[i].lineIdx,
+			rawLine:  rawLineOffset + rawTodos[i].lineIdx,
 			rendLine: rendTodoLines[i],
 			checked:  rawTodos[i].checked,
 			text:     rawTodos[i].text,
@@ -340,7 +430,7 @@ func (m *Model) rebuildPreviewTodos(raw, rendered string) {
 
 	for i := limit; i < len(rawTodos); i++ {
 		m.previewTodos = append(m.previewTodos, previewTodoItem{
-			rawLine:  rawTodos[i].lineIdx,
+			rawLine:  rawLineOffset + rawTodos[i].lineIdx,
 			rendLine: -1,
 			checked:  rawTodos[i].checked,
 			text:     rawTodos[i].text,
@@ -448,16 +538,16 @@ func renderSelectedTodoLine(plain string) string {
 
 func (m *Model) reapplyTodoHighlight() {
 	if !m.previewTodoNavMode {
-		m.preview.SetContent(m.previewContent)
+		m.setPreviewViewportContent(m.previewContent)
 		return
 	}
 	if len(m.previewTodos) == 0 || m.previewTodoCursor < 0 ||
 		m.previewTodoCursor >= len(m.previewTodos) {
-		m.preview.SetContent(m.previewContent)
+		m.setPreviewViewportContent(m.previewContent)
 		return
 	}
 	todo := m.previewTodos[m.previewTodoCursor]
-	m.preview.SetContent(applyTodoLineHighlight(m.previewContent, todo.rendLine))
+	m.setPreviewViewportContent(applyTodoLineHighlight(m.previewContent, todo.rendLine))
 }
 
 func (m Model) mouseInPreview(x, y int) bool {
@@ -551,19 +641,22 @@ func renderTagsHeader(tags []string) string {
 			Render(t))
 	}
 
-	return strings.Join(chips, " ")
+	sep := lipgloss.NewStyle().Background(bgSoftColor).Render(" ")
+	return strings.Join(chips, sep)
 }
 
-func (m Model) renderNotePreview(relPath string, raw string, tags []string) string {
+func (m Model) renderNotePreview(relPath string, raw string, tags []string) (string, int) {
 	body := notes.StripFrontMatter(raw)
 	rendered := m.renderPreviewMarkdown(relPath, body)
+	lineNumberStart := 0
 
 	tagsHeader := renderTagsHeader(tags)
 	if tagsHeader != "" {
 		rendered = tagsHeader + "\n\n" + rendered
+		lineNumberStart = 2
 	}
 
-	return rendered
+	return rendered, lineNumberStart
 }
 
 type previewMatch struct {

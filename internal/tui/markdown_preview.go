@@ -214,11 +214,15 @@ func (r markdownPreviewRenderer) renderListItem(
 	ordered bool,
 	indent int,
 ) string {
-	marker := "• "
-	markerWidth := lipgloss.Width(marker)
+	marker := lipgloss.NewStyle().
+		Background(bgSoftColor).
+		Render("• ")
+	markerWidth := lipgloss.Width(stripANSI(marker))
 	if ordered {
-		marker = fmt.Sprintf("%d. ", index+1)
-		markerWidth = lipgloss.Width(marker)
+		marker = lipgloss.NewStyle().
+			Background(bgSoftColor).
+			Render(fmt.Sprintf("%d. ", index+1))
+		markerWidth = lipgloss.Width(stripANSI(marker))
 	}
 
 	if !ordered {

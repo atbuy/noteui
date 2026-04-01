@@ -140,6 +140,8 @@ type previewRenderedMsg struct {
 	baseContent         string
 	rawContent          string
 	privacyForcedByNote bool
+	lineNumberStart     int
+	todoLineOffset      int
 }
 
 type todoModifiedMsg struct {
@@ -230,13 +232,15 @@ type Model struct {
 	previewWidth int
 	status       string
 
-	cfg            config.Config
-	preview        viewport.Model
-	previewPath    string
-	previewContent string
+	cfg                    config.Config
+	preview                viewport.Model
+	previewPath            string
+	previewContent         string
+	previewLineNumberStart int
 
 	previewPrivacyEnabled      bool
 	previewPrivacyForcedByNote bool
+	previewLineNumbersEnabled  bool
 
 	watcher     interface{ Close() error }
 	watchEvents <-chan teaMsg
@@ -385,32 +389,33 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	}
 
 	return Model{
-		rootDir:               root,
-		version:               version,
-		status:                "loading notes...",
-		expanded:              expanded,
-		categoryInput:         categoryInput,
-		searchInput:           searchInput,
-		moveInput:             moveInput,
-		renameInput:           renameInput,
-		todoInput:             todoInput,
-		passphraseInput:       passphraseInput,
-		preserveCursor:        -1,
-		pendingTodoCursor:     -1,
-		startupError:          startupError,
-		cfg:                   cfg,
-		preview:               vp,
-		focus:                 focusTree,
-		state:                 st,
-		pinnedNotes:           pinnedNotes,
-		pinnedCats:            pinnedCats,
-		listMode:              listModeNotes,
-		lastNonPinsMode:       listModeNotes,
-		tempCursor:            0,
-		pinsCursor:            0,
-		previewPrivacyEnabled: cfg.Preview.Privacy,
-		showDashboard:         cfg.Dashboard,
-		sortByModTime:         st.SortByModTime,
+		rootDir:                   root,
+		version:                   version,
+		status:                    "loading notes...",
+		expanded:                  expanded,
+		categoryInput:             categoryInput,
+		searchInput:               searchInput,
+		moveInput:                 moveInput,
+		renameInput:               renameInput,
+		todoInput:                 todoInput,
+		passphraseInput:           passphraseInput,
+		preserveCursor:            -1,
+		pendingTodoCursor:         -1,
+		startupError:              startupError,
+		cfg:                       cfg,
+		preview:                   vp,
+		focus:                     focusTree,
+		state:                     st,
+		pinnedNotes:               pinnedNotes,
+		pinnedCats:                pinnedCats,
+		listMode:                  listModeNotes,
+		lastNonPinsMode:           listModeNotes,
+		tempCursor:                0,
+		pinsCursor:                0,
+		previewPrivacyEnabled:     cfg.Preview.Privacy,
+		previewLineNumbersEnabled: cfg.Preview.LineNumbers,
+		showDashboard:             cfg.Dashboard,
+		sortByModTime:             st.SortByModTime,
 	}
 }
 
@@ -443,6 +448,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.previewBaseContent = msg.baseContent
 		m.previewPrivacyForcedByNote = msg.privacyForcedByNote
+		m.previewLineNumberStart = msg.lineNumberStart
 		query := strings.TrimSpace(m.searchInput.Value())
 		m.previewMatches = buildPreviewMatches(msg.baseContent, query)
 		m.previewMatchIndex = 0
@@ -457,11 +463,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.previewTodoCursor = 0
 		}
-		m.rebuildPreviewTodos(msg.rawContent, msg.baseContent)
+		m.rebuildPreviewTodos(msg.rawContent, msg.baseContent, msg.todoLineOffset)
 		if m.previewTodoNavMode {
 			m.reapplyTodoHighlight()
 		} else {
-			m.preview.SetContent(m.previewContent)
+			m.setPreviewViewportContent(m.previewContent)
 		}
 		if len(m.previewMatches) > 0 && query != "" {
 			m.scrollToMatchLine(m.previewMatches[0].line)
@@ -666,8 +672,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		locked := m.lockedPreviewText()
 		m.previewBaseContent = ""
 		m.previewContent = locked
+		m.previewLineNumberStart = 0
 		m.previewTodos = nil
-		m.preview.SetContent(locked)
+		m.setPreviewViewportContent(locked)
 		m.rebuildPreviewHeadingsFromRendered()
 		m.previewMatches = nil
 		m.preview.GotoTop()
@@ -1249,7 +1256,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.previewTodoCursor = -1
 				m.pendingBracketDir = ""
 				m.pendingT = false
-				m.preview.SetContent(m.previewContent)
+				m.setPreviewViewportContent(m.previewContent)
 				m.status = "todo nav off"
 				return m, nil
 
@@ -1577,6 +1584,20 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.status = "preview privacy enabled"
 			} else {
 				m.status = "preview privacy disabled"
+			}
+
+			m.refreshPreview()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.TogglePreviewLineNumbers) {
+			m.previewLineNumbersEnabled = !m.previewLineNumbersEnabled
+			m.previewPath = ""
+
+			if m.previewLineNumbersEnabled {
+				m.status = "preview line numbers enabled"
+			} else {
+				m.status = "preview line numbers disabled"
 			}
 
 			m.refreshPreview()

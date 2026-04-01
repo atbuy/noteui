@@ -1120,6 +1120,11 @@ func (m Model) renderHelpModal() string {
 			"Toggle preview privacy",
 			innerWidth,
 		),
+		m.renderHelpLine(
+			keys.TogglePreviewLineNumbers.Help().Key,
+			"Toggle preview line numbers",
+			innerWidth,
+		),
 		m.renderHelpLine(keys.CreateCategory.Help().Key, "Create category", innerWidth),
 		m.renderHelpLine(
 			keys.Delete.Help().Key+keys.DeleteConfirm.Help().Key,
