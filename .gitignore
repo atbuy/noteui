@@ -1,2 +1,6 @@
 # Ignore binary files
 bin/
+
+# Ignore local coverage reports
+coverage.out
+coverage.html
