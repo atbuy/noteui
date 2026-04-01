@@ -103,6 +103,7 @@ type KeysConfig struct {
 	Delete                   []string `toml:"delete"`
 	Move                     []string `toml:"move"`
 	Rename                   []string `toml:"rename"`
+	AddTag                   []string `toml:"add_tag"`
 	Pin                      []string `toml:"pin"`
 	TogglePreviewPrivacy     []string `toml:"toggle_preview_privacy"`
 	TogglePreviewLineNumbers []string `toml:"toggle_preview_line_numbers"`

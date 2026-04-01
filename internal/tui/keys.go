@@ -24,6 +24,7 @@ type keyMap struct {
 	Delete                   key.Binding
 	Move                     key.Binding
 	Rename                   key.Binding
+	AddTag                   key.Binding
 	Pin                      key.Binding
 	TogglePreviewPrivacy     key.Binding
 	TogglePreviewLineNumbers key.Binding
@@ -121,6 +122,10 @@ var keys = keyMap{
 	Rename: key.NewBinding(
 		key.WithKeys("R"),
 		key.WithHelp("R", "Rename note"),
+	),
+	AddTag: key.NewBinding(
+		key.WithKeys("A"),
+		key.WithHelp("A", "Add tag"),
 	),
 	Pin: key.NewBinding(
 		key.WithKeys("p"),
@@ -248,6 +253,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.Delete, cfg.Delete)
 	apply(&keys.Move, cfg.Move)
 	apply(&keys.Rename, cfg.Rename)
+	apply(&keys.AddTag, cfg.AddTag)
 	apply(&keys.Pin, cfg.Pin)
 	apply(&keys.TogglePreviewPrivacy, cfg.TogglePreviewPrivacy)
 	apply(&keys.TogglePreviewLineNumbers, cfg.TogglePreviewLineNumbers)

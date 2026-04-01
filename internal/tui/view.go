@@ -123,6 +123,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showAddTag {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderAddTagModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showHelp {
 		return lipgloss.Place(
 			m.width,
@@ -1136,6 +1147,7 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine("esc / q / ?", "Close help", innerWidth),
 		m.renderHelpLine(keys.Move.Help().Key, "Move note/category", innerWidth),
 		m.renderHelpLine(keys.Rename.Help().Key, "Rename note/category", innerWidth),
+		m.renderHelpLine(keys.AddTag.Help().Key, "Add tag to selected note", innerWidth),
 		m.renderHelpLine(keys.Pin.Help().Key, "Pin or unpin current item", innerWidth),
 		m.renderHelpLine(
 			keys.PendingG.Help().Key+keys.PendingG.Help().Key+" / "+keys.JumpBottom.Help().Key,
@@ -1290,6 +1302,16 @@ func (m Model) renderCreateCategoryModal() string {
 		"Category",
 		m.categoryInput,
 		"Enter to create • Esc to cancel",
+	)
+}
+
+func (m Model) renderAddTagModal() string {
+	return m.renderStandardModal(
+		"Add tag",
+		"Add one or more tags to the selected note. Separate multiple tags with commas.",
+		"Tags",
+		m.tagInput,
+		"Enter to add • Esc to cancel",
 	)
 }
 

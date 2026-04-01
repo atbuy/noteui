@@ -466,6 +466,39 @@ func (m Model) currentCategoryPrefix() string {
 	return ""
 }
 
+func (m *Model) armAddTagCurrent() {
+	path := m.currentNotePath()
+	if path == "" {
+		m.status = "no note selected"
+		return
+	}
+
+	m.showAddTag = true
+	m.tagInput.SetValue("")
+	m.tagInput.Focus()
+	m.tagInput.CursorEnd()
+	m.status = "add tag"
+}
+
+func parseTagInput(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	seen := make(map[string]bool, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(part), "#"))
+		if tag == "" {
+			continue
+		}
+		key := strings.ToLower(tag)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, tag)
+	}
+	return out
+}
+
 func (m Model) currentNotePath() string {
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()

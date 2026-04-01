@@ -278,6 +278,9 @@ type Model struct {
 	renameInput   textinput.Model
 	renamePending *renamePending
 
+	showAddTag bool
+	tagInput   textinput.Model
+
 	searchInput textinput.Model
 	searchMode  bool
 
@@ -324,6 +327,12 @@ type categoryCreatedMsg struct {
 	err     error
 }
 
+type noteTaggedMsg struct {
+	path string
+	tags []string
+	err  error
+}
+
 func New(root, startupError string, cfg config.Config, version string) Model {
 	categoryInput := textinput.New()
 	categoryInput.Placeholder = "work/project-a"
@@ -352,6 +361,12 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	renameInput.Prompt = "Title: "
 	renameInput.CharLimit = 300
 	renameInput.Width = 48
+
+	tagInput := textinput.New()
+	tagInput.Placeholder = "project-x, urgent"
+	tagInput.Prompt = "Tags: "
+	tagInput.CharLimit = 300
+	tagInput.Width = 48
 
 	todoInput := textinput.New()
 	todoInput.Placeholder = "Todo item text"
@@ -397,6 +412,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		searchInput:               searchInput,
 		moveInput:                 moveInput,
 		renameInput:               renameInput,
+		tagInput:                  tagInput,
 		todoInput:                 todoInput,
 		passphraseInput:           passphraseInput,
 		preserveCursor:            -1,
@@ -511,6 +527,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.categoryInput.Width = max(24, min(50, m.width-16))
 		m.moveInput.Width = max(24, min(60, m.width-16))
 		m.renameInput.Width = max(24, min(60, m.width-16))
+		m.tagInput.Width = max(24, min(60, m.width-16))
 		m.todoInput.Width = max(24, min(60, m.width-16))
 
 		previewInnerWidth := max(20, rightWidth-8)
@@ -545,6 +562,23 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.renameInput.SetValue("")
 		m.preserveCursor = m.treeCursor
 		m.status = "renamed note: " + filepath.Base(msg.newPath)
+		return m, refreshAllCmd(m.rootDir)
+
+	case noteTaggedMsg:
+		if msg.err != nil {
+			m.status = "add tag failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showAddTag = false
+		m.tagInput.Blur()
+		m.tagInput.SetValue("")
+		m.previewPath = ""
+		m.preserveCursor = m.treeCursor
+		if len(msg.tags) == 1 {
+			m.status = "added tag: " + msg.tags[0]
+		} else {
+			m.status = fmt.Sprintf("added %d tags", len(msg.tags))
+		}
 		return m, refreshAllCmd(m.rootDir)
 
 	case categoryRenamedMsg:
@@ -1038,6 +1072,44 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.showAddTag {
+			switch msg.String() {
+			case "esc":
+				m.showAddTag = false
+				m.tagInput.Blur()
+				m.tagInput.SetValue("")
+				m.status = "add tag cancelled"
+				return m, nil
+			case "enter":
+				value := strings.TrimSpace(m.tagInput.Value())
+				if value == "" {
+					m.showAddTag = false
+					m.tagInput.Blur()
+					m.tagInput.SetValue("")
+					m.status = "add tag cancelled"
+					return m, nil
+				}
+				path := m.currentNotePath()
+				if path == "" {
+					m.status = "no note selected"
+					return m, nil
+				}
+				tags := parseTagInput(value)
+				if len(tags) == 0 {
+					m.showAddTag = false
+					m.tagInput.Blur()
+					m.tagInput.SetValue("")
+					m.status = "add tag cancelled"
+					return m, nil
+				}
+				return m, addNoteTagsCmd(path, tags)
+			}
+
+			var cmd tea.Cmd
+			m.tagInput, cmd = m.tagInput.Update(msg)
+			return m, cmd
+		}
+
 		if m.deletePending != nil {
 			switch {
 			case msg.String() == "esc":
@@ -1241,7 +1313,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMove &&
-			!m.showRename {
+			!m.showRename && !m.showAddTag {
 			if !key.Matches(msg, keys.PendingZ) {
 				m.pendingZ = false
 			}
@@ -1523,6 +1595,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.Rename) {
 			m.armRenameCurrent()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.AddTag) {
+			m.armAddTagCurrent()
 			return m, nil
 		}
 

@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"os"
 	"strings"
 )
 
@@ -115,4 +116,84 @@ func ParseTags(fm FrontMatter) []string {
 		}
 	}
 	return out
+}
+
+func AddTagsToNote(path string, tags []string) error {
+	raw, err := ReadAll(path)
+	if err != nil {
+		return err
+	}
+
+	normalizedRaw := strings.ReplaceAll(raw, "\r\n", "\n")
+	fm, body, err := ParseFrontMatter(normalizedRaw)
+	if err != nil {
+		return err
+	}
+
+	existing := ParseTags(fm)
+	merged := mergeTags(existing, tags)
+	if len(merged) == 0 {
+		return nil
+	}
+
+	line := "tags: " + strings.Join(merged, ", ")
+	updated := setFrontMatterField(normalizedRaw, body, "tags", line)
+	return os.WriteFile(path, []byte(updated), 0o644)
+}
+
+func mergeTags(existing, incoming []string) []string {
+	out := make([]string, 0, len(existing)+len(incoming))
+	seen := make(map[string]bool, len(existing)+len(incoming))
+	appendTag := func(tag string) {
+		tag = normalizeTag(tag)
+		if tag == "" {
+			return
+		}
+		key := strings.ToLower(tag)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		out = append(out, tag)
+	}
+	for _, tag := range existing {
+		appendTag(tag)
+	}
+	for _, tag := range incoming {
+		appendTag(tag)
+	}
+	return out
+}
+
+func normalizeTag(tag string) string {
+	tag = strings.TrimSpace(tag)
+	tag = strings.TrimPrefix(tag, "#")
+	return strings.TrimSpace(tag)
+}
+
+func setFrontMatterField(raw, body, key, fieldLine string) string {
+	normalizedKey := normalizeFrontMatterKey(key)
+	if raw == body {
+		return "---\n" + fieldLine + "\n---\n" + body
+	}
+
+	rest := strings.TrimPrefix(raw, "---\n")
+	end := strings.Index(rest, "\n---\n")
+	if end == -1 {
+		return "---\n" + fieldLine + "\n---\n" + raw
+	}
+
+	block := rest[:end]
+	var lines []string
+	for _, line := range strings.Split(block, "\n") {
+		if idx := strings.Index(line, ":"); idx >= 0 {
+			k := normalizeFrontMatterKey(line[:idx])
+			if k == normalizedKey {
+				continue
+			}
+		}
+		lines = append(lines, line)
+	}
+	lines = append(lines, fieldLine)
+	return "---\n" + strings.Join(lines, "\n") + "\n---\n" + body
 }
