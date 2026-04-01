@@ -90,6 +90,24 @@ func moveCategoryCmd(root, oldRelPath, newRelPath string) tea.Cmd {
 	}
 }
 
+func batchMoveCmd(root string, items []moveBatchItem) tea.Cmd {
+	return func() tea.Msg {
+		for _, item := range items {
+			var err error
+			switch item.kind {
+			case moveTargetCategory:
+				err = notes.MoveCategory(root, item.oldRelPath, item.newRelPath)
+			case moveTargetNote:
+				err = notes.MoveNote(root, item.oldRelPath, item.newRelPath)
+			}
+			if err != nil {
+				return batchMovedMsg{items: items, err: err}
+			}
+		}
+		return batchMovedMsg{items: items}
+	}
+}
+
 func renameNoteCmd(path, newTitle string) tea.Cmd {
 	return func() tea.Msg {
 		newPath, _, err := notes.RenameNoteTitle(path, newTitle)

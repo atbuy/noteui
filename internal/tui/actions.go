@@ -69,39 +69,7 @@ func (m *Model) armMoveCurrent() {
 		return
 	}
 
-	m.showMove = true
-	m.moveInput.Focus()
-
-	switch item.Kind {
-	case treeCategory:
-		if item.RelPath == "" {
-			m.showMove = false
-			m.status = "cannot move root category"
-			return
-		}
-		m.movePending = &movePending{
-			kind:       moveTargetCategory,
-			oldRelPath: item.RelPath,
-			name:       item.Name,
-		}
-		m.moveInput.SetValue(item.RelPath)
-		m.moveInput.CursorEnd()
-		m.status = "move category"
-
-	case treeNote:
-		if item.Note == nil {
-			m.showMove = false
-			return
-		}
-		m.movePending = &movePending{
-			kind:       moveTargetNote,
-			oldRelPath: item.Note.RelPath,
-			name:       item.Note.Title(),
-		}
-		m.moveInput.SetValue(item.Note.RelPath)
-		m.moveInput.CursorEnd()
-		m.status = "move note"
-	}
+	m.openMoveBrowser()
 }
 
 func (m Model) confirmMove(newRelPath string) tea.Cmd {

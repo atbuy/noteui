@@ -26,6 +26,7 @@ var (
 	chipBgColor       lipgloss.Color
 	inlineCodeBgColor lipgloss.Color
 	pinnedNoteColor   lipgloss.Color
+	markedItemColor   lipgloss.Color
 	selectedBgColor   lipgloss.Color
 	selectedFgColor   lipgloss.Color
 	highlightBgColor  lipgloss.Color
@@ -36,6 +37,7 @@ var (
 	modalTextColor   lipgloss.Color
 	modalMutedColor  lipgloss.Color
 	modalAccentColor lipgloss.Color
+	modalErrorColor  lipgloss.Color
 
 	appStyle         lipgloss.Style
 	titleBarStyle    lipgloss.Style
@@ -53,6 +55,7 @@ var (
 	modalMutedStyle  lipgloss.Style
 	modalFooterStyle lipgloss.Style
 	modalKeyStyle    lipgloss.Style
+	modalErrorStyle  lipgloss.Style
 
 	currentBorder lipgloss.Border
 	modalBorder   lipgloss.Border
@@ -93,6 +96,7 @@ type themePalette struct {
 	ChipBgColor       string
 	InlineCodeBgColor string
 	PinnedNoteColor   string
+	MarkedItemColor   string
 	ErrorColor        string
 	SuccessColor      string
 	SelectedBgColor   string
@@ -121,6 +125,7 @@ func ApplyTheme(cfg config.Config) {
 	override(&p.ChipBgColor, cfg.Theme.ChipBgColor)
 	override(&p.InlineCodeBgColor, cfg.Theme.InlineCodeBgColor)
 	override(&p.PinnedNoteColor, cfg.Theme.PinnedNoteColor)
+	override(&p.MarkedItemColor, cfg.Theme.MarkedItemColor)
 	override(&p.ErrorColor, cfg.Theme.ErrorColor)
 	override(&p.SuccessColor, cfg.Theme.SuccessColor)
 	override(&p.SelectedBgColor, cfg.Theme.SelectedBgColor)
@@ -133,6 +138,9 @@ func ApplyTheme(cfg config.Config) {
 	}
 	if strings.TrimSpace(p.PinnedNoteColor) == "" {
 		p.PinnedNoteColor = p.AccentSoftColor
+	}
+	if strings.TrimSpace(p.MarkedItemColor) == "" {
+		p.MarkedItemColor = "#E5A524"
 	}
 
 	bgColor = lipgloss.Color(p.BgColor)
@@ -147,6 +155,7 @@ func ApplyTheme(cfg config.Config) {
 	chipBgColor = lipgloss.Color(p.ChipBgColor)
 	inlineCodeBgColor = lipgloss.Color(p.InlineCodeBgColor)
 	pinnedNoteColor = lipgloss.Color(p.PinnedNoteColor)
+	markedItemColor = lipgloss.Color(p.MarkedItemColor)
 	errorColor = lipgloss.Color(p.ErrorColor)
 	successColor = lipgloss.Color(p.SuccessColor)
 	selectedBgColor = lipgloss.Color(p.SelectedBgColor)
@@ -159,6 +168,7 @@ func ApplyTheme(cfg config.Config) {
 	modalTextColor = firstNonEmptyColor(cfg.Modal.TextColor, p.TextColor)
 	modalMutedColor = firstNonEmptyColor(cfg.Modal.MutedColor, p.MutedColor)
 	modalAccentColor = firstNonEmptyColor(cfg.Modal.AccentColor, p.AccentSoftColor)
+	modalErrorColor = firstNonEmptyColor(cfg.Modal.ErrorColor, p.ErrorColor)
 
 	panelPaddingX = max(0, cfg.Theme.PanelPaddingX)
 	panelPaddingY = max(0, cfg.Theme.PanelPaddingY)
@@ -259,6 +269,11 @@ func ApplyTheme(cfg config.Config) {
 		Foreground(modalAccentColor).
 		Background(modalBgColor)
 
+	modalErrorStyle = lipgloss.NewStyle().
+		Foreground(modalErrorColor).
+		Background(modalBgColor).
+		Bold(true)
+
 	treeCategoryStyle = lipgloss.NewStyle().
 		Foreground(accentSoftColor).
 		Background(bgSoftColor)
@@ -296,6 +311,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#D8DEE9",
 			SubtleColor:      "#4C566A",
 			ChipBgColor:      "#434C5E",
+			MarkedItemColor:  "#EBCB8B",
 			ErrorColor:       "#D9A2A7",
 			SuccessColor:     "#A3BE8C",
 			SelectedBgColor:  "#4C566A",
@@ -315,6 +331,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#A89984",
 			SubtleColor:      "#665C54",
 			ChipBgColor:      "#3C3836",
+			MarkedItemColor:  "#FABD2F",
 			ErrorColor:       "#FC6755",
 			SuccessColor:     "#B8BB26",
 			SelectedBgColor:  "#504945",
@@ -334,6 +351,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#BAC2DE",
 			SubtleColor:      "#6C7086",
 			ChipBgColor:      "#313244",
+			MarkedItemColor:  "#F9E2AF",
 			ErrorColor:       "#F38BA8",
 			SuccessColor:     "#A6E3A1",
 			SelectedBgColor:  "#45475A",
@@ -353,6 +371,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#65687D",
 			SubtleColor:      "#BCC0CC",
 			ChipBgColor:      "#CCD0DA",
+			MarkedItemColor:  "#DF8E1D",
 			ErrorColor:       "#CC1038",
 			SuccessColor:     "#307820",
 			SelectedBgColor:  "#BCC0CC",
@@ -372,6 +391,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#586B72",
 			SubtleColor:      "#93A1A1",
 			ChipBgColor:      "#E4DDC8",
+			MarkedItemColor:  "#B58900",
 			ErrorColor:       "#C22C29",
 			SuccessColor:     "#5F6F00",
 			SelectedBgColor:  "#D3CBB7",
@@ -391,6 +411,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#656E83",
 			SubtleColor:      "#C8C6BE",
 			ChipBgColor:      "#E8E5DC",
+			MarkedItemColor:  "#C97832",
 			ErrorColor:       "#C0392B",
 			SuccessColor:     "#2E7D32",
 			SelectedBgColor:  "#DDD9CF",
@@ -411,6 +432,7 @@ func builtinTheme(name string) themePalette {
 			SubtleColor:       "#3A404C",
 			ChipBgColor:       "#2C313A",
 			InlineCodeBgColor: "#1B1F26",
+			MarkedItemColor:   "#E5C07B",
 			ErrorColor:        "#E06C75",
 			SuccessColor:      "#98C379",
 			SelectedBgColor:   "#353B45",
@@ -430,6 +452,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#C8C093",
 			SubtleColor:      "#54546D",
 			ChipBgColor:      "#2D2D3A",
+			MarkedItemColor:  "#DCA561",
 			ErrorColor:       "#E56D7B",
 			SuccessColor:     "#98BB6C",
 			SelectedBgColor:  "#2D4F67",
@@ -449,6 +472,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#7A88B2",
 			SubtleColor:      "#44475A",
 			ChipBgColor:      "#343746",
+			MarkedItemColor:  "#FFB86C",
 			ErrorColor:       "#FF5555",
 			SuccessColor:     "#50FA7B",
 			SelectedBgColor:  "#44475A",
@@ -468,6 +492,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#9FAAA2",
 			SubtleColor:      "#475258",
 			ChipBgColor:      "#374145",
+			MarkedItemColor:  "#DBBC7F",
 			ErrorColor:       "#E99092",
 			SuccessColor:     "#A7C080",
 			SelectedBgColor:  "#425047",
@@ -487,6 +512,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#A9B1D6",
 			SubtleColor:      "#565F89",
 			ChipBgColor:      "#292E42",
+			MarkedItemColor:  "#E0AF68",
 			ErrorColor:       "#F7768E",
 			SuccessColor:     "#9ECE6A",
 			SelectedBgColor:  "#364A82",
@@ -506,6 +532,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#4B5563",
 			SubtleColor:      "#AFB8C1",
 			ChipBgColor:      "#EAEEF2",
+			MarkedItemColor:  "#9A6700",
 			ErrorColor:       "#A40E26",
 			SuccessColor:     "#116329",
 			SelectedBgColor:  "#DDF4FF",
@@ -525,6 +552,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#8B949E",
 			SubtleColor:      "#30363D",
 			ChipBgColor:      "#21262D",
+			MarkedItemColor:  "#D29922",
 			ErrorColor:       "#F85149",
 			SuccessColor:     "#3FB950",
 			SelectedBgColor:  "#1C2B45",
@@ -544,6 +572,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#B0B0B0",
 			SubtleColor:      "#3A3A3A",
 			ChipBgColor:      "#262626",
+			MarkedItemColor:  "#BE8A2F",
 			ErrorColor:       "#FF8389",
 			SuccessColor:     "#42BE65",
 			SelectedBgColor:  "#2B2B2B",
@@ -563,6 +592,7 @@ func builtinTheme(name string) themePalette {
 			MutedColor:       "#A8A8A8",
 			SubtleColor:      "#444444",
 			ChipBgColor:      "#3A3A3A",
+			MarkedItemColor:  "#D7AF5F",
 			ErrorColor:       "#D75F5F",
 			SuccessColor:     "#87AF87",
 			SelectedBgColor:  "#3F5F9F",
@@ -588,6 +618,7 @@ func normalizePaletteAccessibility(p themePalette) themePalette {
 	p.MutedColor = ensureContrast(p.MutedColor, p.PanelBgColor, 4.5)
 	p.AccentSoftColor = ensureContrast(p.AccentSoftColor, p.PanelBgColor, 4.5)
 	p.AccentColor = ensureContrast(p.AccentColor, p.BgColor, 4.5)
+	p.MarkedItemColor = ensureContrast(p.MarkedItemColor, p.PanelBgColor, 4.5)
 	p.SelectedFgColor = ensureContrast(p.SelectedFgColor, p.SelectedBgColor, 4.5)
 	return p
 }

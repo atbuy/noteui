@@ -224,13 +224,14 @@ type Model struct {
 	listMode        listMode
 	lastNonPinsMode listMode
 
-	treeItems    []treeItem
-	treeCursor   int
-	selected     *notes.Note
-	width        int
-	height       int
-	previewWidth int
-	status       string
+	treeItems       []treeItem
+	treeCursor      int
+	markedTreeItems map[string]bool
+	selected        *notes.Note
+	width           int
+	height          int
+	previewWidth    int
+	status          string
 
 	cfg                    config.Config
 	preview                viewport.Model
@@ -269,6 +270,10 @@ type Model struct {
 
 	showCreateCategory bool
 	categoryInput      textinput.Model
+
+	showMoveBrowser  bool
+	moveDestCursor   int
+	moveBrowserError string
 
 	showMove    bool
 	moveInput   textinput.Model
@@ -424,6 +429,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		state:                     st,
 		pinnedNotes:               pinnedNotes,
 		pinnedCats:                pinnedCats,
+		markedTreeItems:           make(map[string]bool),
 		listMode:                  listModeNotes,
 		lastNonPinsMode:           listModeNotes,
 		tempCursor:                0,
@@ -547,6 +553,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.movePending = nil
 		m.moveInput.Blur()
 		m.moveInput.SetValue("")
+		m.rewritePinnedNotePath(msg.oldRelPath, msg.newRelPath)
+		_ = m.saveTreeState()
 		m.preserveCursor = m.treeCursor
 		m.status = "moved note: " + msg.newRelPath
 		return m, refreshAllCmd(m.rootDir)
@@ -611,6 +619,30 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.status = "moved category: " + msg.newRelPath
 		return m, refreshAllCmd(m.rootDir)
 
+	case batchMovedMsg:
+		if msg.err != nil {
+			m.status = "move failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.closeMoveBrowser("")
+		m.preserveCursor = m.treeCursor
+		for _, item := range msg.items {
+			switch item.kind {
+			case moveTargetCategory:
+				m.rewriteCategoryStateSubtree(item.oldRelPath, item.newRelPath)
+			case moveTargetNote:
+				m.rewritePinnedNotePath(item.oldRelPath, item.newRelPath)
+			}
+		}
+		m.clearMarkedTreeItems()
+		_ = m.saveTreeState()
+		if len(msg.items) == 1 {
+			m.status = "moved 1 item"
+		} else {
+			m.status = fmt.Sprintf("moved %d items", len(msg.items))
+		}
+		return m, refreshAllCmd(m.rootDir)
+
 	case noteDeletedMsg:
 		if msg.err != nil {
 			m.status = "delete failed: " + msg.err.Error()
@@ -644,6 +676,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.categories = msg.categories
 
 		m.pruneCategoryStateToExisting()
+		m.pruneMarkedTreeItems()
 		_ = m.saveTreeState()
 
 		for _, c := range m.categories {
@@ -1012,6 +1045,62 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.showMoveBrowser {
+			switch {
+			case msg.String() == "esc":
+				m.closeMoveBrowser("move cancelled")
+				return m, nil
+			case msg.String() == "enter":
+				return m, m.confirmMoveBrowser()
+			case key.Matches(msg, keys.JumpBottom):
+				m.moveBrowserError = ""
+				m.jumpMoveDestinationBottom()
+				m.pendingG = false
+				return m, nil
+			case key.Matches(msg, keys.PendingG):
+				m.moveBrowserError = ""
+				if m.pendingG {
+					m.jumpMoveDestinationTop()
+					m.pendingG = false
+				} else {
+					m.pendingG = true
+				}
+				return m, nil
+			case key.Matches(msg, keys.ScrollHalfPageUp):
+				m.moveBrowserError = ""
+				m.moveDestinationCursor(-max(1, m.preview.Height/2))
+				m.pendingG = false
+				return m, nil
+			case key.Matches(msg, keys.ScrollHalfPageDown):
+				m.moveBrowserError = ""
+				m.moveDestinationCursor(max(1, m.preview.Height/2))
+				m.pendingG = false
+				return m, nil
+			case key.Matches(msg, keys.MoveUp):
+				m.moveBrowserError = ""
+				m.moveDestinationCursor(-1)
+				m.pendingG = false
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				m.moveBrowserError = ""
+				m.moveDestinationCursor(1)
+				m.pendingG = false
+				return m, nil
+			case key.Matches(msg, keys.ExpandCategory):
+				m.moveBrowserError = ""
+				m.expandMoveDestination()
+				m.pendingG = false
+				return m, nil
+			case key.Matches(msg, keys.CollapseCategory):
+				m.moveBrowserError = ""
+				m.collapseMoveDestination()
+				m.pendingG = false
+				return m, nil
+			}
+			m.pendingG = false
+			return m, nil
+		}
+
 		if m.showMove {
 			switch msg.String() {
 			case "esc":
@@ -1312,8 +1401,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMove &&
-			!m.showRename && !m.showAddTag {
+		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMoveBrowser &&
+			!m.showMove && !m.showRename && !m.showAddTag {
 			if !key.Matches(msg, keys.PendingZ) {
 				m.pendingZ = false
 			}
@@ -1395,6 +1484,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.PendingG):
+				m.moveBrowserError = ""
 				if m.pendingG {
 					if m.previewTodoNavMode {
 						m.jumpToFirstTodo()
@@ -1537,6 +1627,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.PendingG):
+				m.moveBrowserError = ""
 				if m.pendingG {
 					m.pendingG = false
 					switch m.listMode {
@@ -1590,6 +1681,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.Move) {
 			m.armMoveCurrent()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.ToggleSelect) {
+			m.toggleMarkCurrent()
 			return m, nil
 		}
 

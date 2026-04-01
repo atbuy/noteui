@@ -37,6 +37,7 @@ type ThemeConfig struct {
 	ChipBgColor       string `toml:"chip_bg_color"`
 	InlineCodeBgColor string `toml:"inline_code_bg_color"`
 	PinnedNoteColor   string `toml:"pinned_note_color"`
+	MarkedItemColor   string `toml:"marked_item_color"`
 	ErrorColor        string `toml:"error_color"`
 	SuccessColor      string `toml:"success_color"`
 	SelectedBgColor   string `toml:"selected_bg_color"`
@@ -72,6 +73,7 @@ type ModalConfig struct {
 	TextColor   string `toml:"text_color"`
 	MutedColor  string `toml:"muted_color"`
 	AccentColor string `toml:"accent_color"`
+	ErrorColor  string `toml:"error_color"`
 	BorderStyle string `toml:"border_style"`
 	PaddingX    int    `toml:"padding_x"`
 	PaddingY    int    `toml:"padding_y"`
@@ -104,6 +106,7 @@ type KeysConfig struct {
 	Move                     []string `toml:"move"`
 	Rename                   []string `toml:"rename"`
 	AddTag                   []string `toml:"add_tag"`
+	ToggleSelect             []string `toml:"toggle_select"`
 	Pin                      []string `toml:"pin"`
 	TogglePreviewPrivacy     []string `toml:"toggle_preview_privacy"`
 	TogglePreviewLineNumbers []string `toml:"toggle_preview_line_numbers"`

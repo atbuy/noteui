@@ -101,6 +101,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showMoveBrowser {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderMoveBrowserModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showMove {
 		return lipgloss.Place(
 			m.width,
@@ -513,6 +524,11 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		}
 	}
 
+	markPrefix := "  "
+	if m.isMarkedTreeItem(item) {
+		markPrefix = "+ "
+	}
+
 	pinMark := "  "
 	if pinned {
 		pinMark = "★ "
@@ -524,7 +540,7 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	}
 
 	indent := strings.Repeat("  ", item.Depth)
-	leftPrefix := indent + pinMark + encMark + icon + " "
+	leftPrefix := indent + markPrefix + pinMark + encMark + icon + " "
 	prefixWidth := lipgloss.Width(leftPrefix)
 
 	var tags []string
@@ -540,6 +556,7 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	rowFg := textColor
 	tagFg := mutedColor
 	rowBold := false
+	marked := m.isMarkedTreeItem(item)
 	if selected {
 		rowBg = selectedBgColor
 		rowFg = selectedFgColor
@@ -566,6 +583,10 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 				rowFg = pinnedNoteColor
 			}
 		}
+	}
+	if marked {
+		rowFg = markedItemColor
+		tagFg = markedItemColor
 	}
 
 	tagsPart := ""
@@ -914,6 +935,8 @@ func (m Model) renderModeSegment() string {
 		return "HELP"
 	case m.showCreateCategory:
 		return "NEW CATEGORY"
+	case m.showMoveBrowser:
+		return "MOVE"
 	case m.showMove:
 		return "MOVE"
 	case m.showRename:
@@ -1145,7 +1168,8 @@ func (m Model) renderHelpModal() string {
 		m.renderHelpLine(keys.Refresh.Help().Key, "Refresh", innerWidth),
 		m.renderHelpLine(keys.Quit.Help().Key, "Quit", innerWidth),
 		m.renderHelpLine("esc / q / ?", "Close help", innerWidth),
-		m.renderHelpLine(keys.Move.Help().Key, "Move note/category", innerWidth),
+		m.renderHelpLine(keys.Move.Help().Key, "Move current item or marked batch", innerWidth),
+		m.renderHelpLine(keys.ToggleSelect.Help().Key, "Mark/unmark item for bulk move", innerWidth),
 		m.renderHelpLine(keys.Rename.Help().Key, "Rename note/category", innerWidth),
 		m.renderHelpLine(keys.AddTag.Help().Key, "Add tag to selected note", innerWidth),
 		m.renderHelpLine(keys.Pin.Help().Key, "Pin or unpin current item", innerWidth),
@@ -1220,6 +1244,128 @@ func (m Model) renderHelpModal() string {
 		)
 
 	return modalCardStyle(modalWidth).Render(content)
+}
+
+func (m Model) renderMoveBrowserModal() string {
+	modalWidth, innerWidth := m.modalDimensions(60, 88)
+	summary := m.moveSelectionSummary()
+	destination := "~/notes"
+	if relPath := m.currentMoveDestinationPath(); relPath != "" {
+		destination = filepath.Join("~/notes", relPath)
+	}
+
+	summaryLines := []string{
+		fmt.Sprintf("Notes: %d", summary.notes),
+		fmt.Sprintf("Categories: %d", summary.categories),
+		"Destination: " + destination,
+	}
+	lines := make([]string, 0, len(summaryLines))
+	for _, line := range summaryLines {
+		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(line))
+	}
+
+	list := m.renderMoveDestinationList(innerWidth, min(14, max(6, m.height-20)))
+	errorLine := ""
+	if strings.TrimSpace(m.moveBrowserError) != "" {
+		errorLine = lipgloss.NewStyle().
+			Width(innerWidth).
+			Background(modalBgColor).
+			Render(modalErrorStyle.Render(m.moveBrowserError))
+	}
+
+	content := lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(
+			lipgloss.JoinVertical(
+				lipgloss.Left,
+				m.renderModalTitle("Move", innerWidth),
+				m.renderModalBlank(innerWidth),
+				m.renderModalHint("Choose an existing destination category for the current item or marked batch.", innerWidth),
+				m.renderModalBlank(innerWidth),
+				lipgloss.JoinVertical(lipgloss.Left, lines...),
+				m.renderModalBlank(innerWidth),
+				list,
+				func() string {
+					if errorLine == "" {
+						return ""
+					}
+					return lipgloss.JoinVertical(lipgloss.Left, m.renderModalBlank(innerWidth), errorLine)
+				}(),
+				m.renderModalBlank(innerWidth),
+				m.renderModalFooter("Enter to move • h/l collapse/expand • Esc to cancel", innerWidth),
+			),
+		)
+
+	return modalCardStyle(modalWidth).Render(content)
+}
+
+func (m Model) renderMoveDestinationList(innerWidth, maxRows int) string {
+	items := m.moveDestinationItems()
+	if len(items) == 0 {
+		return lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render("(no categories)")
+	}
+
+	cursor := m.moveDestCursor
+	if cursor < 0 {
+		cursor = 0
+	}
+	if cursor >= len(items) {
+		cursor = len(items) - 1
+	}
+
+	start := 0
+	if len(items) > maxRows {
+		start = max(0, cursor-maxRows/2)
+		if start+maxRows > len(items) {
+			start = len(items) - maxRows
+		}
+	}
+	end := min(len(items), start+maxRows)
+
+	lines := make([]string, 0, end-start+2)
+	if start > 0 {
+		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).Foreground(modalMutedColor).Background(modalBgColor).Render("..."))
+	}
+	for i := start; i < end; i++ {
+		lines = append(lines, m.renderMoveDestinationLine(items[i], i == cursor, innerWidth))
+	}
+	if end < len(items) {
+		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).Foreground(modalMutedColor).Background(modalBgColor).Render("..."))
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func (m Model) renderMoveDestinationLine(item treeItem, selected bool, width int) string {
+	icon := iconCategoryLeaf
+	if m.categoryHasChildren(item.RelPath) {
+		if item.Expanded || item.RelPath == "" {
+			icon = iconCategoryExpanded
+		} else {
+			icon = iconCategoryCollapsed
+		}
+	}
+
+	indent := strings.Repeat("  ", item.Depth)
+	pinMark := "  "
+	if item.RelPath != "" && m.isPinnedCategory(item.RelPath) {
+		pinMark = "★ "
+	}
+	prefix := indent + pinMark + icon + " "
+	prefixWidth := lipgloss.Width(prefix)
+	rowBg := modalBgColor
+	rowFg := accentColor
+	if selected {
+		rowBg = selectedBgColor
+		rowFg = selectedFgColor
+	}
+	nameWidth := max(4, width-2-prefixWidth)
+	name := truncateToWidth(item.Name, nameWidth)
+	name += strings.Repeat(" ", max(0, nameWidth-lipgloss.Width(name)))
+	prefixPart := lipgloss.NewStyle().Foreground(rowFg).Background(rowBg).Render(prefix)
+	namePart := lipgloss.NewStyle().Foreground(rowFg).Background(rowBg).Width(nameWidth).Render(name)
+	return lipgloss.NewStyle().Width(width).Padding(0, 1).Background(rowBg).Render(prefixPart + namePart)
 }
 
 func (m Model) renderMoveModal() string {
@@ -1578,7 +1724,11 @@ func (m Model) leftPanelTitle() string {
 		return fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
 	default:
 		count := max(0, len(m.treeItems)-1)
-		return fmt.Sprintf("Tree (%d)", count)
+		title := fmt.Sprintf("Tree (%d)", count)
+		if marked := m.markedTreeCount(); marked > 0 {
+			title += fmt.Sprintf(" • marked %d", marked)
+		}
+		return title
 	}
 }
 
