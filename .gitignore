@@ -4,3 +4,9 @@ bin/
 # Ignore local coverage reports
 coverage.out
 coverage.html
+
+# Ignore generated docs output
+site/
+
+# Ignore local tool caches
+.cache/

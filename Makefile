@@ -1,4 +1,4 @@
-.PHONY: build run install test clean version
+.PHONY: build run install test docs-build docs-serve clean version
 
 VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo dev)
 BUILDINFO_PKG := atbuy/noteui/internal/buildinfo
@@ -17,6 +17,12 @@ install:
 
 test:
 	go test ./...
+
+docs-build:
+	uvx zensical build --clean
+
+docs-serve:
+	uvx zensical serve
 
 clean:
 	rm -rf ./bin/$(OUTBIN)
