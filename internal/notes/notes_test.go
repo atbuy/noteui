@@ -49,6 +49,15 @@ func TestSlugifyAndWordCount(t *testing.T) {
 	if got := WordCount(raw); got != 3 {
 		t.Fatalf("expected word count 3, got %d", got)
 	}
+	if got := ReadingTimeMinutes(0); got != 0 {
+		t.Fatalf("expected zero reading time, got %d", got)
+	}
+	if got := ReadingTimeMinutes(1); got != 1 {
+		t.Fatalf("expected minimum reading time of 1, got %d", got)
+	}
+	if got := ReadingTimeMinutes(226); got != 2 {
+		t.Fatalf("expected rounded reading time of 2, got %d", got)
+	}
 }
 
 func TestCleanRelativePathAndReplaceOrInsertRootTitle(t *testing.T) {
@@ -156,6 +165,127 @@ func TestMoveNoteValidatesAndMovesFile(t *testing.T) {
 	newPath := filepath.Join(root, "nested", "renamed.md")
 	if _, err := os.Stat(newPath); err != nil {
 		t.Fatalf("expected moved note at %q: %v", newPath, err)
+	}
+
+	if err := MoveNote(root, "nested/renamed.md", "nested/renamed.md"); err != nil {
+		t.Fatalf("expected no-op move to succeed, got %v", err)
+	}
+}
+
+func TestCreateNoteAndReadHelpers(t *testing.T) {
+	root := t.TempDir()
+
+	path, err := CreateNote(root, "daily")
+	if err != nil {
+		t.Fatalf("CreateNote returned error: %v", err)
+	}
+	if filepath.Ext(path) != ".md" {
+		t.Fatalf("expected markdown note, got %q", path)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected note to exist: %v", err)
+	}
+
+	content := "Line 1\n\tIndented\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	preview, err := ReadPreview(path)
+	if err != nil {
+		t.Fatalf("ReadPreview returned error: %v", err)
+	}
+	if !strings.Contains(preview, "    Indented") {
+		t.Fatalf("expected tabs to expand in preview, got %q", preview)
+	}
+
+	full, err := ReadFull(path)
+	if err != nil {
+		t.Fatalf("ReadFull returned error: %v", err)
+	}
+	if full != strings.TrimSpace(strings.ReplaceAll(content, "\t", "    ")) {
+		t.Fatalf("unexpected full content: %q", full)
+	}
+
+	all, err := ReadAll(path)
+	if err != nil {
+		t.Fatalf("ReadAll returned error: %v", err)
+	}
+	if all != content {
+		t.Fatalf("unexpected raw content: %q", all)
+	}
+
+	if !IsNoteFile("example.org") || !IsNoteFile("example.norg") {
+		t.Fatal("expected supported note extensions to return true")
+	}
+	if IsNoteFile("example.json") {
+		t.Fatal("expected unsupported extension to return false")
+	}
+}
+
+func TestCreateTodoNoteAndTodoMutations(t *testing.T) {
+	root := t.TempDir()
+
+	path, err := CreateTodoNote(root, "projects")
+	if err != nil {
+		t.Fatalf("CreateTodoNote returned error: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	if string(data) != "# Todo\n\n- [ ] \n" {
+		t.Fatalf("unexpected todo template: %q", string(data))
+	}
+
+	if err := ToggleTodoLine(path, 2); err != nil {
+		t.Fatalf("ToggleTodoLine returned error: %v", err)
+	}
+	text := mustRead(t, path)
+	if !strings.Contains(text, "- [x] ") {
+		t.Fatalf("expected toggled todo, got %q", text)
+	}
+
+	if err := EditTodoLine(path, 2, "updated task"); err != nil {
+		t.Fatalf("EditTodoLine returned error: %v", err)
+	}
+	text = mustRead(t, path)
+	if !strings.Contains(text, "- [x] updated task") {
+		t.Fatalf("expected edited todo line, got %q", text)
+	}
+
+	if err := AddTodoItem(path, "second task"); err != nil {
+		t.Fatalf("AddTodoItem returned error: %v", err)
+	}
+	text = mustRead(t, path)
+	if !strings.Contains(text, "- [ ] second task") {
+		t.Fatalf("expected appended todo item, got %q", text)
+	}
+
+	if err := DeleteTodoLine(path, 3); err != nil {
+		t.Fatalf("DeleteTodoLine returned error: %v", err)
+	}
+	text = mustRead(t, path)
+	if strings.Contains(text, "second task") {
+		t.Fatalf("expected appended todo item to be deleted, got %q", text)
+	}
+}
+
+func TestTodoMutationsRejectInvalidLines(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "note.md")
+	writeFile(t, path, "plain text\n")
+
+	if err := ToggleTodoLine(path, 0); err == nil {
+		t.Fatal("expected non-todo line to be rejected")
+	}
+	if err := ToggleTodoLine(path, 5); err == nil {
+		t.Fatal("expected out-of-range line to be rejected")
+	}
+	if err := DeleteTodoLine(path, 5); err == nil {
+		t.Fatal("expected out-of-range delete to be rejected")
+	}
+	if err := EditTodoLine(path, 5, "nope"); err == nil {
+		t.Fatal("expected out-of-range edit to be rejected")
 	}
 }
 
@@ -267,6 +397,36 @@ func TestDiscoverCategoriesAndMoveCategory(t *testing.T) {
 	if err := MoveCategory(root, "archive", "archive/subdir"); err == nil {
 		t.Fatal("expected self-nesting move to be rejected")
 	}
+}
+
+func TestDeleteCategoryMovesDirectoryToTrash(t *testing.T) {
+	root := t.TempDir()
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+
+	writeFile(t, filepath.Join(root, "projects", "note.md"), "body")
+	if err := DeleteCategory(root, "projects"); err != nil {
+		t.Fatalf("DeleteCategory returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "projects")); !os.IsNotExist(err) {
+		t.Fatalf("expected category to be removed from notes root, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(xdgData, "Trash", "files", "projects")); err != nil {
+		t.Fatalf("expected category to be moved to trash: %v", err)
+	}
+	if err := DeleteCategory(root, "."); err == nil {
+		t.Fatal("expected root delete to be rejected")
+	}
+}
+
+func mustRead(t *testing.T, path string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile returned error: %v", err)
+	}
+	return string(data)
 }
 
 func writeFile(t *testing.T, path, content string) {

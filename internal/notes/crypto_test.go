@@ -108,6 +108,45 @@ func TestEncryptAndDecryptNoteFile(t *testing.T) {
 	}
 }
 
+func TestReencryptFromTempRenamesOriginalBasedOnEditedTitle(t *testing.T) {
+	dir := t.TempDir()
+	origPath := filepath.Join(dir, "draft.md")
+	tempPath := filepath.Join(dir, "edit.md")
+
+	if err := os.WriteFile(origPath, []byte("placeholder"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+	if err := os.WriteFile(tempPath, []byte("# Renamed Secret\n\nBody text"), 0o644); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	newPath, err := ReencryptFromTemp(origPath, tempPath, "passphrase")
+	if err != nil {
+		t.Fatalf("ReencryptFromTemp returned error: %v", err)
+	}
+	if filepath.Base(newPath) != "renamed-secret.md" {
+		t.Fatalf("expected renamed encrypted note path, got %q", newPath)
+	}
+	if _, err := os.Stat(tempPath); !os.IsNotExist(err) {
+		t.Fatalf("expected temp file to be removed, stat err=%v", err)
+	}
+	if _, err := os.Stat(origPath); !os.IsNotExist(err) {
+		t.Fatalf("expected original file to be replaced, stat err=%v", err)
+	}
+
+	raw := mustRead(t, newPath)
+	if !strings.Contains(raw, "encrypted: true") {
+		t.Fatalf("expected encrypted flag in rewritten note, got %q", raw)
+	}
+	decrypted, err := DecryptBody(strings.TrimSpace(StripFrontMatter(raw)), "passphrase")
+	if err != nil {
+		t.Fatalf("DecryptBody returned error: %v", err)
+	}
+	if decrypted != "# Renamed Secret\n\nBody text" {
+		t.Fatalf("unexpected decrypted body: %q", decrypted)
+	}
+}
+
 func TestUniqueTrashNameAndBuildTrashInfo(t *testing.T) {
 	filesDir := t.TempDir()
 	infoDir := t.TempDir()
