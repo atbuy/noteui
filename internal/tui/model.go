@@ -1312,16 +1312,24 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.JumpBottom):
-				m.preview.GotoBottom()
-				m.status = "preview bottom"
+				if m.previewTodoNavMode {
+					m.jumpToLastTodo()
+				} else {
+					m.preview.GotoBottom()
+					m.status = "preview bottom"
+				}
 				m.pendingG = false
 				m.pendingBracketDir = ""
 				return m, nil
 
 			case key.Matches(msg, keys.PendingG):
 				if m.pendingG {
-					m.preview.GotoTop()
-					m.status = "preview top"
+					if m.previewTodoNavMode {
+						m.jumpToFirstTodo()
+					} else {
+						m.preview.GotoTop()
+						m.status = "preview top"
+					}
 					m.pendingG = false
 					return m, nil
 				}

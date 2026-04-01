@@ -481,6 +481,34 @@ func (m *Model) jumpToPrevTodo() {
 	m.reapplyTodoHighlight()
 }
 
+func (m *Model) jumpToFirstTodo() {
+	if len(m.previewTodos) == 0 {
+		m.status = "no todos"
+		return
+	}
+	m.previewTodoCursor = 0
+	todo := m.previewTodos[m.previewTodoCursor]
+	if todo.rendLine >= 0 {
+		m.preview.SetYOffset(todo.rendLine)
+	}
+	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
+	m.reapplyTodoHighlight()
+}
+
+func (m *Model) jumpToLastTodo() {
+	if len(m.previewTodos) == 0 {
+		m.status = "no todos"
+		return
+	}
+	m.previewTodoCursor = len(m.previewTodos) - 1
+	todo := m.previewTodos[m.previewTodoCursor]
+	if todo.rendLine >= 0 {
+		m.preview.SetYOffset(todo.rendLine)
+	}
+	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
+	m.reapplyTodoHighlight()
+}
+
 func applyTodoLineHighlight(content string, rendLine int) string {
 	if rendLine < 0 {
 		return content

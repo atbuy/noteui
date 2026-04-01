@@ -1156,6 +1156,11 @@ func (m Model) renderHelpModal() string {
 			innerWidth,
 		),
 		m.renderHelpLine(
+			keys.PendingG.Help().Key+keys.PendingG.Help().Key+" / "+keys.JumpBottom.Help().Key,
+			"First / last todo in todo nav",
+			innerWidth,
+		),
+		m.renderHelpLine(
 			keys.TodoKey.Help().Key+keys.TodoKey.Help().Key,
 			"Toggle current todo checkbox",
 			innerWidth,
