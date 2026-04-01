@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -265,8 +266,24 @@ type Model struct {
 	pinnedNotes map[string]bool
 	pinnedCats  map[string]bool
 
-	showHelp      bool
-	showDashboard bool
+	showHelp             bool
+	helpScroll           int
+	helpRowsCache        []string
+	helpRowsCacheQuery   string
+	helpRowsCacheWidth   int
+	helpBodyCache        string
+	helpBodyCacheQuery   string
+	helpBodyCacheWidth   int
+	helpBodyCacheRows    int
+	helpBodyCacheScroll  int
+	helpModalCache       string
+	helpModalCacheQuery  string
+	helpModalCacheWidth  int
+	helpModalCacheHeight int
+	helpModalCacheRows   int
+	helpModalCacheScroll int
+	helpMouseSuppressed  bool
+	showDashboard        bool
 
 	showCreateCategory bool
 	categoryInput      textinput.Model
@@ -285,6 +302,7 @@ type Model struct {
 
 	showAddTag bool
 	tagInput   textinput.Model
+	helpInput  textinput.Model
 
 	searchInput textinput.Model
 	searchMode  bool
@@ -338,6 +356,22 @@ type noteTaggedMsg struct {
 	err  error
 }
 
+type helpMouseResumeMsg struct{}
+
+func disableMouseCmd() tea.Cmd {
+	return func() tea.Msg { return tea.DisableMouse() }
+}
+
+func enableMouseCellMotionCmd() tea.Cmd {
+	return func() tea.Msg { return tea.EnableMouseCellMotion() }
+}
+
+func helpMouseResumeCmd() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
+		return helpMouseResumeMsg{}
+	})
+}
+
 func New(root, startupError string, cfg config.Config, version string) Model {
 	categoryInput := textinput.New()
 	categoryInput.Placeholder = "work/project-a"
@@ -372,6 +406,14 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	tagInput.Prompt = "Tags: "
 	tagInput.CharLimit = 300
 	tagInput.Width = 48
+
+	helpInput := textinput.New()
+	helpInput.Placeholder = "Filter commands..."
+	helpInput.Prompt = "Filter: "
+	helpInput.CharLimit = 200
+	helpInput.Width = 32
+	helpInput.TextStyle = lipgloss.NewStyle().Foreground(modalTextColor).Background(modalBgColor)
+	helpInput.PlaceholderStyle = lipgloss.NewStyle().Foreground(modalMutedColor).Background(modalBgColor)
 
 	todoInput := textinput.New()
 	todoInput.Placeholder = "Todo item text"
@@ -418,6 +460,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		moveInput:                 moveInput,
 		renameInput:               renameInput,
 		tagInput:                  tagInput,
+		helpInput:                 helpInput,
 		todoInput:                 todoInput,
 		passphraseInput:           passphraseInput,
 		preserveCursor:            -1,
@@ -508,7 +551,42 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.status = "todo updated"
 		return m, refreshAllCmd(m.rootDir)
 
+	case helpMouseResumeMsg:
+		if !m.helpMouseSuppressed {
+			return m, nil
+		}
+		m.helpMouseSuppressed = false
+		return m, enableMouseCellMotionCmd()
+
 	case tea.MouseMsg:
+		if m.showHelp {
+			maxRows := max(8, min(20, m.height-16))
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				if m.moveHelpScroll(-3, maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+					return m, nil
+				}
+				if !m.helpMouseSuppressed {
+					m.helpMouseSuppressed = true
+					return m, tea.Batch(disableMouseCmd(), helpMouseResumeCmd())
+				}
+				return m, nil
+			case tea.MouseButtonWheelDown:
+				if m.moveHelpScroll(3, maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+					return m, nil
+				}
+				if !m.helpMouseSuppressed {
+					m.helpMouseSuppressed = true
+					return m, tea.Batch(disableMouseCmd(), helpMouseResumeCmd())
+				}
+				return m, nil
+			default:
+				return m, nil
+			}
+		}
+
 		m.previewHover = m.mouseInPreview(msg.X, msg.Y)
 
 		if m.previewHover || m.focus == focusPreview {
@@ -525,6 +603,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.helpRowsCache = nil // invalidate; rebuildHelpRowsCache will refill on next open/type
+		m.invalidateHelpBodyCache()
+		m.rebuildHelpModalCache(max(8, min(20, m.height-16)))
 
 		leftWidth, rightWidth := m.panelWidths()
 
@@ -922,6 +1003,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				return m, addTodoCmd(path, text)
 			}
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.todoInput, cmd = m.todoInput.Update(msg)
 			return m, cmd
@@ -983,6 +1067,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.passphraseInput, cmd = m.passphraseInput.Update(msg)
 			return m, cmd
@@ -1039,6 +1126,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				rawLine := m.previewTodos[m.previewTodoCursor].rawLine
 				return m, editTodoCmd(path, rawLine, text)
+			}
+			if isMouseEscapeFragment(msg) {
+				return m, nil
 			}
 			var cmd tea.Cmd
 			m.todoInput, cmd = m.todoInput.Update(msg)
@@ -1122,6 +1212,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, m.confirmMove(value)
 			}
 
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.moveInput, cmd = m.moveInput.Update(msg)
 			return m, cmd
@@ -1156,6 +1249,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 			}
 
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.renameInput, cmd = m.renameInput.Update(msg)
 			return m, cmd
@@ -1194,6 +1290,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, addNoteTagsCmd(path, tags)
 			}
 
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.tagInput, cmd = m.tagInput.Update(msg)
 			return m, cmd
@@ -1213,13 +1312,73 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if m.showHelp {
+			maxRows := max(8, min(20, m.height-16))
 			switch msg.String() {
-			case "esc", "q", "?":
+			case "esc":
 				m.showHelp = false
+				m.helpInput.Blur()
 				m.status = "help closed"
+				if m.helpMouseSuppressed {
+					m.helpMouseSuppressed = false
+					return m, enableMouseCellMotionCmd()
+				}
+				return m, nil
+			case "up":
+				if m.moveHelpScroll(-1, maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+				}
+				return m, nil
+			case "down":
+				if m.moveHelpScroll(1, maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+				}
+				return m, nil
+			case "home":
+				m.helpScroll = 0
+				m.clampHelpScroll(maxRows)
+				m.rebuildHelpModalCache(maxRows)
+				return m, nil
+			case "end":
+				m.helpScroll = 1 << 30
+				m.clampHelpScroll(maxRows)
+				m.rebuildHelpModalCache(maxRows)
+				return m, nil
+			}
+			switch {
+			case key.Matches(msg, keys.ScrollHalfPageUp):
+				if m.moveHelpScroll(-max(1, maxRows/2), maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+				}
+				return m, nil
+			case key.Matches(msg, keys.ScrollHalfPageDown):
+				if m.moveHelpScroll(max(1, maxRows/2), maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+				}
+				return m, nil
+			case key.Matches(msg, keys.ScrollPageUp):
+				if m.moveHelpScroll(-maxRows, maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+				}
+				return m, nil
+			case key.Matches(msg, keys.ScrollPageDown):
+				if m.moveHelpScroll(maxRows, maxRows) {
+					m.rebuildHelpModalCache(maxRows)
+				}
 				return m, nil
 			default:
-				return m, nil
+				if !shouldUpdateHelpInput(msg, m.helpInput) {
+					return m, nil
+				}
+				var cmd tea.Cmd
+				before := m.helpInput.Value()
+				m.helpInput, cmd = m.helpInput.Update(msg)
+				if m.helpInput.Value() != before {
+					m.helpScroll = 0
+					m.rebuildHelpRowsCache()
+				}
+				m.clampHelpScroll(maxRows)
+				m.rebuildHelpModalCache(maxRows)
+				return m, cmd
 			}
 		}
 
@@ -1242,6 +1401,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, createCategoryCmd(m.rootDir, value)
 			}
 
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.categoryInput, cmd = m.categoryInput.Update(msg)
 			return m, cmd
@@ -1287,6 +1449,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
 			var cmd tea.Cmd
 			m.searchInput, cmd = m.searchInput.Update(msg)
 			m.previewPath = ""
@@ -1367,6 +1532,13 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.ShowHelp) {
 			m.showHelp = true
+			m.helpScroll = 0
+			m.helpMouseSuppressed = false
+			m.helpInput.SetValue("")
+			m.helpInput.Focus()
+			m.rebuildHelpRowsCache()
+			m.rebuildHelpModalCache(max(8, min(20, m.height-16)))
+			m.pendingG = false
 			m.status = "help"
 			return m, nil
 		}

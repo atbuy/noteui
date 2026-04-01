@@ -1107,127 +1107,45 @@ func (m Model) renderPrivacySegment() string {
 }
 
 func (m Model) renderHelpModal() string {
-	modalWidth, innerWidth := m.modalDimensions(50, 76)
-
-	title := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(modalTitleStyle.Render("Help"))
-
-	bf := keys.BracketForward.Help().Key
-	bb := keys.BracketBackward.Help().Key
-	lines := []string{
-		m.renderHelpLine(
-			keys.MoveDown.Help().Key+" / "+keys.MoveUp.Help().Key,
-			"Move up and down",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.ScrollHalfPageUp.Help().Key+" / "+keys.ScrollHalfPageDown.Help().Key,
-			"Scroll half page up / down",
-			innerWidth,
-		),
-		m.renderHelpLine(keys.Open.Help().Key, "Open note or jump from Pins", innerWidth),
-		m.renderHelpLine(
-			keys.CollapseCategory.Help().Key+"/"+keys.ExpandCategory.Help().Key,
-			"Collapse/Expand category",
-			innerWidth,
-		),
-		m.renderHelpLine(bf+"/"+bb, "Switch Notes / Temporary", innerWidth),
-		m.renderHelpLine(keys.ShowPins.Help().Key, "Toggle Pins view", innerWidth),
-		m.renderHelpLine(keys.Search.Help().Key, "Search", innerWidth),
-		m.renderHelpLine(
-			keys.NextMatch.Help().Key+" / "+keys.PrevMatch.Help().Key,
-			"Next / previous match in preview",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.PendingZ.Help().Key+keys.PendingZ.Help().Key,
-			"Center current match in preview",
-			innerWidth,
-		),
-		m.renderHelpLine("esc", "Leave search, then clear on second press", innerWidth),
-		m.renderHelpLine(keys.NewNote.Help().Key, "New note in current view", innerWidth),
-		m.renderHelpLine(keys.NewTemporaryNote.Help().Key, "New temporary note", innerWidth),
-		m.renderHelpLine(
-			keys.TogglePreviewPrivacy.Help().Key,
-			"Toggle preview privacy",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.TogglePreviewLineNumbers.Help().Key,
-			"Toggle preview line numbers",
-			innerWidth,
-		),
-		m.renderHelpLine(keys.CreateCategory.Help().Key, "Create category", innerWidth),
-		m.renderHelpLine(
-			keys.Delete.Help().Key+keys.DeleteConfirm.Help().Key,
-			"Trash note/category",
-			innerWidth,
-		),
-		m.renderHelpLine(keys.Refresh.Help().Key, "Refresh", innerWidth),
-		m.renderHelpLine(keys.Quit.Help().Key, "Quit", innerWidth),
-		m.renderHelpLine("esc / q / ?", "Close help", innerWidth),
-		m.renderHelpLine(keys.Move.Help().Key, "Move current item or marked batch", innerWidth),
-		m.renderHelpLine(keys.ToggleSelect.Help().Key, "Mark/unmark item for bulk move", innerWidth),
-		m.renderHelpLine(keys.Rename.Help().Key, "Rename note/category", innerWidth),
-		m.renderHelpLine(keys.AddTag.Help().Key, "Add tag to selected note", innerWidth),
-		m.renderHelpLine(keys.Pin.Help().Key, "Pin or unpin current item", innerWidth),
-		m.renderHelpLine(
-			keys.PendingG.Help().Key+keys.PendingG.Help().Key+" / "+keys.JumpBottom.Help().Key,
-			"Jump to top / bottom of list",
-			innerWidth,
-		),
-		m.renderHelpLine(keys.SortToggle.Help().Key, "Toggle sort (alpha / modified)", innerWidth),
-		m.renderHelpLine("#tag", "Filter by tag in search", innerWidth),
-		m.renderHelpLine(keys.NewTodoList.Help().Key, "New todo list (tree focus)", innerWidth),
-		m.renderHelpLine(
-			bf+keys.HeadingJumpKey.Help().Key+" / "+bb+keys.HeadingJumpKey.Help().Key,
-			"Next / prev heading in preview",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			bf+keys.TodoKey.Help().Key+" / "+bb+keys.TodoKey.Help().Key,
-			"Next / prev todo in preview",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.PendingG.Help().Key+keys.PendingG.Help().Key+" / "+keys.JumpBottom.Help().Key,
-			"First / last todo in todo nav",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.TodoKey.Help().Key+keys.TodoKey.Help().Key,
-			"Toggle current todo checkbox",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.TodoKey.Help().Key+keys.TodoAdd.Help().Key,
-			"Add new todo item",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.TodoKey.Help().Key+keys.TodoDelete.Help().Key,
-			"Delete current todo item",
-			innerWidth,
-		),
-		m.renderHelpLine(
-			keys.TodoKey.Help().Key+keys.TodoEdit.Help().Key,
-			"Edit current todo item",
-			innerWidth,
-		),
-		m.renderHelpLine(keys.ToggleEncryption.Help().Key, "Toggle note encryption", innerWidth),
+	modalWidth, innerWidth := m.modalDimensions(60, 96)
+	maxRows := max(8, min(20, m.height-16))
+	query := m.helpInput.Value()
+	if m.helpModalCache != "" && m.helpModalCacheQuery == query && m.helpModalCacheWidth == m.width && m.helpModalCacheHeight == m.height && m.helpModalCacheRows == maxRows && m.helpModalCacheScroll == m.helpScroll {
+		return m.helpModalCache
 	}
 
-	body := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(lipgloss.JoinVertical(lipgloss.Left, lines...))
+	var rows []string
+	if m.helpRowsCache != nil && m.helpRowsCacheQuery == query && m.helpRowsCacheWidth == innerWidth {
+		rows = m.helpRowsCache
+	} else {
+		rows = m.renderedHelpRows(innerWidth, false)
+	}
+	scroll := m.helpScroll
+	maxScroll := max(0, len(rows)-maxRows)
+	if scroll < 0 {
+		scroll = 0
+	}
+	if scroll > maxScroll {
+		scroll = maxScroll
+	}
+	body := m.helpBodyCache
+	if body == "" || m.helpBodyCacheQuery != query || m.helpBodyCacheWidth != innerWidth || m.helpBodyCacheRows != maxRows || m.helpBodyCacheScroll != scroll {
+		end := min(len(rows), scroll+maxRows)
+		visibleRows := append([]string{}, rows[scroll:end]...)
+		for len(visibleRows) < maxRows {
+			visibleRows = append(visibleRows, m.renderModalBlank(innerWidth))
+		}
+		body = lipgloss.NewStyle().Width(innerWidth).Height(maxRows).Background(modalBgColor).Render(lipgloss.JoinVertical(lipgloss.Left, visibleRows...))
+	}
 
-	footer := lipgloss.NewStyle().
-		Width(innerWidth).
-		Background(modalBgColor).
-		Render(modalFooterStyle.Render("Press esc, q, or ? to close"))
+	scrollText := "all"
+	if len(rows) > maxRows {
+		scrollText = fmt.Sprintf("%d-%d of %d", scroll+1, min(len(rows), scroll+maxRows), len(rows))
+	}
+	filterHint := "Type to filter by section, key, or description"
+	if strings.TrimSpace(query) != "" {
+		filterHint = "Filtered help"
+	}
 
 	content := lipgloss.NewStyle().
 		Width(innerWidth).
@@ -1235,11 +1153,15 @@ func (m Model) renderHelpModal() string {
 		Render(
 			lipgloss.JoinVertical(
 				lipgloss.Left,
-				title,
-				lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(""),
+				m.renderModalTitle("Help", innerWidth),
+				m.renderModalBlank(innerWidth),
+				m.renderModalHint(filterHint+" • "+scrollText, innerWidth),
+				m.renderModalBlank(innerWidth),
+				m.renderModalInputRow("Filter", m.helpInput, innerWidth),
+				m.renderModalBlank(innerWidth),
 				body,
-				lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(""),
-				footer,
+				m.renderModalBlank(innerWidth),
+				m.renderModalFooter("Type to filter • up/down scroll • home/end top/bottom • ctrl+d/u page • mouse wheel • esc to close", innerWidth),
 			),
 		)
 
@@ -1661,7 +1583,7 @@ func (m Model) renderModalInputRow(label string, input textinput.Model, innerWid
 }
 
 func (m Model) renderHelpLine(k, desc string, width int) string {
-	keyWidth := 14
+	keyWidth := 18
 	descWidth := max(10, width-keyWidth)
 
 	keyPart := lipgloss.NewStyle().
@@ -1670,6 +1592,7 @@ func (m Model) renderHelpLine(k, desc string, width int) string {
 		Render(
 			modalKeyStyle.
 				Width(keyWidth).
+				Align(lipgloss.Left).
 				Render(k),
 		)
 
@@ -1679,6 +1602,7 @@ func (m Model) renderHelpLine(k, desc string, width int) string {
 		Render(
 			modalTextStyle.
 				Width(descWidth).
+				Align(lipgloss.Right).
 				Render(desc),
 		)
 
