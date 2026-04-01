@@ -1,0 +1,552 @@
+package tui
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/notes"
+)
+
+func configForApply() config.KeysConfig {
+	return config.KeysConfig{Quit: []string{"x", "ctrl+x"}}
+}
+
+func emptyConfig() config.KeysConfig {
+	return config.KeysConfig{}
+}
+
+// Tests for modal render functions, tree/list views, and action helpers.
+
+func TestRenderCreateCategoryModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showCreateCategory = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderCreateCategoryModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Create category") {
+		require.Failf(t, "assertion failed", "expected modal title, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderAddTagModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showAddTag = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderAddTagModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Add tag") {
+		require.Failf(t, "assertion failed", "expected 'Add tag' in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderTodoAddModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showTodoAdd = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderTodoAddModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Add todo item") {
+		require.Failf(t, "assertion failed", "expected 'Add todo item' in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderTodoEditModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showTodoEdit = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderTodoEditModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Edit todo item") {
+		require.Failf(t, "assertion failed", "expected 'Edit todo item' in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderPassphraseModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showPassphraseModal = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderPassphraseModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "passphrase") && !strings.Contains(strings.ToLower(plain), "passphrase") {
+		require.Failf(t, "assertion failed", "expected passphrase text in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderPassphraseModalEncryptContext(t *testing.T) {
+	m := newTestModel(t)
+	m.showPassphraseModal = true
+	m.passphraseModalCtx = "encrypt"
+	m.width = 120
+	m.height = 40
+	rendered := m.renderPassphraseModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Set passphrase") {
+		require.Failf(t, "assertion failed", "expected 'Set passphrase' title for encrypt context, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderEncryptConfirmModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showEncryptConfirm = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderEncryptConfirmModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(strings.ToLower(plain), "encrypt") {
+		require.Failf(t, "assertion failed", "expected encrypt text in confirmation modal, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderMoveModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showMove = true
+	m.movePending = &movePending{kind: moveTargetNote, oldRelPath: "work/note.md", name: "note.md"}
+	m.width = 120
+	m.height = 40
+	rendered := m.renderMoveModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(strings.ToLower(plain), "move") {
+		require.Failf(t, "assertion failed", "expected 'move' in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderRenameModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showRename = true
+	m.renamePending = &renamePending{kind: renameTargetNote, path: "work/note.md", oldTitle: "Old Title"}
+	m.width = 120
+	m.height = 40
+	rendered := m.renderRenameModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(strings.ToLower(plain), "rename") {
+		require.Failf(t, "assertion failed", "expected 'rename' in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}
+
+func TestRenderTreeViewEmpty(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = nil
+	rendered := m.renderTreeView()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "empty") {
+		require.Failf(t, "assertion failed", "expected 'empty' in tree view with no items, got %q", plain)
+	}
+}
+
+func TestRenderTreeViewWithNotes(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	now := time.Now()
+	m.notes = []notes.Note{
+		{RelPath: "work/alpha.md", Name: "alpha.md", TitleText: "Alpha Note", ModTime: now},
+	}
+	m.categories = []notes.Category{
+		{Name: "All notes", RelPath: ""},
+		{Name: "work", RelPath: "work"},
+	}
+	m.expanded = map[string]bool{"": true, "work": true}
+	m.pinnedNotes = map[string]bool{}
+	m.pinnedCats = map[string]bool{}
+	m.markedTreeItems = map[string]bool{}
+	m.rebuildTree()
+
+	rendered := m.renderTreeView()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Alpha Note") && !strings.Contains(plain, "alpha.md") {
+		require.Failf(t, "assertion failed", "expected note title in tree view, got %q", plain)
+	}
+}
+
+func TestRenderTemporaryListViewEmpty(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.tempNotes = nil
+	rendered := m.renderTemporaryListView()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "empty") && !strings.Contains(plain, "no") && !strings.Contains(plain, "temp") {
+		// Just verify it doesn't panic and returns something
+		_ = plain
+	}
+}
+
+func TestRenderTemporaryListViewWithNotes(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.width = 120
+	now := time.Now()
+	m.tempNotes = []notes.Note{
+		{RelPath: "scratch.md", Name: "scratch.md", TitleText: "Scratch Note", ModTime: now},
+	}
+	m.tempCursor = 0
+	rendered := m.renderTemporaryListView()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Scratch Note") && !strings.Contains(plain, "scratch.md") {
+		require.Failf(t, "assertion failed", "expected temp note in temporary list, got %q", plain)
+	}
+}
+
+func TestRenderPinsListViewEmpty(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModePins
+	m.pinnedNotes = map[string]bool{}
+	m.pinnedCats = map[string]bool{}
+	rendered := m.renderPinsListView()
+	plain := stripANSI(rendered)
+	// Should render without panic
+	_ = plain
+}
+
+func TestLeftPanelTitle(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	title := m.leftPanelTitle()
+	if title == "" {
+		require.FailNow(t, "expected non-empty left panel title")
+	}
+}
+
+func TestLeftPanelTitleTemporary(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	title := m.leftPanelTitle()
+	if !strings.Contains(strings.ToLower(title), "temp") {
+		require.Failf(t, "assertion failed", "expected 'temp' in panel title for temporary mode, got %q", title)
+	}
+}
+
+func TestLeftPanelTitlePins(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModePins
+	title := m.leftPanelTitle()
+	if !strings.Contains(strings.ToLower(title), "pin") {
+		require.Failf(t, "assertion failed", "expected 'pin' in panel title for pins mode, got %q", title)
+	}
+}
+
+func TestCurrentNotePathTemporary(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	now := time.Now()
+	m.tempNotes = []notes.Note{
+		{RelPath: "scratch.md", Name: "scratch.md", Path: "/tmp/scratch.md", ModTime: now},
+	}
+	m.tempCursor = 0
+	path := m.currentNotePath()
+	if path != "/tmp/scratch.md" {
+		require.Failf(t, "assertion failed", "expected /tmp/scratch.md, got %q", path)
+	}
+}
+
+func TestCurrentNotePathNone(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	m.treeItems = nil
+	path := m.currentNotePath()
+	if path != "" {
+		require.Failf(t, "assertion failed", "expected empty path when no note selected, got %q", path)
+	}
+}
+
+func TestCurrentNotePathFromTree(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	n := &notes.Note{RelPath: "work/note.md", Path: "/notes/work/note.md"}
+	m.treeItems = []treeItem{
+		{Kind: treeNote, RelPath: "work/note.md", Note: n},
+	}
+	m.treeCursor = 0
+	path := m.currentNotePath()
+	if path != "/notes/work/note.md" {
+		require.Failf(t, "assertion failed", "expected note path from tree, got %q", path)
+	}
+}
+
+func TestArmDeleteCurrentNoSelection(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	m.treeItems = nil
+	// Should not panic with no selection
+	m.armDeleteCurrent()
+	if m.deletePending != nil {
+		require.FailNow(t, "expected nil deletePending when no selection")
+	}
+}
+
+func TestArmDeleteCurrentNote(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	n := &notes.Note{RelPath: "work/note.md", Path: "/notes/work/note.md", Name: "note.md"}
+	m.treeItems = []treeItem{
+		{Kind: treeNote, RelPath: "work/note.md", Name: "note.md", Note: n},
+	}
+	m.treeCursor = 0
+	m.armDeleteCurrent()
+	if m.deletePending == nil {
+		require.FailNow(t, "expected deletePending to be set after armDeleteCurrent")
+	}
+	if m.deletePending.kind != deleteTargetNote {
+		require.Failf(t, "assertion failed", "expected deleteTargetNote kind, got %v", m.deletePending.kind)
+	}
+}
+
+func TestArmDeleteCurrentCategory(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "work", Name: "work"},
+	}
+	m.treeCursor = 0
+	m.armDeleteCurrent()
+	if m.deletePending == nil {
+		require.FailNow(t, "expected deletePending to be set for category delete")
+	}
+	if m.deletePending.kind != deleteTargetCategory {
+		require.Failf(t, "assertion failed", "expected deleteTargetCategory kind, got %v", m.deletePending.kind)
+	}
+}
+
+func TestArmDeleteRootCategoryRejected(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "", Name: "All notes"},
+	}
+	m.treeCursor = 0
+	m.armDeleteCurrent()
+	if m.deletePending != nil {
+		require.FailNow(t, "expected root category delete to be rejected")
+	}
+}
+
+func TestArmRenameCurrentNote(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	n := &notes.Note{RelPath: "work/note.md", Path: "/notes/work/note.md", Name: "note.md", TitleText: "My Note"}
+	m.treeItems = []treeItem{
+		{Kind: treeNote, RelPath: "work/note.md", Name: "My Note", Note: n},
+	}
+	m.treeCursor = 0
+	m.armRenameCurrent()
+	if !m.showRename {
+		require.FailNow(t, "expected showRename to be true after armRenameCurrent")
+	}
+	if m.renamePending == nil {
+		require.FailNow(t, "expected renamePending to be set")
+	}
+	if m.renameInput.Value() != "My Note" {
+		require.Failf(t, "assertion failed", "expected rename input to contain current title, got %q", m.renameInput.Value())
+	}
+}
+
+func TestArmRenameRootCategoryRejected(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "", Name: "All notes"},
+	}
+	m.treeCursor = 0
+	m.armRenameCurrent()
+	if m.showRename {
+		require.FailNow(t, "expected root category rename to be rejected")
+	}
+}
+
+func TestArmAddTagCurrentNoNote(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	m.treeItems = nil
+	m.armAddTagCurrent()
+	if m.showAddTag {
+		require.FailNow(t, "expected showAddTag to remain false when no note selected")
+	}
+}
+
+func TestArmAddTagCurrentWithNote(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	n := &notes.Note{RelPath: "work/note.md", Path: "/notes/work/note.md"}
+	m.treeItems = []treeItem{
+		{Kind: treeNote, RelPath: "work/note.md", Note: n},
+	}
+	m.treeCursor = 0
+	m.armAddTagCurrent()
+	if !m.showAddTag {
+		require.FailNow(t, "expected showAddTag to be true after armAddTagCurrent")
+	}
+}
+
+func TestFilteredTempNotes(t *testing.T) {
+	now := time.Now()
+	m := newTestModel(t)
+	m.tempNotes = []notes.Note{
+		{RelPath: "alpha.md", Name: "alpha.md", TitleText: "Alpha", ModTime: now},
+		{RelPath: "beta.md", Name: "beta.md", TitleText: "Beta", ModTime: now.Add(-time.Hour)},
+	}
+	m.searchInput.SetValue("")
+	all := m.filteredTempNotes()
+	if len(all) != 2 {
+		require.Failf(t, "assertion failed", "expected 2 temp notes with empty query, got %d", len(all))
+	}
+
+	m.searchInput.SetValue("alpha")
+	filtered := m.filteredTempNotes()
+	if len(filtered) != 1 || filtered[0].TitleText != "Alpha" {
+		require.Failf(t, "assertion failed", "expected 1 matching note, got %v", filtered)
+	}
+}
+
+func TestFilteredTempNotesSortByModTime(t *testing.T) {
+	now := time.Now()
+	m := newTestModel(t)
+	m.tempNotes = []notes.Note{
+		{RelPath: "old.md", Name: "old.md", TitleText: "Old", ModTime: now.Add(-time.Hour)},
+		{RelPath: "new.md", Name: "new.md", TitleText: "New", ModTime: now},
+	}
+	m.sortByModTime = true
+	m.searchInput.SetValue("")
+	sorted := m.filteredTempNotes()
+	if len(sorted) != 2 || sorted[0].TitleText != "New" {
+		require.Failf(t, "assertion failed", "expected newest first, got %v", sorted)
+	}
+}
+
+func TestMoveTempCursor(t *testing.T) {
+	now := time.Now()
+	m := newTestModel(t)
+	m.tempNotes = []notes.Note{
+		{RelPath: "a.md", Name: "a.md", ModTime: now},
+		{RelPath: "b.md", Name: "b.md", ModTime: now},
+		{RelPath: "c.md", Name: "c.md", ModTime: now},
+	}
+	m.tempCursor = 0
+	m.listMode = listModeTemporary
+
+	m.moveTempCursor(1)
+	if m.tempCursor != 1 {
+		require.Failf(t, "assertion failed", "expected cursor 1 after delta +1, got %d", m.tempCursor)
+	}
+
+	m.moveTempCursor(-5)
+	if m.tempCursor != 0 {
+		require.Failf(t, "assertion failed", "expected cursor clamped to 0, got %d", m.tempCursor)
+	}
+
+	m.moveTempCursor(100)
+	if m.tempCursor != 2 {
+		require.Failf(t, "assertion failed", "expected cursor clamped to max (2), got %d", m.tempCursor)
+	}
+}
+
+func TestCurrentCategoryPrefixCategory(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "work", Name: "work"},
+	}
+	m.treeCursor = 0
+	prefix := m.currentCategoryPrefix()
+	if prefix != "work/" {
+		require.Failf(t, "assertion failed", "expected 'work/', got %q", prefix)
+	}
+}
+
+func TestCurrentCategoryPrefixNote(t *testing.T) {
+	m := newTestModel(t)
+	n := &notes.Note{RelPath: "work/note.md"}
+	m.treeItems = []treeItem{
+		{Kind: treeNote, RelPath: "work/note.md", Note: n},
+	}
+	m.treeCursor = 0
+	prefix := m.currentCategoryPrefix()
+	if prefix != "work/" {
+		require.Failf(t, "assertion failed", "expected 'work/', got %q", prefix)
+	}
+}
+
+func TestCurrentCategoryPrefixRoot(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "", Name: "All notes"},
+	}
+	m.treeCursor = 0
+	prefix := m.currentCategoryPrefix()
+	if prefix != "" {
+		require.Failf(t, "assertion failed", "expected empty prefix for root category, got %q", prefix)
+	}
+}
+
+func TestApplyConfigKeysOverridesBinding(t *testing.T) {
+	// Save original keys to restore after the test
+	origKeys := keys
+	defer func() { keys = origKeys }()
+
+	defaultQuitKeys := keys.Quit.Keys()
+
+	// Apply an override via a config struct with only Quit set
+	cfg := configForApply()
+	ApplyConfigKeys(cfg)
+
+	newKeys := keys.Quit.Keys()
+	if len(newKeys) == 0 {
+		require.FailNow(t, "expected quit key to have bindings after override")
+	}
+	if len(defaultQuitKeys) > 0 && newKeys[0] == defaultQuitKeys[0] {
+		require.Failf(t, "assertion failed", "expected key override to change quit binding, still %q", newKeys[0])
+	}
+}
+
+func TestApplyConfigKeysEmptyNoOp(t *testing.T) {
+	origKeys := keys
+	defer func() { keys = origKeys }()
+
+	before := keys.Quit.Keys()
+
+	// Empty config override — all slices nil, should be no-op
+	ApplyConfigKeys(emptyConfig())
+
+	after := keys.Quit.Keys()
+	if len(before) != len(after) || (len(before) > 0 && before[0] != after[0]) {
+		require.Failf(t, "assertion failed", "expected empty config not to change quit binding, before=%v after=%v", before, after)
+	}
+}
+
+func TestRenderTreeLineNote(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	m.pinnedNotes = map[string]bool{}
+	m.pinnedCats = map[string]bool{}
+	m.markedTreeItems = map[string]bool{}
+	n := notes.Note{RelPath: "work/note.md", Name: "note.md", TitleText: "My Note"}
+	item := treeItem{Kind: treeNote, RelPath: "work/note.md", Name: "My Note", Note: &n, Depth: 0}
+	rendered := m.renderTreeLine(item, false)
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "My Note") {
+		require.Failf(t, "assertion failed", "expected 'My Note' in tree line, got %q", plain)
+	}
+}
+
+func TestRenderTreeLineCategory(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	m.pinnedNotes = map[string]bool{}
+	m.pinnedCats = map[string]bool{}
+	m.markedTreeItems = map[string]bool{}
+	m.categories = []notes.Category{{Name: "work", RelPath: "work"}}
+	item := treeItem{Kind: treeCategory, RelPath: "work", Name: "work", Depth: 0, Expanded: true}
+	rendered := m.renderTreeLine(item, true)
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "work") {
+		require.Failf(t, "assertion failed", "expected 'work' in category tree line, got %q", plain)
+	}
+}

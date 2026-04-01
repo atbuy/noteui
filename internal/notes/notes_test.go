@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestExtractTitleAndFallbackHelpers(t *testing.T) {
@@ -18,25 +20,25 @@ func TestExtractTitleAndFallbackHelpers(t *testing.T) {
 	}, "\n")
 
 	if got := ExtractTitle(raw); got != "Heading Title" {
-		t.Fatalf("expected heading title, got %q", got)
+		require.Failf(t, "assertion failed", "expected heading title, got %q", got)
 	}
 	if got := ExtractTitleOrFirstLine("---\nfoo: bar\n---\n* first line"); got != "first line" {
-		t.Fatalf("expected first line fallback, got %q", got)
+		require.Failf(t, "assertion failed", "expected first line fallback, got %q", got)
 	}
 	if got := fallbackTitleFromFilename("project-notes.md"); got != "project notes" {
-		t.Fatalf("unexpected fallback title: %q", got)
+		require.Failf(t, "assertion failed", "unexpected fallback title: %q", got)
 	}
 	if got := fallbackTitleFromFilename(".md"); got != "Untitled" {
-		t.Fatalf("expected Untitled fallback, got %q", got)
+		require.Failf(t, "assertion failed", "expected Untitled fallback, got %q", got)
 	}
 }
 
 func TestSlugifyAndWordCount(t *testing.T) {
 	if got := Slugify("  Hello, World + Draft/1  "); got != "hello-world-draft-1" {
-		t.Fatalf("unexpected slug: %q", got)
+		require.Failf(t, "assertion failed", "unexpected slug: %q", got)
 	}
 	if got := Slugify("!!!"); got != "" {
-		t.Fatalf("expected empty slug for punctuation-only input, got %q", got)
+		require.Failf(t, "assertion failed", "expected empty slug for punctuation-only input, got %q", got)
 	}
 
 	raw := strings.Join([]string{
@@ -47,34 +49,34 @@ func TestSlugifyAndWordCount(t *testing.T) {
 		"three",
 	}, "\n")
 	if got := WordCount(raw); got != 3 {
-		t.Fatalf("expected word count 3, got %d", got)
+		require.Failf(t, "assertion failed", "expected word count 3, got %d", got)
 	}
 	if got := ReadingTimeMinutes(0); got != 0 {
-		t.Fatalf("expected zero reading time, got %d", got)
+		require.Failf(t, "assertion failed", "expected zero reading time, got %d", got)
 	}
 	if got := ReadingTimeMinutes(1); got != 1 {
-		t.Fatalf("expected minimum reading time of 1, got %d", got)
+		require.Failf(t, "assertion failed", "expected minimum reading time of 1, got %d", got)
 	}
 	if got := ReadingTimeMinutes(226); got != 2 {
-		t.Fatalf("expected rounded reading time of 2, got %d", got)
+		require.Failf(t, "assertion failed", "expected rounded reading time of 2, got %d", got)
 	}
 }
 
 func TestCleanRelativePathAndReplaceOrInsertRootTitle(t *testing.T) {
 	if got := cleanRelativePath(" ../docs/note ", true); got != "docs/note.md" {
-		t.Fatalf("unexpected cleaned path: %q", got)
+		require.Failf(t, "assertion failed", "unexpected cleaned path: %q", got)
 	}
 	if got := cleanRelativePath(".", true); got != "" {
-		t.Fatalf("expected empty cleaned path, got %q", got)
+		require.Failf(t, "assertion failed", "expected empty cleaned path, got %q", got)
 	}
 
 	replaced := replaceOrInsertRootTitle("# Old\n\nBody", "New")
 	if replaced != "# New\n\nBody" {
-		t.Fatalf("unexpected replaced title content: %q", replaced)
+		require.Failf(t, "assertion failed", "unexpected replaced title content: %q", replaced)
 	}
 	inserted := replaceOrInsertRootTitle("Body", "Inserted")
 	if inserted != "# Inserted\n\nBody" {
-		t.Fatalf("unexpected inserted title content: %q", inserted)
+		require.Failf(t, "assertion failed", "unexpected inserted title content: %q", inserted)
 	}
 }
 
@@ -82,18 +84,18 @@ func TestRenameFromTitleDeletesEmptyTemporaryNote(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".new-20260401-120000.md")
 	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 
 	newPath, renamed, err := RenameFromTitle(path)
 	if err != nil {
-		t.Fatalf("RenameFromTitle returned error: %v", err)
+		require.Failf(t, "assertion failed", "RenameFromTitle returned error: %v", err)
 	}
 	if newPath != "" || renamed {
-		t.Fatalf("expected deleted temporary note, got path=%q renamed=%v", newPath, renamed)
+		require.Failf(t, "assertion failed", "expected deleted temporary note, got path=%q renamed=%v", newPath, renamed)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("expected temp note to be deleted, stat err=%v", err)
+		require.Failf(t, "assertion failed", "expected temp note to be deleted, stat err=%v", err)
 	}
 }
 
@@ -101,23 +103,23 @@ func TestRenameFromTitleUsesUniquePath(t *testing.T) {
 	dir := t.TempDir()
 	existing := filepath.Join(dir, "meeting-notes.md")
 	if err := os.WriteFile(existing, []byte("existing"), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 
 	path := filepath.Join(dir, ".new-20260401-120000.md")
 	if err := os.WriteFile(path, []byte("# Meeting Notes\nBody"), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 
 	newPath, renamed, err := RenameFromTitle(path)
 	if err != nil {
-		t.Fatalf("RenameFromTitle returned error: %v", err)
+		require.Failf(t, "assertion failed", "RenameFromTitle returned error: %v", err)
 	}
 	if !renamed {
-		t.Fatal("expected note to be renamed")
+		require.FailNow(t, "expected note to be renamed")
 	}
 	if filepath.Base(newPath) != "meeting-notes-2.md" {
-		t.Fatalf("expected unique target path, got %q", newPath)
+		require.Failf(t, "assertion failed", "expected unique target path, got %q", newPath)
 	}
 }
 
@@ -125,26 +127,26 @@ func TestRenameNoteTitleUpdatesContentAndFilename(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "draft.md")
 	if err := os.WriteFile(path, []byte("# Old Title\n\nBody"), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 
 	newPath, renamed, err := RenameNoteTitle(path, "Fresh Title")
 	if err != nil {
-		t.Fatalf("RenameNoteTitle returned error: %v", err)
+		require.Failf(t, "assertion failed", "RenameNoteTitle returned error: %v", err)
 	}
 	if !renamed {
-		t.Fatal("expected note to be renamed")
+		require.FailNow(t, "expected note to be renamed")
 	}
 	if filepath.Base(newPath) != "fresh-title.md" {
-		t.Fatalf("unexpected new path: %q", newPath)
+		require.Failf(t, "assertion failed", "unexpected new path: %q", newPath)
 	}
 
 	data, err := os.ReadFile(newPath)
 	if err != nil {
-		t.Fatalf("ReadFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "ReadFile returned error: %v", err)
 	}
 	if !strings.HasPrefix(string(data), "# Fresh Title") {
-		t.Fatalf("expected updated title in file, got %q", string(data))
+		require.Failf(t, "assertion failed", "expected updated title in file, got %q", string(data))
 	}
 }
 
@@ -152,23 +154,23 @@ func TestMoveNoteValidatesAndMovesFile(t *testing.T) {
 	root := t.TempDir()
 	oldPath := filepath.Join(root, "draft.md")
 	if err := os.WriteFile(oldPath, []byte("body"), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 
 	if err := MoveNote(root, "", "next.md"); err == nil {
-		t.Fatal("expected error for empty source path")
+		require.FailNow(t, "expected error for empty source path")
 	}
 
 	if err := MoveNote(root, "../draft.md", "nested/renamed"); err != nil {
-		t.Fatalf("MoveNote returned error: %v", err)
+		require.Failf(t, "assertion failed", "MoveNote returned error: %v", err)
 	}
 	newPath := filepath.Join(root, "nested", "renamed.md")
 	if _, err := os.Stat(newPath); err != nil {
-		t.Fatalf("expected moved note at %q: %v", newPath, err)
+		require.Failf(t, "assertion failed", "expected moved note at %q: %v", newPath, err)
 	}
 
 	if err := MoveNote(root, "nested/renamed.md", "nested/renamed.md"); err != nil {
-		t.Fatalf("expected no-op move to succeed, got %v", err)
+		require.Failf(t, "assertion failed", "expected no-op move to succeed, got %v", err)
 	}
 }
 
@@ -177,49 +179,49 @@ func TestCreateNoteAndReadHelpers(t *testing.T) {
 
 	path, err := CreateNote(root, "daily")
 	if err != nil {
-		t.Fatalf("CreateNote returned error: %v", err)
+		require.Failf(t, "assertion failed", "CreateNote returned error: %v", err)
 	}
 	if filepath.Ext(path) != ".md" {
-		t.Fatalf("expected markdown note, got %q", path)
+		require.Failf(t, "assertion failed", "expected markdown note, got %q", path)
 	}
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("expected note to exist: %v", err)
+		require.Failf(t, "assertion failed", "expected note to exist: %v", err)
 	}
 
 	content := "Line 1\n\tIndented\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 
 	preview, err := ReadPreview(path)
 	if err != nil {
-		t.Fatalf("ReadPreview returned error: %v", err)
+		require.Failf(t, "assertion failed", "ReadPreview returned error: %v", err)
 	}
 	if !strings.Contains(preview, "    Indented") {
-		t.Fatalf("expected tabs to expand in preview, got %q", preview)
+		require.Failf(t, "assertion failed", "expected tabs to expand in preview, got %q", preview)
 	}
 
 	full, err := ReadFull(path)
 	if err != nil {
-		t.Fatalf("ReadFull returned error: %v", err)
+		require.Failf(t, "assertion failed", "ReadFull returned error: %v", err)
 	}
 	if full != strings.TrimSpace(strings.ReplaceAll(content, "\t", "    ")) {
-		t.Fatalf("unexpected full content: %q", full)
+		require.Failf(t, "assertion failed", "unexpected full content: %q", full)
 	}
 
 	all, err := ReadAll(path)
 	if err != nil {
-		t.Fatalf("ReadAll returned error: %v", err)
+		require.Failf(t, "assertion failed", "ReadAll returned error: %v", err)
 	}
 	if all != content {
-		t.Fatalf("unexpected raw content: %q", all)
+		require.Failf(t, "assertion failed", "unexpected raw content: %q", all)
 	}
 
 	if !IsNoteFile("example.org") || !IsNoteFile("example.norg") {
-		t.Fatal("expected supported note extensions to return true")
+		require.FailNow(t, "expected supported note extensions to return true")
 	}
 	if IsNoteFile("example.json") {
-		t.Fatal("expected unsupported extension to return false")
+		require.FailNow(t, "expected unsupported extension to return false")
 	}
 }
 
@@ -230,20 +232,20 @@ func TestCreateTemporaryNoteAndDeleteNote(t *testing.T) {
 
 	path, err := CreateTemporaryNote(root)
 	if err != nil {
-		t.Fatalf("CreateTemporaryNote returned error: %v", err)
+		require.Failf(t, "assertion failed", "CreateTemporaryNote returned error: %v", err)
 	}
 	if !strings.HasPrefix(path, TempRoot(root)) {
-		t.Fatalf("expected temporary note under temp root, got %q", path)
+		require.Failf(t, "assertion failed", "expected temporary note under temp root, got %q", path)
 	}
 
 	if err := DeleteNote(path); err != nil {
-		t.Fatalf("DeleteNote returned error: %v", err)
+		require.Failf(t, "assertion failed", "DeleteNote returned error: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("expected original note to be gone, stat err=%v", err)
+		require.Failf(t, "assertion failed", "expected original note to be gone, stat err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(xdgData, "Trash", "files", filepath.Base(path))); err != nil {
-		t.Fatalf("expected deleted note in trash, got %v", err)
+		require.Failf(t, "assertion failed", "expected deleted note in trash, got %v", err)
 	}
 }
 
@@ -257,21 +259,21 @@ func TestNotePresentationHelpers(t *testing.T) {
 	}
 
 	if got := n.Title(); got != "daily.md" {
-		t.Fatalf("expected file name fallback title, got %q", got)
+		require.Failf(t, "assertion failed", "expected file name fallback title, got %q", got)
 	}
 	if got := n.Description(); got != "work/daily.md" {
-		t.Fatalf("unexpected description: %q", got)
+		require.Failf(t, "assertion failed", "unexpected description: %q", got)
 	}
 	filter := n.FilterValue()
 	for _, fragment := range []string{"daily.md", "work/daily.md", "preview body", "alpha beta"} {
 		if !strings.Contains(filter, fragment) {
-			t.Fatalf("expected filter value to contain %q, got %q", fragment, filter)
+			require.Failf(t, "assertion failed", "expected filter value to contain %q, got %q", fragment, filter)
 		}
 	}
 
 	n.TitleText = "Daily"
 	if got := n.Title(); got != "Daily" {
-		t.Fatalf("expected explicit title, got %q", got)
+		require.Failf(t, "assertion failed", "expected explicit title, got %q", got)
 	}
 }
 
@@ -280,46 +282,46 @@ func TestCreateTodoNoteAndTodoMutations(t *testing.T) {
 
 	path, err := CreateTodoNote(root, "projects")
 	if err != nil {
-		t.Fatalf("CreateTodoNote returned error: %v", err)
+		require.Failf(t, "assertion failed", "CreateTodoNote returned error: %v", err)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("ReadFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "ReadFile returned error: %v", err)
 	}
 	if string(data) != "# Todo\n\n- [ ] \n" {
-		t.Fatalf("unexpected todo template: %q", string(data))
+		require.Failf(t, "assertion failed", "unexpected todo template: %q", string(data))
 	}
 
 	if err := ToggleTodoLine(path, 2); err != nil {
-		t.Fatalf("ToggleTodoLine returned error: %v", err)
+		require.Failf(t, "assertion failed", "ToggleTodoLine returned error: %v", err)
 	}
 	text := mustRead(t, path)
 	if !strings.Contains(text, "- [x] ") {
-		t.Fatalf("expected toggled todo, got %q", text)
+		require.Failf(t, "assertion failed", "expected toggled todo, got %q", text)
 	}
 
 	if err := EditTodoLine(path, 2, "updated task"); err != nil {
-		t.Fatalf("EditTodoLine returned error: %v", err)
+		require.Failf(t, "assertion failed", "EditTodoLine returned error: %v", err)
 	}
 	text = mustRead(t, path)
 	if !strings.Contains(text, "- [x] updated task") {
-		t.Fatalf("expected edited todo line, got %q", text)
+		require.Failf(t, "assertion failed", "expected edited todo line, got %q", text)
 	}
 
 	if err := AddTodoItem(path, "second task"); err != nil {
-		t.Fatalf("AddTodoItem returned error: %v", err)
+		require.Failf(t, "assertion failed", "AddTodoItem returned error: %v", err)
 	}
 	text = mustRead(t, path)
 	if !strings.Contains(text, "- [ ] second task") {
-		t.Fatalf("expected appended todo item, got %q", text)
+		require.Failf(t, "assertion failed", "expected appended todo item, got %q", text)
 	}
 
 	if err := DeleteTodoLine(path, 3); err != nil {
-		t.Fatalf("DeleteTodoLine returned error: %v", err)
+		require.Failf(t, "assertion failed", "DeleteTodoLine returned error: %v", err)
 	}
 	text = mustRead(t, path)
 	if strings.Contains(text, "second task") {
-		t.Fatalf("expected appended todo item to be deleted, got %q", text)
+		require.Failf(t, "assertion failed", "expected appended todo item to be deleted, got %q", text)
 	}
 }
 
@@ -328,16 +330,16 @@ func TestTodoMutationsRejectInvalidLines(t *testing.T) {
 	writeFile(t, path, "plain text\n")
 
 	if err := ToggleTodoLine(path, 0); err == nil {
-		t.Fatal("expected non-todo line to be rejected")
+		require.FailNow(t, "expected non-todo line to be rejected")
 	}
 	if err := ToggleTodoLine(path, 5); err == nil {
-		t.Fatal("expected out-of-range line to be rejected")
+		require.FailNow(t, "expected out-of-range line to be rejected")
 	}
 	if err := DeleteTodoLine(path, 5); err == nil {
-		t.Fatal("expected out-of-range delete to be rejected")
+		require.FailNow(t, "expected out-of-range delete to be rejected")
 	}
 	if err := EditTodoLine(path, 5, "nope"); err == nil {
-		t.Fatal("expected out-of-range edit to be rejected")
+		require.FailNow(t, "expected out-of-range edit to be rejected")
 	}
 }
 
@@ -363,20 +365,20 @@ func TestDiscoverFindsNotesAndSkipsHiddenDirectories(t *testing.T) {
 
 	got, err := Discover(root)
 	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+		require.Failf(t, "assertion failed", "Discover returned error: %v", err)
 	}
 	if len(got) != 3 {
-		t.Fatalf("expected 3 discovered notes, got %d", len(got))
+		require.Failf(t, "assertion failed", "expected 3 discovered notes, got %d", len(got))
 	}
 
 	if got[0].RelPath != "inbox.md" || got[0].Category != "uncategorized" {
-		t.Fatalf("unexpected root note metadata: %#v", got[0])
+		require.Failf(t, "assertion failed", "unexpected root note metadata: %#v", got[0])
 	}
 	if strings.Join(got[0].Tags, ",") != "alpha,beta" {
-		t.Fatalf("unexpected root note tags: %v", got[0].Tags)
+		require.Failf(t, "assertion failed", "unexpected root note tags: %v", got[0].Tags)
 	}
 	if got[2].RelPath != "work/project.md" || got[2].Category != "work" || !got[2].Encrypted {
-		t.Fatalf("unexpected nested note metadata: %#v", got[2])
+		require.Failf(t, "assertion failed", "unexpected nested note metadata: %#v", got[2])
 	}
 }
 
@@ -385,13 +387,13 @@ func TestDiscoverTemporaryCreatesTempRootAndUsesEmptyCategoryForRoot(t *testing.
 
 	got, err := DiscoverTemporary(root)
 	if err != nil {
-		t.Fatalf("DiscoverTemporary returned error: %v", err)
+		require.Failf(t, "assertion failed", "DiscoverTemporary returned error: %v", err)
 	}
 	if len(got) != 0 {
-		t.Fatalf("expected no temporary notes, got %d", len(got))
+		require.Failf(t, "assertion failed", "expected no temporary notes, got %d", len(got))
 	}
 	if _, err := os.Stat(TempRoot(root)); err != nil {
-		t.Fatalf("expected temp root to be created: %v", err)
+		require.Failf(t, "assertion failed", "expected temp root to be created: %v", err)
 	}
 
 	writeFile(t, filepath.Join(TempRoot(root), "scratch.md"), "# Scratch")
@@ -399,55 +401,55 @@ func TestDiscoverTemporaryCreatesTempRootAndUsesEmptyCategoryForRoot(t *testing.
 
 	got, err = DiscoverTemporary(root)
 	if err != nil {
-		t.Fatalf("DiscoverTemporary returned error: %v", err)
+		require.Failf(t, "assertion failed", "DiscoverTemporary returned error: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("expected 2 temporary notes, got %d", len(got))
+		require.Failf(t, "assertion failed", "expected 2 temporary notes, got %d", len(got))
 	}
 	if got[0].Category != "" {
-		t.Fatalf("expected root temp note to have empty category, got %q", got[0].Category)
+		require.Failf(t, "assertion failed", "expected root temp note to have empty category, got %q", got[0].Category)
 	}
 	if got[1].Category != "today" {
-		t.Fatalf("expected nested temp note category to be today, got %q", got[1].Category)
+		require.Failf(t, "assertion failed", "expected nested temp note category to be today, got %q", got[1].Category)
 	}
 }
 
 func TestDiscoverCategoriesAndMoveCategory(t *testing.T) {
 	root := t.TempDir()
 	if err := CreateCategory(root, "work/projects"); err != nil {
-		t.Fatalf("CreateCategory returned error: %v", err)
+		require.Failf(t, "assertion failed", "CreateCategory returned error: %v", err)
 	}
 	if err := CreateCategory(root, "personal"); err != nil {
-		t.Fatalf("CreateCategory returned error: %v", err)
+		require.Failf(t, "assertion failed", "CreateCategory returned error: %v", err)
 	}
 	if err := CreateCategory(root, ".hidden"); err != nil {
-		t.Fatalf("CreateCategory returned error: %v", err)
+		require.Failf(t, "assertion failed", "CreateCategory returned error: %v", err)
 	}
 
 	cats, err := DiscoverCategories(root)
 	if err != nil {
-		t.Fatalf("DiscoverCategories returned error: %v", err)
+		require.Failf(t, "assertion failed", "DiscoverCategories returned error: %v", err)
 	}
 	if len(cats) != 4 {
-		t.Fatalf("expected 4 categories including virtual root, got %d", len(cats))
+		require.Failf(t, "assertion failed", "expected 4 categories including virtual root, got %d", len(cats))
 	}
 	if cats[0].RelPath != "" || cats[0].Name != "All notes" {
-		t.Fatalf("unexpected virtual root category: %#v", cats[0])
+		require.Failf(t, "assertion failed", "unexpected virtual root category: %#v", cats[0])
 	}
 	for _, cat := range cats {
 		if strings.HasPrefix(cat.RelPath, ".hidden") {
-			t.Fatalf("expected hidden category to be skipped, got %#v", cat)
+			require.Failf(t, "assertion failed", "expected hidden category to be skipped, got %#v", cat)
 		}
 	}
 
 	if err := MoveCategory(root, "work", "archive/work"); err != nil {
-		t.Fatalf("MoveCategory returned error: %v", err)
+		require.Failf(t, "assertion failed", "MoveCategory returned error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "archive", "work", "projects")); err != nil {
-		t.Fatalf("expected moved category tree: %v", err)
+		require.Failf(t, "assertion failed", "expected moved category tree: %v", err)
 	}
 	if err := MoveCategory(root, "archive", "archive/subdir"); err == nil {
-		t.Fatal("expected self-nesting move to be rejected")
+		require.FailNow(t, "expected self-nesting move to be rejected")
 	}
 }
 
@@ -458,16 +460,16 @@ func TestDeleteCategoryMovesDirectoryToTrash(t *testing.T) {
 
 	writeFile(t, filepath.Join(root, "projects", "note.md"), "body")
 	if err := DeleteCategory(root, "projects"); err != nil {
-		t.Fatalf("DeleteCategory returned error: %v", err)
+		require.Failf(t, "assertion failed", "DeleteCategory returned error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "projects")); !os.IsNotExist(err) {
-		t.Fatalf("expected category to be removed from notes root, stat err=%v", err)
+		require.Failf(t, "assertion failed", "expected category to be removed from notes root, stat err=%v", err)
 	}
 	if _, err := os.Stat(filepath.Join(xdgData, "Trash", "files", "projects")); err != nil {
-		t.Fatalf("expected category to be moved to trash: %v", err)
+		require.Failf(t, "assertion failed", "expected category to be moved to trash: %v", err)
 	}
 	if err := DeleteCategory(root, "."); err == nil {
-		t.Fatal("expected root delete to be rejected")
+		require.FailNow(t, "expected root delete to be rejected")
 	}
 }
 
@@ -476,7 +478,7 @@ func mustRead(t *testing.T, path string) string {
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("ReadFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "ReadFile returned error: %v", err)
 	}
 	return string(data)
 }
@@ -485,9 +487,9 @@ func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("MkdirAll returned error: %v", err)
+		require.Failf(t, "assertion failed", "MkdirAll returned error: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 }

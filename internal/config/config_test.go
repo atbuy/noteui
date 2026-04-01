@@ -3,32 +3,22 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDefaultProvidesExpectedBaseline(t *testing.T) {
 	cfg := Default()
 
-	if !cfg.Dashboard {
-		t.Fatal("expected dashboard to be enabled by default")
-	}
-	if cfg.Theme.Name != "default" {
-		t.Fatalf("expected default theme, got %q", cfg.Theme.Name)
-	}
-	if cfg.Theme.BorderStyle != "rounded" {
-		t.Fatalf("expected rounded border style, got %q", cfg.Theme.BorderStyle)
-	}
-	if !cfg.Preview.RenderMarkdown {
-		t.Fatal("expected markdown preview to be enabled by default")
-	}
-	if !cfg.Preview.SyntaxHighlight {
-		t.Fatal("expected syntax highlighting to be enabled by default")
-	}
-	if !cfg.Preview.LineNumbers {
-		t.Fatal("expected line numbers to be enabled by default")
-	}
+	require.True(t, cfg.Dashboard)
+	require.Equal(t, "default", cfg.Theme.Name)
+	require.Equal(t, "rounded", cfg.Theme.BorderStyle)
+	require.True(t, cfg.Preview.RenderMarkdown)
+	require.True(t, cfg.Preview.SyntaxHighlight)
+	require.True(t, cfg.Preview.LineNumbers)
 }
 
 func TestValidateAcceptsValidConfig(t *testing.T) {
@@ -39,9 +29,7 @@ func TestValidateAcceptsValidConfig(t *testing.T) {
 	cfg.Preview.Style = "light"
 	cfg.Preview.CodeStyle = "github"
 
-	if err := Validate(cfg); err != nil {
-		t.Fatalf("Validate returned error for valid config: %v", err)
-	}
+	require.NoError(t, Validate(cfg))
 }
 
 func TestValidateRejectsInvalidValues(t *testing.T) {
@@ -93,12 +81,8 @@ func TestValidateRejectsInvalidValues(t *testing.T) {
 			tt.mutate(&cfg)
 
 			err := Validate(cfg)
-			if err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("expected error containing %q, got %q", tt.wantErr, err)
-			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tt.wantErr)
 		})
 	}
 }
@@ -107,12 +91,8 @@ func TestLoadReturnsDefaultWhenConfigMissing(t *testing.T) {
 	t.Setenv("NOTEUI_CONFIG", filepath.Join(t.TempDir(), "missing.toml"))
 
 	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if !reflect.DeepEqual(cfg, Default()) {
-		t.Fatalf("expected default config, got %#v", cfg)
-	}
+	require.NoError(t, err)
+	require.Empty(t, cmp.Diff(Default(), cfg))
 }
 
 func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
@@ -131,53 +111,29 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 		`line_numbers = false`,
 		"",
 	}, "\n")
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	t.Setenv("NOTEUI_CONFIG", path)
 
 	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if cfg.Dashboard {
-		t.Fatal("expected dashboard override to be applied")
-	}
-	if cfg.Theme.Name != "nord" {
-		t.Fatalf("expected theme override to be applied, got %q", cfg.Theme.Name)
-	}
-	if cfg.Theme.BorderStyle != "double" {
-		t.Fatalf("expected border style override, got %q", cfg.Theme.BorderStyle)
-	}
-	if cfg.Preview.Style != "light" {
-		t.Fatalf("expected preview style override, got %q", cfg.Preview.Style)
-	}
-	if cfg.Preview.CodeStyle != "github" {
-		t.Fatalf("expected code style override, got %q", cfg.Preview.CodeStyle)
-	}
-	if cfg.Preview.LineNumbers {
-		t.Fatal("expected line number override to be applied")
-	}
+	require.NoError(t, err)
+	require.False(t, cfg.Dashboard)
+	require.Equal(t, "nord", cfg.Theme.Name)
+	require.Equal(t, "double", cfg.Theme.BorderStyle)
+	require.Equal(t, "light", cfg.Preview.Style)
+	require.Equal(t, "github", cfg.Preview.CodeStyle)
+	require.False(t, cfg.Preview.LineNumbers)
 }
 
 func TestLoadReturnsDefaultOnParseError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte("[theme\nname = \"nord\"\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("[theme\nname = \"nord\"\n"), 0o644))
 	t.Setenv("NOTEUI_CONFIG", path)
 
 	cfg, err := Load()
-	if err == nil {
-		t.Fatal("expected parse error, got nil")
-	}
-	if !strings.Contains(err.Error(), "config parse error") {
-		t.Fatalf("expected parse error, got %q", err)
-	}
-	if !reflect.DeepEqual(cfg, Default()) {
-		t.Fatalf("expected default config on parse error, got %#v", cfg)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "config parse error")
+	require.Empty(t, cmp.Diff(Default(), cfg))
 }
 
 func TestLoadRejectsUnknownKeys(t *testing.T) {
@@ -188,19 +144,11 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 		`name = "default"`,
 		`unexpected = "value"`,
 	}, "\n")
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	t.Setenv("NOTEUI_CONFIG", path)
 
 	cfg, err := Load()
-	if err == nil {
-		t.Fatal("expected error for unknown keys, got nil")
-	}
-	if !strings.Contains(err.Error(), "unknown config key(s): theme.unexpected") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !reflect.DeepEqual(cfg, Default()) {
-		t.Fatalf("expected default config on error, got %#v", cfg)
-	}
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown config key(s): theme.unexpected")
+	require.Empty(t, cmp.Diff(Default(), cfg))
 }

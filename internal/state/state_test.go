@@ -3,9 +3,10 @@ package state
 import (
 	"os"
 	"path/filepath"
-	"reflect"
-	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStatePathUsesXDGStateHomeWhenSet(t *testing.T) {
@@ -13,14 +14,8 @@ func TestStatePathUsesXDGStateHomeWhenSet(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", xdg)
 
 	path, err := statePath()
-	if err != nil {
-		t.Fatalf("statePath returned error: %v", err)
-	}
-
-	want := filepath.Join(xdg, "noteui", "state.json")
-	if path != want {
-		t.Fatalf("expected %q, got %q", want, path)
-	}
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(xdg, "noteui", "state.json"), path)
 }
 
 func TestStatePathFallsBackToHomeDirectory(t *testing.T) {
@@ -29,26 +24,16 @@ func TestStatePathFallsBackToHomeDirectory(t *testing.T) {
 	t.Setenv("HOME", home)
 
 	path, err := statePath()
-	if err != nil {
-		t.Fatalf("statePath returned error: %v", err)
-	}
-
-	want := filepath.Join(home, ".local", "state", "noteui", "state.json")
-	if path != want {
-		t.Fatalf("expected %q, got %q", want, path)
-	}
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(home, ".local", "state", "noteui", "state.json"), path)
 }
 
 func TestLoadReturnsZeroValueWhenFileMissing(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	s, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if !reflect.DeepEqual(s, State{}) {
-		t.Fatalf("expected zero-value state, got %#v", s)
-	}
+	require.NoError(t, err)
+	require.Empty(t, cmp.Diff(State{}, s))
 }
 
 func TestLoadReturnsZeroValueWhenFileEmpty(t *testing.T) {
@@ -56,20 +41,12 @@ func TestLoadReturnsZeroValueWhenFileEmpty(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", xdg)
 
 	path := filepath.Join(xdg, "noteui", "state.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("MkdirAll returned error: %v", err)
-	}
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, nil, 0o644))
 
 	s, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if !reflect.DeepEqual(s, State{}) {
-		t.Fatalf("expected zero-value state, got %#v", s)
-	}
+	require.NoError(t, err)
+	require.Empty(t, cmp.Diff(State{}, s))
 }
 
 func TestLoadRejectsInvalidJSON(t *testing.T) {
@@ -77,17 +54,11 @@ func TestLoadRejectsInvalidJSON(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", xdg)
 
 	path := filepath.Join(xdg, "noteui", "state.json")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("MkdirAll returned error: %v", err)
-	}
-	if err := os.WriteFile(path, []byte("{not-json"), 0o644); err != nil {
-		t.Fatalf("WriteFile returned error: %v", err)
-	}
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte("{not-json"), 0o644))
 
 	_, err := Load()
-	if err == nil {
-		t.Fatal("expected JSON error, got nil")
-	}
+	require.Error(t, err)
 }
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
@@ -101,15 +72,11 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		SortByModTime:       true,
 	}
 
-	if err := Save(want); err != nil {
-		t.Fatalf("Save returned error: %v", err)
-	}
+	require.NoError(t, Save(want))
 
 	path := filepath.Join(xdg, "noteui", "state.json")
 	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile returned error: %v", err)
-	}
+	require.NoError(t, err)
 	text := string(data)
 	for _, fragment := range []string{
 		`"pinned_notes"`,
@@ -117,25 +84,10 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		`"collapsed_categories"`,
 		`"sort_by_mod_time": true`,
 	} {
-		if !strings.Contains(text, fragment) {
-			t.Fatalf("expected saved state to contain %q, got %q", fragment, text)
-		}
+		require.Contains(t, text, fragment)
 	}
 
 	got, err := Load()
-	if err != nil {
-		t.Fatalf("Load returned error: %v", err)
-	}
-	if strings.Join(got.PinnedNotes, ",") != strings.Join(want.PinnedNotes, ",") {
-		t.Fatalf("expected pinned notes %v, got %v", want.PinnedNotes, got.PinnedNotes)
-	}
-	if strings.Join(got.PinnedCategories, ",") != strings.Join(want.PinnedCategories, ",") {
-		t.Fatalf("expected pinned categories %v, got %v", want.PinnedCategories, got.PinnedCategories)
-	}
-	if strings.Join(got.CollapsedCategories, ",") != strings.Join(want.CollapsedCategories, ",") {
-		t.Fatalf("expected collapsed categories %v, got %v", want.CollapsedCategories, got.CollapsedCategories)
-	}
-	if got.SortByModTime != want.SortByModTime {
-		t.Fatalf("expected SortByModTime %v, got %v", want.SortByModTime, got.SortByModTime)
-	}
+	require.NoError(t, err)
+	require.Empty(t, cmp.Diff(want, got))
 }
