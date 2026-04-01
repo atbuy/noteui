@@ -534,6 +534,16 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		rowFg = selectedFgColor
 		tagFg = selectedFgColor
 		rowBold = boldSelected
+		if item.Kind == treeCategory {
+			rowFg = accentColor
+		}
+		if pinned {
+			if item.Kind == treeCategory {
+				rowFg = accentColor
+			} else {
+				rowFg = pinnedNoteColor
+			}
+		}
 	} else {
 		if item.Kind == treeCategory {
 			rowFg = accentColor
@@ -744,10 +754,14 @@ func (m Model) renderTemporaryListView() string {
 		label := trimOrPad(pinMark+iconNote+" "+n.Title(), rowWidth-2)
 
 		if i == m.tempCursor {
+			fg := selectedFgColor
+			if m.isPinnedTemporaryNote(n.RelPath) {
+				fg = pinnedNoteColor
+			}
 			lines = append(lines, lipgloss.NewStyle().
 				Width(rowWidth).
 				Padding(0, 1).
-				Foreground(selectedFgColor).
+				Foreground(fg).
 				Background(selectedBgColor).
 				Bold(boldSelected).
 				Render(label))
@@ -796,10 +810,14 @@ func (m Model) renderPinsListView() string {
 		plain := trimOrPad(prefix+label, rowWidth-2)
 
 		if i == m.pinsCursor {
+			fg := pinnedNoteColor
+			if item.Kind == pinItemCategory {
+				fg = accentColor
+			}
 			lines = append(lines, lipgloss.NewStyle().
 				Width(rowWidth).
 				Padding(0, 1).
-				Foreground(selectedFgColor).
+				Foreground(fg).
 				Background(selectedBgColor).
 				Bold(boldSelected).
 				Render(plain))

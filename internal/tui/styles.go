@@ -132,7 +132,7 @@ func ApplyTheme(cfg config.Config) {
 		p.InlineCodeBgColor = deriveInlineCodeBgColor(p.PanelBgColor, p.ChipBgColor)
 	}
 	if strings.TrimSpace(p.PinnedNoteColor) == "" {
-		p.PinnedNoteColor = p.SuccessColor
+		p.PinnedNoteColor = p.AccentSoftColor
 	}
 
 	bgColor = lipgloss.Color(p.BgColor)
