@@ -223,6 +223,58 @@ func TestCreateNoteAndReadHelpers(t *testing.T) {
 	}
 }
 
+func TestCreateTemporaryNoteAndDeleteNote(t *testing.T) {
+	root := t.TempDir()
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+
+	path, err := CreateTemporaryNote(root)
+	if err != nil {
+		t.Fatalf("CreateTemporaryNote returned error: %v", err)
+	}
+	if !strings.HasPrefix(path, TempRoot(root)) {
+		t.Fatalf("expected temporary note under temp root, got %q", path)
+	}
+
+	if err := DeleteNote(path); err != nil {
+		t.Fatalf("DeleteNote returned error: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected original note to be gone, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(xdgData, "Trash", "files", filepath.Base(path))); err != nil {
+		t.Fatalf("expected deleted note in trash, got %v", err)
+	}
+}
+
+func TestNotePresentationHelpers(t *testing.T) {
+	n := Note{
+		Name:      "daily.md",
+		RelPath:   "work/daily.md",
+		Preview:   "preview body",
+		Tags:      []string{"alpha", "beta"},
+		TitleText: "",
+	}
+
+	if got := n.Title(); got != "daily.md" {
+		t.Fatalf("expected file name fallback title, got %q", got)
+	}
+	if got := n.Description(); got != "work/daily.md" {
+		t.Fatalf("unexpected description: %q", got)
+	}
+	filter := n.FilterValue()
+	for _, fragment := range []string{"daily.md", "work/daily.md", "preview body", "alpha beta"} {
+		if !strings.Contains(filter, fragment) {
+			t.Fatalf("expected filter value to contain %q, got %q", fragment, filter)
+		}
+	}
+
+	n.TitleText = "Daily"
+	if got := n.Title(); got != "Daily" {
+		t.Fatalf("expected explicit title, got %q", got)
+	}
+}
+
 func TestCreateTodoNoteAndTodoMutations(t *testing.T) {
 	root := t.TempDir()
 
