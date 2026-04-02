@@ -1466,11 +1466,13 @@ func (m Model) renderEncryptConfirmModal() string {
 	yesStyle := lipgloss.NewStyle().
 		Padding(0, 2).
 		Border(lipgloss.RoundedBorder()).
-		BorderBackground(modalBgColor)
+		BorderBackground(modalBgColor).
+		Background(modalBgColor)
 	noStyle := lipgloss.NewStyle().
 		Padding(0, 2).
 		Border(lipgloss.RoundedBorder()).
-		BorderBackground(modalBgColor)
+		BorderBackground(modalBgColor).
+		Background(modalBgColor)
 
 	if m.encryptConfirmYes {
 		yesStyle = yesStyle.
@@ -1492,7 +1494,7 @@ func (m Model) renderEncryptConfirmModal() string {
 
 	yesBtn := yesStyle.Render("Yes")
 	noBtn := noStyle.Render("No")
-	buttons := lipgloss.JoinHorizontal(lipgloss.Top, yesBtn, "  ", noBtn)
+	buttons := lipgloss.JoinHorizontal(lipgloss.Top, yesBtn, m.renderModalBlockGap(2, max(lipgloss.Height(yesBtn), lipgloss.Height(noBtn))), noBtn)
 
 	content := lipgloss.NewStyle().
 		Width(innerWidth).
@@ -1541,10 +1543,26 @@ func (m Model) renderModalFooter(text string, innerWidth int) string {
 }
 
 func (m Model) renderModalBlank(innerWidth int) string {
-	return lipgloss.NewStyle().
-		Width(innerWidth).
+	return m.renderModalGap(innerWidth)
+}
+
+func (m Model) renderModalGap(width int) string {
+	return m.renderModalBlockGap(width, 1)
+}
+
+func (m Model) renderModalBlockGap(width, height int) string {
+	if width <= 0 || height <= 0 {
+		return ""
+	}
+	line := lipgloss.NewStyle().
+		Width(width).
 		Background(modalBgColor).
-		Render("")
+		Render(strings.Repeat(" ", width))
+	lines := make([]string, height)
+	for i := range lines {
+		lines[i] = line
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
 func (m Model) renderModalInputRow(label string, input textinput.Model, innerWidth int) string {

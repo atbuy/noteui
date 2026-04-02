@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 
 	"atbuy/noteui/internal/config"
@@ -693,4 +694,11 @@ func TestNoteSyncVisualStateUsesPendingBeforeStartupSyncCheck(t *testing.T) {
 		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now(), LastSyncedHash: "sha256:ok"},
 	}
 	require.Equal(t, noteSyncVisualPending, m.noteSyncVisualState(&n))
+}
+
+func TestRenderModalGapUsesStyledSpaces(t *testing.T) {
+	m := newTestModel(t)
+	rendered := m.renderModalGap(3)
+	require.Equal(t, "   ", stripANSI(rendered))
+	require.Equal(t, 3, lipgloss.Width(rendered))
 }
