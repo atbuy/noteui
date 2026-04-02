@@ -27,6 +27,10 @@ type keyMap struct {
 	AddTag                   key.Binding
 	ToggleSelect             key.Binding
 	Pin                      key.Binding
+	ToggleSync               key.Binding
+	DeleteRemoteKeepLocal    key.Binding
+	SyncImportCurrent        key.Binding
+	SyncImport               key.Binding
 	TogglePreviewPrivacy     key.Binding
 	TogglePreviewLineNumbers key.Binding
 	SortToggle               key.Binding
@@ -135,6 +139,22 @@ var keys = keyMap{
 	Pin: key.NewBinding(
 		key.WithKeys("p"),
 		key.WithHelp("p", "Pin"),
+	),
+	ToggleSync: key.NewBinding(
+		key.WithKeys("S"),
+		key.WithHelp("S", "Toggle sync"),
+	),
+	DeleteRemoteKeepLocal: key.NewBinding(
+		key.WithKeys("U"),
+		key.WithHelp("U", "Delete remote copy"),
+	),
+	SyncImportCurrent: key.NewBinding(
+		key.WithKeys("i"),
+		key.WithHelp("i", "Import current remote note"),
+	),
+	SyncImport: key.NewBinding(
+		key.WithKeys("I"),
+		key.WithHelp("I", "Import all missing synced notes"),
 	),
 	SortToggle: key.NewBinding(
 		key.WithKeys("s"),
@@ -261,6 +281,10 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.AddTag, cfg.AddTag)
 	apply(&keys.ToggleSelect, cfg.ToggleSelect)
 	apply(&keys.Pin, cfg.Pin)
+	apply(&keys.ToggleSync, cfg.ToggleSync)
+	apply(&keys.DeleteRemoteKeepLocal, cfg.DeleteRemoteKeepLocal)
+	apply(&keys.SyncImportCurrent, cfg.SyncImportCurrent)
+	apply(&keys.SyncImport, cfg.SyncImport)
 	apply(&keys.TogglePreviewPrivacy, cfg.TogglePreviewPrivacy)
 	apply(&keys.TogglePreviewLineNumbers, cfg.TogglePreviewLineNumbers)
 	apply(&keys.SortToggle, cfg.SortToggle)

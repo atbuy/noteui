@@ -510,7 +510,7 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		} else {
 			icon = iconCategoryLeaf
 		}
-	case treeNote:
+	case treeNote, treeRemoteNote:
 		icon = iconNote
 	}
 
@@ -539,9 +539,23 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		encMark = "[enc] "
 	}
 
+	syncMark := ""
+	syncColor := textColor
+	if item.Kind == treeNote && item.Note != nil {
+		syncMark, syncColor = m.noteSyncMarker(item.Note)
+	} else if item.Kind == treeRemoteNote {
+		if m.syncInFlight[item.RelPath] {
+			syncMark, syncColor = m.blinkingSyncMarker()
+		} else {
+			syncMark = "x "
+			syncColor = mutedColor
+		}
+	}
+
 	indent := strings.Repeat("  ", item.Depth)
-	leftPrefix := indent + markPrefix + pinMark + encMark + icon + " "
-	prefixWidth := lipgloss.Width(leftPrefix)
+	leftPrefix := indent + markPrefix + pinMark
+	rightPrefix := encMark + icon + " "
+	prefixWidth := lipgloss.Width(leftPrefix) + lipgloss.Width(syncMark) + lipgloss.Width(rightPrefix)
 
 	var tags []string
 	if item.Kind == treeNote && item.Note != nil {
@@ -584,6 +598,10 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 			}
 		}
 	}
+	if item.Kind == treeRemoteNote {
+		rowFg = mutedColor
+		tagFg = mutedColor
+	}
 	if marked {
 		rowFg = markedItemColor
 		tagFg = markedItemColor
@@ -609,11 +627,19 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		max(0, titleWidth-lipgloss.Width(truncatedTitle)),
 	)
 
-	prefixPart := lipgloss.NewStyle().
+	prefixStyle := lipgloss.NewStyle().
 		Foreground(rowFg).
 		Background(rowBg).
-		Bold(rowBold).
-		Render(leftPrefix)
+		Bold(rowBold)
+	prefixPart := prefixStyle.Render(leftPrefix)
+	if syncMark != "" {
+		prefixPart += lipgloss.NewStyle().
+			Foreground(syncColor).
+			Background(rowBg).
+			Bold(rowBold).
+			Render(syncMark)
+	}
+	prefixPart += prefixStyle.Render(rightPrefix)
 	titlePart := lipgloss.NewStyle().
 		Width(titleWidth).
 		MaxWidth(titleWidth).
@@ -914,6 +940,10 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "rename failed:"),
 		strings.HasPrefix(m.status, "move failed:"),
 		strings.HasPrefix(m.status, "pin failed:"),
+		strings.HasPrefix(m.status, "sync failed:"),
+		strings.HasPrefix(m.status, "toggle sync failed:"),
+		strings.HasPrefix(m.status, "sync import failed:"),
+		strings.HasPrefix(m.status, "remote delete failed:"),
 		strings.HasPrefix(m.status, "todo error:"),
 		strings.HasPrefix(m.status, "encryption failed:"),
 		strings.HasPrefix(m.status, "decryption failed:"),
@@ -1022,6 +1052,11 @@ func (m Model) renderSelectionSegment() string {
 			return "note: ★ " + title
 		}
 		return "note: " + title
+	case treeRemoteNote:
+		if item.RemoteNote == nil {
+			return "remote note"
+		}
+		return "remote note: " + remoteOnlyNoteTitle(*item.RemoteNote)
 	}
 
 	return "selection"

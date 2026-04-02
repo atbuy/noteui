@@ -136,6 +136,34 @@ func (m *Model) refreshPreview() {
 		return
 	}
 
+	if item.Kind == treeRemoteNote && item.RemoteNote != nil {
+		previewKey := "remote:" + item.RemoteNote.ID
+		if m.previewPath == previewKey {
+			return
+		}
+		pathText := filepath.Join("~/notes", filepath.FromSlash(item.RemoteNote.RelPath))
+		content := strings.Join([]string{
+			"# " + remoteOnlyNoteTitle(*item.RemoteNote),
+			"",
+			"This note exists on the server but is not stored locally.",
+			"",
+			"- Path: `" + filepath.ToSlash(item.RemoteNote.RelPath) + "`",
+			"- Status: remote only",
+			"",
+			"Press `i` to import this note or `I` to import all missing synced notes.",
+		}, "\n")
+		rendered := m.renderPreviewMarkdown(pathText, content)
+		m.previewPath = previewKey
+		m.previewContent = rendered
+		m.previewPrivacyForcedByNote = false
+		m.previewLineNumberStart = 0
+		m.setPreviewViewportContent(rendered)
+		m.rebuildPreviewHeadingsFromRendered()
+		m.previewMatches = nil
+		m.preview.GotoTop()
+		return
+	}
+
 	if item.Note == nil {
 		m.previewPath = ""
 		m.previewContent = "No note selected"

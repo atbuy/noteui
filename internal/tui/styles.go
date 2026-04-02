@@ -26,6 +26,9 @@ var (
 	chipBgColor       lipgloss.Color
 	inlineCodeBgColor lipgloss.Color
 	pinnedNoteColor   lipgloss.Color
+	syncedNoteColor   lipgloss.Color
+	unsyncedNoteColor lipgloss.Color
+	syncingNoteColor  lipgloss.Color
 	markedItemColor   lipgloss.Color
 	selectedBgColor   lipgloss.Color
 	selectedFgColor   lipgloss.Color
@@ -96,6 +99,9 @@ type themePalette struct {
 	ChipBgColor       string
 	InlineCodeBgColor string
 	PinnedNoteColor   string
+	SyncedNoteColor   string
+	UnsyncedNoteColor string
+	SyncingNoteColor  string
 	MarkedItemColor   string
 	ErrorColor        string
 	SuccessColor      string
@@ -125,6 +131,9 @@ func ApplyTheme(cfg config.Config) {
 	override(&p.ChipBgColor, cfg.Theme.ChipBgColor)
 	override(&p.InlineCodeBgColor, cfg.Theme.InlineCodeBgColor)
 	override(&p.PinnedNoteColor, cfg.Theme.PinnedNoteColor)
+	override(&p.SyncedNoteColor, cfg.Theme.SyncedNoteColor)
+	override(&p.UnsyncedNoteColor, cfg.Theme.UnsyncedNoteColor)
+	override(&p.SyncingNoteColor, cfg.Theme.SyncingNoteColor)
 	override(&p.MarkedItemColor, cfg.Theme.MarkedItemColor)
 	override(&p.ErrorColor, cfg.Theme.ErrorColor)
 	override(&p.SuccessColor, cfg.Theme.SuccessColor)
@@ -138,6 +147,15 @@ func ApplyTheme(cfg config.Config) {
 	}
 	if strings.TrimSpace(p.PinnedNoteColor) == "" {
 		p.PinnedNoteColor = p.AccentSoftColor
+	}
+	if strings.TrimSpace(p.SyncedNoteColor) == "" {
+		p.SyncedNoteColor = p.SuccessColor
+	}
+	if strings.TrimSpace(p.UnsyncedNoteColor) == "" {
+		p.UnsyncedNoteColor = p.ErrorColor
+	}
+	if strings.TrimSpace(p.SyncingNoteColor) == "" {
+		p.SyncingNoteColor = "#F59E0B"
 	}
 	if strings.TrimSpace(p.MarkedItemColor) == "" {
 		p.MarkedItemColor = "#E5A524"
@@ -155,6 +173,9 @@ func ApplyTheme(cfg config.Config) {
 	chipBgColor = lipgloss.Color(p.ChipBgColor)
 	inlineCodeBgColor = lipgloss.Color(p.InlineCodeBgColor)
 	pinnedNoteColor = lipgloss.Color(p.PinnedNoteColor)
+	syncedNoteColor = lipgloss.Color(p.SyncedNoteColor)
+	unsyncedNoteColor = lipgloss.Color(p.UnsyncedNoteColor)
+	syncingNoteColor = lipgloss.Color(p.SyncingNoteColor)
 	markedItemColor = lipgloss.Color(p.MarkedItemColor)
 	errorColor = lipgloss.Color(p.ErrorColor)
 	successColor = lipgloss.Color(p.SuccessColor)

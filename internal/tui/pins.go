@@ -7,6 +7,7 @@ import (
 
 	"atbuy/noteui/internal/notes"
 	"atbuy/noteui/internal/state"
+	notesync "atbuy/noteui/internal/sync"
 )
 
 func (m *Model) togglePinCurrent() error {
@@ -110,6 +111,9 @@ func (m *Model) togglePinCurrent() error {
 			m.pinnedNotes[item.Note.RelPath] = true
 			m.status = "pinned note: " + item.Note.Title()
 		}
+	case treeRemoteNote:
+		m.status = "note is only on the server; press i to import it or I to import all"
+		return nil
 	}
 
 	if err := m.saveTreeState(); err != nil {
@@ -153,7 +157,13 @@ func (m *Model) saveTreeState() error {
 	m.syncStateFromPins()
 	m.syncStateFromExpanded()
 	m.state.SortByModTime = m.sortByModTime
-	return state.Save(m.state)
+	if err := state.Save(m.state); err != nil {
+		return err
+	}
+	if notesync.HasSyncProfile(m.cfg.Sync) && len(m.notes) > 0 {
+		return notesync.SavePinsFromRelPaths(m.rootDir, m.notes, m.state.PinnedNotes, m.state.PinnedCategories)
+	}
+	return nil
 }
 
 func (m *Model) pruneCategoryStateToExisting() {

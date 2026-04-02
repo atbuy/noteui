@@ -29,6 +29,7 @@ The config supports these top-level keys:
 - `modal`
 - `preview`
 - `keys`
+- `sync`
 
 ## `dashboard`
 
@@ -59,6 +60,9 @@ Supported fields include:
 - `chip_bg_color`
 - `inline_code_bg_color`
 - `pinned_note_color`
+- `synced_note_color`
+- `unsynced_note_color`
+- `syncing_note_color`
 - `marked_item_color`
 - `error_color`
 - `success_color`
@@ -168,9 +172,59 @@ Recognized `preview.code_style` values include:
 - `paraiso-dark`
 - `paraiso-light`
 
+## `sync`
+
+Sync is optional. If `sync.default_profile` is unset, noteui does not attempt network sync.
+
+Supported fields:
+
+- `default_profile`
+- `profiles.<name>.ssh_host`
+- `profiles.<name>.remote_root`
+- `profiles.<name>.remote_bin`
+
+Example:
+
+```toml
+[sync]
+default_profile = "homebox"
+
+[sync.profiles.homebox]
+ssh_host = "notes-prod"
+remote_root = "/srv/noteui"
+remote_bin = "/usr/local/bin/noteui-sync"
+```
+
+Notes are selected for sync per file with frontmatter:
+
+```yaml
+---
+sync: synced
+---
+```
+
+If the field is missing, or set to `local`, the note stays local-only and uses a hollow marker in `theme.unsynced_note_color`.
+
+For synced notes, the tree marker semantics are:
+
+- `theme.synced_note_color`: the note has a confirmed healthy remote state
+- `theme.syncing_note_color`: a sync, import, or remote-delete action is currently in flight for that note
+- `theme.unsynced_note_color`: the note is synced in intent, but its current remote state is not confirmed healthy
+
+On startup, noteui treats synced notes as unconfirmed until the first remote check completes. This prevents stale local metadata from showing a green marker before the current remote state has been verified.
+
+On a second machine, configure the same sync profile and use `sync_import_current` to import the selected remote-only note, or `sync_import` to pull all missing synced notes from the remote and initialize `.noteui-sync/` as needed. noteui refreshes only remote note metadata automatically; remote-only notes stay as muted placeholders in the tree until imported. The same action also restores deleted synced notes inside an existing root, but it skips any remote note whose target path already exists locally. To stop syncing one local note while keeping the file, use `delete_remote_keep_local` on a synced local note; this deletes the remote copy and switches the local file back to `sync: local`.
+
 ## `keys`
 
 The `keys` section allows overriding default keybindings. Each field takes a list of key strings.
+
+Useful sync-related defaults:
+
+- `toggle_sync = ["S"]`
+- `delete_remote_keep_local = ["U"]`
+- `sync_import_current = ["i"]`
+- `sync_import = ["I"]`
 
 Supported fields include:
 
@@ -192,6 +246,10 @@ Supported fields include:
 - `add_tag`
 - `toggle_select`
 - `pin`
+- `toggle_sync`
+- `delete_remote_keep_local`
+- `sync_import_current`
+- `sync_import`
 - `toggle_preview_privacy`
 - `toggle_preview_line_numbers`
 - `sort_toggle`
@@ -217,30 +275,3 @@ Supported fields include:
 - `scroll_page_down`
 - `scroll_page_up`
 - `toggle_encryption`
-
-## Example config
-
-!!! tip
-
-    Start small. You do not need to define every section. Add only the values you want to override and let noteui keep the rest at defaults.
-
-```toml
-dashboard = true
-
-[theme]
-name = "nord"
-border_style = "rounded"
-
-[preview]
-render_markdown = true
-style = "dark"
-syntax_highlight = true
-code_style = "monokai"
-privacy = false
-line_numbers = true
-
-[keys]
-open = ["enter", "o"]
-search = ["/"]
-show_help = ["?"]
-```

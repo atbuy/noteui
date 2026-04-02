@@ -24,13 +24,9 @@ func ParseFrontMatter(raw string) (FrontMatter, string, error) {
 	body := rest[end+len("\n---\n"):]
 
 	fm := make(FrontMatter)
-
 	for _, line := range strings.Split(block, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "#") {
+		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
 
@@ -42,7 +38,6 @@ func ParseFrontMatter(raw string) (FrontMatter, string, error) {
 		key = normalizeFrontMatterKey(key)
 		value = strings.TrimSpace(value)
 		value = strings.Trim(value, `"'`)
-
 		if key == "" {
 			continue
 		}
@@ -74,6 +69,27 @@ func FrontMatterBool(fm FrontMatter, key string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func FrontMatterString(fm FrontMatter, key string) string {
+	if len(fm) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(fm[normalizeFrontMatterKey(key)])
+}
+
+const (
+	SyncClassLocal  = "local"
+	SyncClassSynced = "synced"
+)
+
+func ParseSyncClass(fm FrontMatter) string {
+	switch strings.ToLower(FrontMatterString(fm, "sync")) {
+	case SyncClassSynced:
+		return SyncClassSynced
+	default:
+		return SyncClassLocal
 	}
 }
 
@@ -136,9 +152,48 @@ func AddTagsToNote(path string, tags []string) error {
 		return nil
 	}
 
-	line := "tags: " + strings.Join(merged, ", ")
-	updated := setFrontMatterField(normalizedRaw, body, "tags", line)
+	updated := setFrontMatterField(normalizedRaw, body, "tags", "tags: "+strings.Join(merged, ", "))
 	return os.WriteFile(path, []byte(updated), 0o644)
+}
+
+func SetNoteSyncClass(path, syncClass string) error {
+	raw, err := ReadAll(path)
+	if err != nil {
+		return err
+	}
+
+	normalizedRaw := strings.ReplaceAll(raw, "\r\n", "\n")
+	_, body, err := ParseFrontMatter(normalizedRaw)
+	if err != nil {
+		return err
+	}
+
+	value := SyncClassLocal
+	if strings.EqualFold(strings.TrimSpace(syncClass), SyncClassSynced) {
+		value = SyncClassSynced
+	}
+
+	updated := setFrontMatterField(normalizedRaw, body, "sync", "sync: "+value)
+	return os.WriteFile(path, []byte(updated), 0o644)
+}
+
+func ToggleNoteSyncClass(path string) (string, error) {
+	raw, err := ReadAll(path)
+	if err != nil {
+		return "", err
+	}
+
+	fm, _, err := ParseFrontMatter(strings.ReplaceAll(raw, "\r\n", "\n"))
+	if err != nil {
+		return "", err
+	}
+
+	next := SyncClassSynced
+	if ParseSyncClass(fm) == SyncClassSynced {
+		next = SyncClassLocal
+	}
+
+	return next, SetNoteSyncClass(path, next)
 }
 
 func mergeTags(existing, incoming []string) []string {
@@ -184,13 +239,15 @@ func setFrontMatterField(raw, body, key, fieldLine string) string {
 	}
 
 	block := rest[:end]
-	var lines []string
+	lines := make([]string, 0, strings.Count(block, "\n")+1)
 	for _, line := range strings.Split(block, "\n") {
 		if idx := strings.Index(line, ":"); idx >= 0 {
-			k := normalizeFrontMatterKey(line[:idx])
-			if k == normalizedKey {
+			if normalizeFrontMatterKey(line[:idx]) == normalizedKey {
 				continue
 			}
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
 		}
 		lines = append(lines, line)
 	}

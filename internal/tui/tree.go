@@ -10,6 +10,7 @@ import (
 
 	"atbuy/noteui/internal/editor"
 	"atbuy/noteui/internal/notes"
+	notesync "atbuy/noteui/internal/sync"
 )
 
 func (m *Model) rebuildTree() {
@@ -124,6 +125,20 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 			MatchHint: hint,
 		})
 	}
+
+	for _, n := range m.directChildRemoteNotes(parent) {
+		if query != "" && !m.remoteNoteMatches(n, query) {
+			continue
+		}
+		remoteCopy := n
+		*out = append(*out, treeItem{
+			Kind:       treeRemoteNote,
+			Name:       remoteOnlyNoteTitle(n),
+			RelPath:    n.RelPath,
+			Depth:      depth,
+			RemoteNote: &remoteCopy,
+		})
+	}
 }
 
 func (m Model) directChildNotes(parent string) []notes.Note {
@@ -153,18 +168,55 @@ func (m Model) directChildNotes(parent string) []notes.Note {
 	return out
 }
 
-func (m Model) directChildCategories(parent string) []notes.Category {
-	out := make([]notes.Category, 0)
-	for _, c := range m.categories {
-		if c.RelPath == "" {
-			continue
-		}
-		dir := filepath.Dir(c.RelPath)
+func (m Model) directChildRemoteNotes(parent string) []notesync.RemoteNoteMeta {
+	out := make([]notesync.RemoteNoteMeta, 0)
+	for _, n := range m.remoteOnlyNotes {
+		dir := filepath.Dir(n.RelPath)
 		if dir == "." {
 			dir = ""
 		}
 		if dir == parent {
-			out = append(out, c)
+			out = append(out, n)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].RelPath == out[j].RelPath {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].RelPath < out[j].RelPath
+	})
+	return out
+}
+
+func (m Model) remoteNoteMatches(n notesync.RemoteNoteMeta, query string) bool {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return true
+	}
+	for term := range strings.FieldsSeq(q) {
+		if !strings.Contains(strings.ToLower(remoteOnlyNoteTitle(n)), term) && !strings.Contains(strings.ToLower(n.RelPath), term) {
+			return false
+		}
+	}
+	return true
+}
+
+func (m Model) directChildCategories(parent string) []notes.Category {
+	out := make([]notes.Category, 0)
+	seen := make(map[string]bool)
+	for _, source := range [][]notes.Category{m.categories, m.remoteCategories} {
+		for _, c := range source {
+			if c.RelPath == "" || seen[c.RelPath] {
+				continue
+			}
+			dir := filepath.Dir(c.RelPath)
+			if dir == "." {
+				dir = ""
+			}
+			if dir == parent {
+				out = append(out, c)
+				seen[c.RelPath] = true
+			}
 		}
 	}
 
@@ -174,8 +226,6 @@ func (m Model) directChildCategories(parent string) []notes.Category {
 		if pi != pj {
 			return pi
 		}
-		// Categories always sort alphabetically regardless of sort mode
-		// since they don't have a meaningful mod time.
 		return out[i].RelPath < out[j].RelPath
 	})
 
@@ -237,10 +287,11 @@ func (m Model) categoryMatches(c notes.Category, query string) bool {
 func (m Model) categorySubtreeMatches(relPath, query string) bool {
 	prefix := relPath + string(filepath.Separator)
 
-	for _, c := range m.categories {
-		if c.RelPath != relPath && strings.HasPrefix(c.RelPath, prefix) &&
-			m.categoryMatches(c, query) {
-			return true
+	for _, source := range [][]notes.Category{m.categories, m.remoteCategories} {
+		for _, c := range source {
+			if c.RelPath != relPath && strings.HasPrefix(c.RelPath, prefix) && m.categoryMatches(c, query) {
+				return true
+			}
 		}
 	}
 	for _, n := range m.notes {
@@ -250,6 +301,17 @@ func (m Model) categorySubtreeMatches(relPath, query string) bool {
 		}
 		if dir == relPath || strings.HasPrefix(dir, prefix) {
 			if m.noteMatches(n, query) {
+				return true
+			}
+		}
+	}
+	for _, n := range m.remoteOnlyNotes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == relPath || strings.HasPrefix(dir, prefix) {
+			if m.remoteNoteMatches(n, query) {
 				return true
 			}
 		}
@@ -385,6 +447,10 @@ func (m *Model) activateCurrentItem() tea.Cmd {
 		m.toggleCurrentCategory()
 		return nil
 	}
+	if item.Kind == treeRemoteNote {
+		m.status = "note is only on the server; press i to import it or I to import all"
+		return nil
+	}
 
 	if item.Note != nil {
 		if item.Note.Encrypted {
@@ -412,7 +478,7 @@ func (m *Model) selectTreeCategory(relPath string) {
 func (m *Model) selectTreeNote(relPath string) {
 	m.rebuildTree()
 	for i, item := range m.treeItems {
-		if item.Kind == treeNote && item.RelPath == relPath {
+		if (item.Kind == treeNote || item.Kind == treeRemoteNote) && item.RelPath == relPath {
 			m.treeCursor = i
 			m.syncSelectedNote()
 			return
@@ -494,15 +560,26 @@ func (m *Model) collapseCurrentCategory() {
 
 func (m Model) categoryHasChildren(relPath string) bool {
 	if relPath == "" {
-		return len(m.directChildCategories("")) > 0 || len(m.directChildNotes("")) > 0
+		return len(m.directChildCategories("")) > 0 || len(m.directChildNotes("")) > 0 || len(m.directChildRemoteNotes("")) > 0
 	}
 	prefix := relPath + string(filepath.Separator)
-	for _, c := range m.categories {
-		if c.RelPath != relPath && strings.HasPrefix(c.RelPath, prefix) {
-			return true
+	for _, source := range [][]notes.Category{m.categories, m.remoteCategories} {
+		for _, c := range source {
+			if c.RelPath != relPath && strings.HasPrefix(c.RelPath, prefix) {
+				return true
+			}
 		}
 	}
 	for _, n := range m.notes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == relPath {
+			return true
+		}
+	}
+	for _, n := range m.remoteOnlyNotes {
 		dir := filepath.Dir(n.RelPath)
 		if dir == "." {
 			dir = ""
@@ -532,6 +609,12 @@ func (m Model) currentTargetDir() string {
 			return ""
 		}
 		return dir
+	case treeRemoteNote:
+		dir := filepath.Dir(item.RelPath)
+		if dir == "." {
+			return ""
+		}
+		return dir
 	default:
 		return ""
 	}
@@ -539,11 +622,20 @@ func (m Model) currentTargetDir() string {
 
 func (m Model) countNotesUnder(relPath string) int {
 	if relPath == "" {
-		return len(m.notes)
+		return len(m.notes) + len(m.remoteOnlyNotes)
 	}
 	prefix := relPath + string(filepath.Separator)
 	count := 0
 	for _, n := range m.notes {
+		dir := filepath.Dir(n.RelPath)
+		if dir == "." {
+			dir = ""
+		}
+		if dir == relPath || strings.HasPrefix(dir, prefix) {
+			count++
+		}
+	}
+	for _, n := range m.remoteOnlyNotes {
 		dir := filepath.Dir(n.RelPath)
 		if dir == "." {
 			dir = ""
@@ -557,16 +649,20 @@ func (m Model) countNotesUnder(relPath string) int {
 
 func (m Model) countChildCategories(relPath string) int {
 	count := 0
-	for _, c := range m.categories {
-		if c.RelPath == "" {
-			continue
-		}
-		dir := filepath.Dir(c.RelPath)
-		if dir == "." {
-			dir = ""
-		}
-		if dir == relPath {
-			count++
+	seen := make(map[string]bool)
+	for _, source := range [][]notes.Category{m.categories, m.remoteCategories} {
+		for _, c := range source {
+			if c.RelPath == "" {
+				continue
+			}
+			dir := filepath.Dir(c.RelPath)
+			if dir == "." {
+				dir = ""
+			}
+			if dir == relPath && !seen[c.RelPath] {
+				seen[c.RelPath] = true
+				count++
+			}
 		}
 	}
 	return count

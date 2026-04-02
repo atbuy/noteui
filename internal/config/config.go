@@ -20,6 +20,18 @@ type Config struct {
 	Modal      ModalConfig      `toml:"modal"`
 	Preview    PreviewConfig    `toml:"preview"`
 	Keys       KeysConfig       `toml:"keys"`
+	Sync       SyncConfig       `toml:"sync"`
+}
+
+type SyncConfig struct {
+	DefaultProfile string                 `toml:"default_profile"`
+	Profiles       map[string]SyncProfile `toml:"profiles"`
+}
+
+type SyncProfile struct {
+	SSHHost    string `toml:"ssh_host"`
+	RemoteRoot string `toml:"remote_root"`
+	RemoteBin  string `toml:"remote_bin"`
 }
 
 type ThemeConfig struct {
@@ -37,6 +49,9 @@ type ThemeConfig struct {
 	ChipBgColor       string `toml:"chip_bg_color"`
 	InlineCodeBgColor string `toml:"inline_code_bg_color"`
 	PinnedNoteColor   string `toml:"pinned_note_color"`
+	SyncedNoteColor   string `toml:"synced_note_color"`
+	UnsyncedNoteColor string `toml:"unsynced_note_color"`
+	SyncingNoteColor  string `toml:"syncing_note_color"`
 	MarkedItemColor   string `toml:"marked_item_color"`
 	ErrorColor        string `toml:"error_color"`
 	SuccessColor      string `toml:"success_color"`
@@ -108,6 +123,10 @@ type KeysConfig struct {
 	AddTag                   []string `toml:"add_tag"`
 	ToggleSelect             []string `toml:"toggle_select"`
 	Pin                      []string `toml:"pin"`
+	ToggleSync               []string `toml:"toggle_sync"`
+	DeleteRemoteKeepLocal    []string `toml:"delete_remote_keep_local"`
+	SyncImportCurrent        []string `toml:"sync_import_current"`
+	SyncImport               []string `toml:"sync_import"`
 	TogglePreviewPrivacy     []string `toml:"toggle_preview_privacy"`
 	TogglePreviewLineNumbers []string `toml:"toggle_preview_line_numbers"`
 	SortToggle               []string `toml:"sort_toggle"`
@@ -172,6 +191,12 @@ func Default() Config {
 			CodeStyle:       "monokai",
 			Privacy:         false,
 			LineNumbers:     true,
+		},
+		Keys: KeysConfig{
+			ToggleSync:            []string{"S"},
+			DeleteRemoteKeepLocal: []string{"U"},
+			SyncImportCurrent:     []string{"i"},
+			SyncImport:            []string{"I"},
 		},
 	}
 }
@@ -244,6 +269,27 @@ func Validate(cfg Config) error {
 			"invalid preview.code_style %q (valid examples: monokai, github, dracula, swapoff, onesenterprise)",
 			cfg.Preview.CodeStyle,
 		)
+	}
+
+	for name, profile := range cfg.Sync.Profiles {
+		if strings.TrimSpace(name) == "" {
+			return errors.New("sync profile name cannot be empty")
+		}
+		if strings.TrimSpace(profile.SSHHost) == "" {
+			return fmt.Errorf("sync profile %q is missing ssh_host", name)
+		}
+		if strings.TrimSpace(profile.RemoteRoot) == "" {
+			return fmt.Errorf("sync profile %q is missing remote_root", name)
+		}
+		if strings.TrimSpace(profile.RemoteBin) == "" {
+			return fmt.Errorf("sync profile %q is missing remote_bin", name)
+		}
+	}
+
+	if cfg.Sync.DefaultProfile != "" {
+		if _, ok := cfg.Sync.Profiles[cfg.Sync.DefaultProfile]; !ok {
+			return fmt.Errorf("unknown sync.default_profile %q", cfg.Sync.DefaultProfile)
+		}
 	}
 
 	return nil

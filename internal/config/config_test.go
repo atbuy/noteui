@@ -19,6 +19,10 @@ func TestDefaultProvidesExpectedBaseline(t *testing.T) {
 	require.True(t, cfg.Preview.RenderMarkdown)
 	require.True(t, cfg.Preview.SyntaxHighlight)
 	require.True(t, cfg.Preview.LineNumbers)
+	require.Equal(t, []string{"S"}, cfg.Keys.ToggleSync)
+	require.Equal(t, []string{"U"}, cfg.Keys.DeleteRemoteKeepLocal)
+	require.Equal(t, []string{"i"}, cfg.Keys.SyncImportCurrent)
+	require.Equal(t, []string{"I"}, cfg.Keys.SyncImport)
 }
 
 func TestValidateAcceptsValidConfig(t *testing.T) {
@@ -104,11 +108,28 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 		"[theme]",
 		`name = "nord"`,
 		`border_style = "double"`,
+		`synced_note_color = "#22c55e"`,
+		`unsynced_note_color = "#ef4444"`,
+		`syncing_note_color = "#f59e0b"`,
 		"",
 		"[preview]",
 		`style = "light"`,
 		`code_style = "github"`,
 		`line_numbers = false`,
+		"",
+		"[keys]",
+		`toggle_sync = ["gs"]`,
+		`delete_remote_keep_local = ["gu"]`,
+		`sync_import_current = ["ii"]`,
+		`sync_import = ["gi"]`,
+		"",
+		"[sync]",
+		`default_profile = "homebox"`,
+		"",
+		"[sync.profiles.homebox]",
+		`ssh_host = "notes-prod"`,
+		`remote_root = "/srv/noteui"`,
+		`remote_bin = "/usr/local/bin/noteui-sync"`,
 		"",
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
@@ -122,6 +143,35 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 	require.Equal(t, "light", cfg.Preview.Style)
 	require.Equal(t, "github", cfg.Preview.CodeStyle)
 	require.False(t, cfg.Preview.LineNumbers)
+	require.Equal(t, "#22c55e", cfg.Theme.SyncedNoteColor)
+	require.Equal(t, "#ef4444", cfg.Theme.UnsyncedNoteColor)
+	require.Equal(t, "#f59e0b", cfg.Theme.SyncingNoteColor)
+	require.Equal(t, []string{"gs"}, cfg.Keys.ToggleSync)
+	require.Equal(t, []string{"gu"}, cfg.Keys.DeleteRemoteKeepLocal)
+	require.Equal(t, []string{"ii"}, cfg.Keys.SyncImportCurrent)
+	require.Equal(t, []string{"gi"}, cfg.Keys.SyncImport)
+	require.Equal(t, "homebox", cfg.Sync.DefaultProfile)
+	require.Equal(t, "notes-prod", cfg.Sync.Profiles["homebox"].SSHHost)
+}
+
+func TestValidateRejectsUnknownDefaultSyncProfile(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "missing"
+
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `unknown sync.default_profile "missing"`)
+}
+
+func TestValidateRejectsIncompleteSyncProfile(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"homebox": {SSHHost: "notes-prod"},
+	}
+
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `sync profile "homebox" is missing remote_root`)
 }
 
 func TestLoadReturnsDefaultOnParseError(t *testing.T) {

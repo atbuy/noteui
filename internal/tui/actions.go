@@ -68,6 +68,10 @@ func (m *Model) armMoveCurrent() {
 	if item == nil {
 		return
 	}
+	if item.Kind == treeRemoteNote {
+		m.status = "note is only on the server; press i to import it or I to import all"
+		return
+	}
 
 	m.openMoveBrowser()
 }
@@ -168,6 +172,8 @@ func (m *Model) armDeleteCurrent() {
 			name:    item.Note.Name,
 		}
 		m.status = "press d again to trash note: " + item.Note.Name
+	case treeRemoteNote:
+		m.status = "note is only on the server; press i to import it or I to import all"
 	}
 }
 
@@ -276,6 +282,8 @@ func (m *Model) armRenameCurrent() {
 		m.renameInput.Focus()
 		m.renameInput.CursorEnd()
 		m.status = "rename category"
+	case treeRemoteNote:
+		m.status = "note is only on the server; press i to import it or I to import all"
 	}
 }
 
@@ -416,15 +424,23 @@ func (m Model) currentCategoryPrefix() string {
 		return ""
 	}
 
-	if item.Kind == treeCategory {
+	switch item.Kind {
+	case treeCategory:
 		if item.RelPath == "" {
 			return ""
 		}
 		return item.RelPath + string(filepath.Separator)
-	}
-
-	if item.Note != nil {
+	case treeNote:
+		if item.Note == nil {
+			return ""
+		}
 		dir := filepath.Dir(item.Note.RelPath)
+		if dir == "." || dir == "" {
+			return ""
+		}
+		return dir + string(filepath.Separator)
+	case treeRemoteNote:
+		dir := filepath.Dir(item.RelPath)
 		if dir == "." || dir == "" {
 			return ""
 		}
@@ -433,21 +449,6 @@ func (m Model) currentCategoryPrefix() string {
 
 	return ""
 }
-
-func (m *Model) armAddTagCurrent() {
-	path := m.currentNotePath()
-	if path == "" {
-		m.status = "no note selected"
-		return
-	}
-
-	m.showAddTag = true
-	m.tagInput.SetValue("")
-	m.tagInput.Focus()
-	m.tagInput.CursorEnd()
-	m.status = "add tag"
-}
-
 func parseTagInput(value string) []string {
 	parts := strings.Split(value, ",")
 	out := make([]string, 0, len(parts))
@@ -465,6 +466,22 @@ func parseTagInput(value string) []string {
 		out = append(out, tag)
 	}
 	return out
+}
+
+func (m *Model) armAddTagCurrent() {
+	if m.blockRemoteOnlyAction() {
+		return
+	}
+	path := m.currentNotePath()
+	if path == "" {
+		m.status = "no note selected"
+		return
+	}
+	m.showAddTag = true
+	m.tagInput.SetValue("")
+	m.tagInput.Focus()
+	m.tagInput.CursorEnd()
+	m.status = "add tag"
 }
 
 func (m Model) currentNotePath() string {
@@ -495,6 +512,9 @@ func (m Model) currentNotePath() string {
 }
 
 func (m *Model) armToggleEncryption() {
+	if m.blockRemoteOnlyAction() {
+		return
+	}
 	path := m.currentNotePath()
 	if path == "" {
 		m.status = "no note selected"

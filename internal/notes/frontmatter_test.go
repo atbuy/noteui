@@ -79,6 +79,37 @@ func TestNotePrivacyAndEncryptionFlags(t *testing.T) {
 	}
 }
 
+func TestParseSyncClassDefaultsToLocal(t *testing.T) {
+	fm := FrontMatter{}
+	require.Equal(t, SyncClassLocal, ParseSyncClass(fm))
+	fm["sync"] = "synced"
+	require.Equal(t, SyncClassSynced, ParseSyncClass(fm))
+	fm["sync"] = "bogus"
+	require.Equal(t, SyncClassLocal, ParseSyncClass(fm))
+}
+
+func TestToggleNoteSyncClassRewritesFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.md")
+	require.NoError(t, os.WriteFile(path, []byte("# Heading\n\nBody\n"), 0o644))
+
+	next, err := ToggleNoteSyncClass(path)
+	require.NoError(t, err)
+	require.Equal(t, SyncClassSynced, next)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), "sync: synced")
+
+	next, err = ToggleNoteSyncClass(path)
+	require.NoError(t, err)
+	require.Equal(t, SyncClassLocal, next)
+
+	raw, err = os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), "sync: local")
+}
+
 func TestMergeTagsNormalizesAndDeduplicates(t *testing.T) {
 	got := mergeTags([]string{"work", "Urgent"}, []string{"#urgent", " personal ", "", "Work"})
 	if strings.Join(got, ",") != "work,Urgent,personal" {

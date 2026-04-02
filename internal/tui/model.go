@@ -17,6 +17,7 @@ import (
 	"atbuy/noteui/internal/editor"
 	"atbuy/noteui/internal/notes"
 	"atbuy/noteui/internal/state"
+	notesync "atbuy/noteui/internal/sync"
 )
 
 type (
@@ -56,6 +57,7 @@ const (
 const (
 	treeCategory treeItemKind = iota
 	treeNote
+	treeRemoteNote
 )
 
 const (
@@ -183,14 +185,15 @@ type previewTodoItem struct {
 }
 
 type treeItem struct {
-	Kind      treeItemKind
-	Name      string
-	RelPath   string
-	Depth     int
-	Expanded  bool
-	Note      *notes.Note
-	Category  *notes.Category
-	MatchHint string
+	Kind       treeItemKind
+	Name       string
+	RelPath    string
+	Depth      int
+	Expanded   bool
+	Note       *notes.Note
+	RemoteNote *notesync.RemoteNoteMeta
+	Category   *notes.Category
+	MatchHint  string
 }
 
 type pinItem struct {
@@ -207,6 +210,11 @@ func (t treeItem) key() string {
 		return "c:" + t.RelPath
 	case treeNote:
 		return "n:" + t.RelPath
+	case treeRemoteNote:
+		if t.RemoteNote != nil {
+			return "r:" + t.RemoteNote.ID
+		}
+		return "r:" + t.RelPath
 	default:
 		return t.RelPath
 	}
@@ -216,14 +224,16 @@ type Model struct {
 	rootDir string
 	version string
 
-	notes           []notes.Note
-	categories      []notes.Category
-	expanded        map[string]bool
-	tempNotes       []notes.Note
-	tempCursor      int
-	pinsCursor      int
-	listMode        listMode
-	lastNonPinsMode listMode
+	notes            []notes.Note
+	categories       []notes.Category
+	remoteOnlyNotes  []notesync.RemoteNoteMeta
+	remoteCategories []notes.Category
+	expanded         map[string]bool
+	tempNotes        []notes.Note
+	tempCursor       int
+	pinsCursor       int
+	listMode         listMode
+	lastNonPinsMode  listMode
 
 	treeItems       []treeItem
 	treeCursor      int
@@ -233,6 +243,7 @@ type Model struct {
 	height          int
 	previewWidth    int
 	status          string
+	deferredStatus  string
 
 	cfg                    config.Config
 	preview                viewport.Model
@@ -330,7 +341,16 @@ type Model struct {
 
 	startupError string
 
-	sortByModTime bool
+	sortByModTime            bool
+	syncDebounceToken        int
+	syncRunning              bool
+	syncSpinnerFrame         int
+	syncRecords              map[string]notesync.NoteRecord
+	syncInFlight             map[string]bool
+	startupSyncChecked       bool
+	pendingSyncedPinRelPaths []string
+	pendingSyncedCategories  []string
+	applyPendingSyncedPins   bool
 }
 
 type dataLoadedMsg struct {
@@ -357,6 +377,7 @@ type noteTaggedMsg struct {
 }
 
 type helpMouseResumeMsg struct{}
+type syncSpinnerTickMsg struct{}
 
 func disableMouseCmd() tea.Cmd {
 	return func() tea.Msg { return tea.DisableMouse() }
@@ -369,6 +390,12 @@ func enableMouseCellMotionCmd() tea.Cmd {
 func helpMouseResumeCmd() tea.Cmd {
 	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg {
 		return helpMouseResumeMsg{}
+	})
+}
+
+func syncSpinnerCmd() tea.Cmd {
+	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
+		return syncSpinnerTickMsg{}
 	})
 }
 
@@ -442,6 +469,19 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	for _, p := range st.PinnedCategories {
 		pinnedCats[p] = true
 	}
+	if notesync.HasSyncProfile(cfg.Sync) {
+		if syncedNotes, syncedCats, err := notesync.LoadPinnedRelPaths(root); err == nil {
+			for _, p := range syncedNotes {
+				pinnedNotes[p] = true
+			}
+			if syncedCats != nil {
+				pinnedCats = make(map[string]bool, len(syncedCats))
+				for _, p := range syncedCats {
+					pinnedCats[p] = true
+				}
+			}
+		}
+	}
 
 	expanded := map[string]bool{
 		"": true,
@@ -481,6 +521,9 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		previewLineNumbersEnabled: cfg.Preview.LineNumbers,
 		showDashboard:             cfg.Dashboard,
 		sortByModTime:             st.SortByModTime,
+		syncRecords:               map[string]notesync.NoteRecord{},
+		syncInFlight:              map[string]bool{},
+		startupSyncChecked:        !notesync.HasSyncProfile(cfg.Sync),
 	}
 }
 
@@ -488,7 +531,318 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		refreshAllCmd(m.rootDir),
 		startWatchTeaCmd(m.rootDir),
+		startSyncCmd(),
 	)
+}
+
+func (m *Model) refreshSyncRecords() {
+	m.syncRecords = map[string]notesync.NoteRecord{}
+	if !notesync.HasSyncProfile(m.cfg.Sync) {
+		return
+	}
+	records, err := notesync.LoadNoteRecords(m.rootDir)
+	if err != nil {
+		return
+	}
+	for _, rec := range records {
+		relPath := filepath.ToSlash(strings.TrimSpace(rec.RelPath))
+		if relPath == "" {
+			continue
+		}
+		m.syncRecords[relPath] = rec
+	}
+}
+
+func (m Model) pendingSyncRelPaths() map[string]bool {
+	out := make(map[string]bool)
+	for _, note := range m.notes {
+		if note.SyncClass != notes.SyncClassSynced {
+			continue
+		}
+		relPath := filepath.ToSlash(note.RelPath)
+		rec, ok := m.syncRecords[relPath]
+		if !ok || rec.Conflict != nil || strings.TrimSpace(rec.LastSyncError) != "" || rec.LastSyncAt.IsZero() {
+			out[relPath] = true
+			continue
+		}
+		raw, err := notes.ReadAll(note.Path)
+		if err != nil {
+			out[relPath] = true
+			continue
+		}
+		if rec.LastSyncedHash != notesync.HashContent(raw) || rec.Encrypted != note.Encrypted {
+			out[relPath] = true
+		}
+	}
+	return out
+}
+
+func (m *Model) startSyncRun() tea.Cmd {
+	if m.syncRunning || !notesync.HasSyncProfile(m.cfg.Sync) {
+		return nil
+	}
+	m.syncRunning = true
+	m.syncSpinnerFrame = 0
+	m.syncInFlight = m.pendingSyncRelPaths()
+	return batchCmds(
+		syncNowCmd(m.rootDir, m.cfg.Sync, m.localPinnedNoteKeys(), m.localPinnedCategories()),
+		syncSpinnerCmd(),
+	)
+}
+
+func (m *Model) finishSyncRun() {
+	m.syncRunning = false
+	m.syncSpinnerFrame = 0
+	m.syncInFlight = map[string]bool{}
+	m.refreshSyncRecords()
+}
+
+func (m *Model) startSyncVisual(relPaths ...string) tea.Cmd {
+	if len(relPaths) == 0 {
+		return nil
+	}
+	if len(m.syncInFlight) == 0 {
+		m.syncSpinnerFrame = 0
+	}
+	if m.syncInFlight == nil {
+		m.syncInFlight = map[string]bool{}
+	}
+	for _, relPath := range relPaths {
+		relPath = filepath.ToSlash(strings.TrimSpace(relPath))
+		if relPath == "" {
+			continue
+		}
+		m.syncInFlight[relPath] = true
+	}
+	if len(m.syncInFlight) == 0 {
+		return nil
+	}
+	return syncSpinnerCmd()
+}
+
+type noteSyncVisualState int
+
+const (
+	noteSyncVisualLocal noteSyncVisualState = iota
+	noteSyncVisualPending
+	noteSyncVisualSyncing
+	noteSyncVisualHealthy
+)
+
+func (m Model) noteSyncVisualState(note *notes.Note) noteSyncVisualState {
+	if note == nil {
+		return noteSyncVisualLocal
+	}
+	relPath := filepath.ToSlash(strings.TrimSpace(note.RelPath))
+	if note.SyncClass != notes.SyncClassSynced {
+		return noteSyncVisualLocal
+	}
+	if m.syncInFlight[relPath] {
+		return noteSyncVisualSyncing
+	}
+	if !m.startupSyncChecked {
+		return noteSyncVisualPending
+	}
+	rec, ok := m.syncRecords[relPath]
+	if !ok {
+		return noteSyncVisualPending
+	}
+	if rec.Conflict != nil || strings.TrimSpace(rec.LastSyncError) != "" || rec.LastSyncAt.IsZero() {
+		return noteSyncVisualPending
+	}
+	return noteSyncVisualHealthy
+}
+
+func (m Model) blinkingSyncMarker() (string, lipgloss.Color) {
+	if m.syncSpinnerFrame%2 == 0 {
+		return "● ", syncingNoteColor
+	}
+	return "◌ ", syncingNoteColor
+}
+
+func (m Model) noteSyncMarker(note *notes.Note) (string, lipgloss.Color) {
+	switch m.noteSyncVisualState(note) {
+	case noteSyncVisualLocal:
+		return "○ ", unsyncedNoteColor
+	case noteSyncVisualHealthy:
+		return "● ", syncedNoteColor
+	case noteSyncVisualSyncing:
+		return m.blinkingSyncMarker()
+	default:
+		return "● ", unsyncedNoteColor
+	}
+}
+
+func (m *Model) setRemoteOnlyNotes(items []notesync.RemoteNoteMeta) bool {
+	normalized := normalizeRemoteOnlyNotes(items)
+	if remoteNoteMetaSlicesEqual(m.remoteOnlyNotes, normalized) {
+		return false
+	}
+	m.remoteOnlyNotes = normalized
+	m.remoteCategories = remoteCategoriesFromNotes(normalized)
+	return true
+}
+
+func normalizeRemoteOnlyNotes(items []notesync.RemoteNoteMeta) []notesync.RemoteNoteMeta {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]notesync.RemoteNoteMeta, 0, len(items))
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		item.ID = strings.TrimSpace(item.ID)
+		item.RelPath = filepath.ToSlash(strings.TrimSpace(item.RelPath))
+		item.Title = strings.TrimSpace(item.Title)
+		if item.ID == "" || item.RelPath == "" || seen[item.ID] {
+			continue
+		}
+		seen[item.ID] = true
+		out = append(out, item)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].RelPath == out[j].RelPath {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].RelPath < out[j].RelPath
+	})
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func remoteNoteMetaSlicesEqual(a, b []notesync.RemoteNoteMeta) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func remoteCategoriesFromNotes(items []notesync.RemoteNoteMeta) []notes.Category {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(items))
+	out := make([]notes.Category, 0, len(items))
+	for _, item := range items {
+		dir := filepath.Dir(item.RelPath)
+		for dir != "." && dir != "" {
+			dir = filepath.ToSlash(dir)
+			if !seen[dir] {
+				seen[dir] = true
+				out = append(out, notes.Category{Name: filepath.Base(dir), RelPath: dir, Depth: strings.Count(dir, "/")})
+			}
+			next := filepath.Dir(dir)
+			if next == dir {
+				break
+			}
+			dir = next
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].RelPath < out[j].RelPath })
+	return out
+}
+
+func (m Model) currentRemoteOnlyNote() *notesync.RemoteNoteMeta {
+	if m.listMode != listModeNotes {
+		return nil
+	}
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeRemoteNote || item.RemoteNote == nil {
+		return nil
+	}
+	return item.RemoteNote
+}
+
+func (m *Model) blockRemoteOnlyAction() bool {
+	remote := m.currentRemoteOnlyNote()
+	if remote == nil {
+		return false
+	}
+	m.status = "note is only on the server; press i to import it or I to import all"
+	return true
+}
+
+func remoteOnlyNoteTitle(meta notesync.RemoteNoteMeta) string {
+	if strings.TrimSpace(meta.Title) != "" {
+		return meta.Title
+	}
+	return filepath.Base(meta.RelPath)
+}
+
+func batchCmds(cmds ...tea.Cmd) tea.Cmd {
+	var out []tea.Cmd
+	for _, cmd := range cmds {
+		if cmd != nil {
+			out = append(out, cmd)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	if len(out) == 1 {
+		return out[0]
+	}
+	return tea.Batch(out...)
+}
+
+func (m *Model) scheduleSync() tea.Cmd {
+	if !notesync.HasSyncProfile(m.cfg.Sync) {
+		return nil
+	}
+	m.syncDebounceToken++
+	return syncDebounceCmd(m.syncDebounceToken)
+}
+
+func (m Model) localPinnedNoteKeys() []string {
+	out := make([]string, 0, len(m.pinnedNotes))
+	for p := range m.pinnedNotes {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (m Model) localPinnedCategories() []string {
+	out := make([]string, 0, len(m.pinnedCats))
+	for p := range m.pinnedCats {
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func (m *Model) applySyncedPins(noteRelPaths, cats []string) {
+	syncedSet := make(map[string]bool, len(m.notes))
+	for _, note := range m.notes {
+		if note.SyncClass == notes.SyncClassSynced {
+			syncedSet[note.RelPath] = true
+		}
+	}
+	newPinned := make(map[string]bool, len(m.pinnedNotes)+len(noteRelPaths))
+	for k, v := range m.pinnedNotes {
+		if strings.HasPrefix(k, ".tmp/") || !syncedSet[k] {
+			newPinned[k] = v
+		}
+	}
+	for _, relPath := range noteRelPaths {
+		newPinned[relPath] = true
+	}
+	m.pinnedNotes = newPinned
+	if cats != nil {
+		m.pinnedCats = make(map[string]bool, len(cats))
+		for _, relPath := range cats {
+			m.pinnedCats[relPath] = true
+		}
+	}
+	m.syncStateFromPins()
+	m.rebuildTree()
+	m.syncSelectedNote()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -541,7 +895,93 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case syncStartMsg:
+		return m, m.startSyncRun()
+
+	case syncDebouncedMsg:
+		if msg.token != m.syncDebounceToken || m.syncRunning {
+			return m, nil
+		}
+		return m, m.startSyncRun()
+
+	case syncSpinnerTickMsg:
+		if !m.syncRunning && len(m.syncInFlight) == 0 {
+			return m, nil
+		}
+		m.syncSpinnerFrame++
+		if !m.syncRunning && len(m.syncInFlight) == 0 {
+			return m, nil
+		}
+		return m, syncSpinnerCmd()
+
+	case syncFinishedMsg:
+		m.startupSyncChecked = true
+		m.finishSyncRun()
+		if msg.err != nil {
+			if notesync.HasSyncProfile(m.cfg.Sync) {
+				m.status = "sync failed: " + msg.err.Error()
+			}
+			return m, nil
+		}
+		placeholdersChanged := m.setRemoteOnlyNotes(msg.result.RemoteOnlyNotes)
+		if msg.result.PinnedNoteRelPaths != nil || msg.result.PinnedCategories != nil {
+			m.applySyncedPins(msg.result.PinnedNoteRelPaths, msg.result.PinnedCategories)
+		}
+		if msg.result.NotesChanged {
+			m.deferredStatus = "sync updated local notes"
+			return m, refreshAllCmd(m.rootDir)
+		}
+		if msg.result.PinsChanged {
+			m.status = "sync updated pins"
+			return m, nil
+		}
+		if msg.result.RegisteredNotes > 0 || msg.result.UpdatedNotes > 0 || msg.result.Conflicts > 0 {
+			m.status = fmt.Sprintf("sync complete: %d registered, %d updated, %d conflicts", msg.result.RegisteredNotes, msg.result.UpdatedNotes, msg.result.Conflicts)
+			if placeholdersChanged {
+				m.rebuildTree()
+			}
+			return m, nil
+		}
+		if placeholdersChanged {
+			m.rebuildTree()
+		}
+		return m, nil
+
+	case syncImportFinishedMsg:
+		if m.syncRunning || len(m.syncInFlight) > 0 {
+			m.finishSyncRun()
+		}
+		if msg.err != nil {
+			m.status = "sync import failed: " + msg.err.Error()
+			return m, nil
+		}
+		placeholdersChanged := m.setRemoteOnlyNotes(msg.result.RemoteOnlyNotes)
+		status := "sync import complete: remote is empty"
+		switch {
+		case msg.result.ImportedNotes > 0 && msg.result.SkippedImports > 0:
+			status = fmt.Sprintf("sync import complete: %d notes, %d skipped", msg.result.ImportedNotes, msg.result.SkippedImports)
+		case msg.result.ImportedNotes > 0:
+			status = fmt.Sprintf("sync import complete: %d notes", msg.result.ImportedNotes)
+		case msg.result.SkippedImports > 0:
+			status = fmt.Sprintf("sync import complete: %d skipped", msg.result.SkippedImports)
+		case msg.result.PinsChanged:
+			status = "sync import updated pins"
+		}
+		if msg.result.ImportedNotes > 0 || msg.result.PinsChanged {
+			m.pendingSyncedPinRelPaths = msg.result.PinnedNoteRelPaths
+			m.pendingSyncedCategories = msg.result.PinnedCategories
+			m.applyPendingSyncedPins = true
+			m.deferredStatus = status
+			return m, refreshAllCmd(m.rootDir)
+		}
+		m.status = status
+		if placeholdersChanged {
+			m.rebuildTree()
+		}
+		return m, nil
+
 	case todoModifiedMsg:
+
 		if msg.err != nil {
 			m.status = "todo error: " + msg.err.Error()
 			return m, nil
@@ -549,7 +989,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.pendingTodoCursor = m.previewTodoCursor
 		m.previewPath = ""
 		m.status = "todo updated"
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case helpMouseResumeMsg:
 		if !m.helpMouseSuppressed {
@@ -638,7 +1078,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		_ = m.saveTreeState()
 		m.preserveCursor = m.treeCursor
 		m.status = "moved note: " + msg.newRelPath
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case noteRenamedMsg:
 		if msg.err != nil {
@@ -651,9 +1091,41 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.renameInput.SetValue("")
 		m.preserveCursor = m.treeCursor
 		m.status = "renamed note: " + filepath.Base(msg.newPath)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+
+	case remoteNoteDeletedMsg:
+		if m.syncRunning || len(m.syncInFlight) > 0 {
+			m.finishSyncRun()
+		}
+		if msg.err != nil {
+			m.status = "remote delete failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.previewPath = ""
+		m.deferredStatus = "deleted remote copy; note kept locally"
 		return m, refreshAllCmd(m.rootDir)
 
+	case noteSyncClassToggledMsg:
+		if msg.err != nil {
+			m.status = "toggle sync failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.previewPath = ""
+		m.status = "note sync: " + msg.syncClass
+		if msg.syncClass == notes.SyncClassSynced {
+			relPath, err := filepath.Rel(m.rootDir, msg.path)
+			if err == nil {
+				return m, batchCmds(
+					refreshAllCmd(m.rootDir),
+					m.startSyncVisual(filepath.ToSlash(relPath)),
+					m.scheduleSync(),
+				)
+			}
+		}
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+
 	case noteTaggedMsg:
+
 		if msg.err != nil {
 			m.status = "add tag failed: " + msg.err.Error()
 			return m, nil
@@ -668,7 +1140,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf("added %d tags", len(msg.tags))
 		}
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case categoryRenamedMsg:
 		if msg.err != nil {
@@ -683,7 +1155,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.rewriteCategoryStateSubtree(msg.oldRelPath, msg.newRelPath)
 		_ = m.saveTreeState()
 		m.status = "renamed category: " + msg.newRelPath
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case categoryMovedMsg:
 		if msg.err != nil {
@@ -698,7 +1170,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.rewriteCategoryStateSubtree(msg.oldRelPath, msg.newRelPath)
 		_ = m.saveTreeState()
 		m.status = "moved category: " + msg.newRelPath
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case batchMovedMsg:
 		if msg.err != nil {
@@ -722,7 +1194,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf("moved %d items", len(msg.items))
 		}
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case noteDeletedMsg:
 		if msg.err != nil {
@@ -732,7 +1204,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.deletePending = nil
 		m.preserveCursor = m.treeCursor
 		m.status = "deleted note: " + msg.path
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case categoryDeletedMsg:
 		if msg.err != nil {
@@ -744,7 +1216,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.removeCategoryStateSubtree(msg.relPath)
 		_ = m.saveTreeState()
 		m.status = "deleted category: " + msg.relPath
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case dataLoadedMsg:
 		if msg.err != nil {
@@ -755,6 +1227,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.notes = msg.notes
 		m.tempNotes = msg.tempNotes
 		m.categories = msg.categories
+		m.refreshSyncRecords()
+		if m.syncRunning {
+			m.syncInFlight = m.pendingSyncRelPaths()
+		}
 
 		m.pruneCategoryStateToExisting()
 		m.pruneMarkedTreeItems()
@@ -770,6 +1246,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		m.rebuildTree()
+		if m.applyPendingSyncedPins {
+			m.applySyncedPins(m.pendingSyncedPinRelPaths, m.pendingSyncedCategories)
+			m.pendingSyncedPinRelPaths = nil
+			m.pendingSyncedCategories = nil
+			m.applyPendingSyncedPins = false
+		}
 
 		if len(m.tempNotes) == 0 {
 			m.tempCursor = 0
@@ -787,7 +1269,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		m.syncSelectedNote()
 
-		if len(msg.notes) > 0 {
+		if m.deferredStatus != "" {
+			m.status = m.deferredStatus
+			m.deferredStatus = ""
+		} else if len(msg.notes) > 0 {
 			m.status = fmt.Sprintf("loaded %d notes", len(msg.notes))
 		} else {
 			m.status = "no notes found"
@@ -800,7 +1285,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = "created: " + msg.path
-		return m, tea.Batch(refreshAllCmd(m.rootDir), editor.Open(msg.path))
+		return m, batchCmds(refreshAllCmd(m.rootDir), editor.Open(msg.path), m.scheduleSync())
 
 	case categoryCreatedMsg:
 		if msg.err != nil {
@@ -811,7 +1296,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.categoryInput.Blur()
 		m.categoryInput.SetValue("")
 		m.status = "created category: " + msg.relPath
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case previewLockedMsg:
 		if msg.path != m.previewPath {
@@ -835,7 +1320,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.status = "note encrypted"
 		m.previewPath = ""
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case decryptNoteMsg:
 		if msg.err != nil {
@@ -844,7 +1329,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.status = "note decrypted"
 		m.previewPath = ""
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case openEncryptedNoteReadyMsg:
 		if msg.err != nil {
@@ -863,7 +1348,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, refreshAllCmd(m.rootDir)
 		}
 		m.status = "note saved and re-encrypted"
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case editor.FinishedMsg:
 		if msg.Err != nil {
@@ -886,7 +1371,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		// Empty file with temp name was deleted.
 		if newPath == "" && !renamed {
 			m.status = "note discarded"
-			return m, refreshAllCmd(m.rootDir)
+			return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 		}
 
 		if renamed {
@@ -895,7 +1380,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.status = "editor closed"
 		}
 
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case watchStartedMsg:
 		if msg.err != nil {
@@ -912,12 +1397,13 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.pendingTodoCursor = m.previewTodoCursor
 		m.previewPath = ""
 		if m.watchEvents != nil {
-			return m, tea.Batch(
+			return m, batchCmds(
 				refreshAllCmd(m.rootDir),
 				waitForWatchTeaCmd(m.watchEvents),
+				m.scheduleSync(),
 			)
 		}
-		return m, refreshAllCmd(m.rootDir)
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case watchErrorMsg:
 		if msg.err != nil {
@@ -1879,8 +2365,61 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if key.Matches(msg, keys.Pin) {
 			if err := m.togglePinCurrent(); err != nil {
 				m.status = "pin failed: " + err.Error()
+				return m, nil
 			}
-			return m, nil
+			return m, m.scheduleSync()
+		}
+
+		if key.Matches(msg, keys.ToggleSync) {
+			item := m.currentTreeItem()
+			if item != nil && item.Kind == treeRemoteNote {
+				m.status = "note is only on the server; press i to import it or I to import all"
+				return m, nil
+			}
+			if item == nil || item.Kind != treeNote || item.Note == nil {
+				m.status = "sync toggle only works on notes"
+				return m, nil
+			}
+			return m, toggleNoteSyncCmd(item.Note.Path)
+		}
+
+		if key.Matches(msg, keys.DeleteRemoteKeepLocal) {
+			item := m.currentTreeItem()
+			if item == nil || item.Kind != treeNote || item.Note == nil {
+				m.status = "remote delete only works on synced local notes"
+				return m, nil
+			}
+			if item.Note.SyncClass != notes.SyncClassSynced {
+				m.status = "remote delete only works on synced local notes"
+				return m, nil
+			}
+			if _, ok := m.syncRecords[filepath.ToSlash(item.Note.RelPath)]; !ok {
+				m.status = "note is not linked to a remote copy"
+				return m, nil
+			}
+			m.status = "deleting remote copy..."
+			return m, batchCmds(
+				deleteRemoteNoteKeepLocalCmd(m.rootDir, item.Note.Path, m.cfg.Sync),
+				m.startSyncVisual(item.Note.RelPath),
+			)
+		}
+
+		if key.Matches(msg, keys.SyncImportCurrent) {
+			item := m.currentTreeItem()
+			if item == nil || item.Kind != treeRemoteNote || item.RemoteNote == nil {
+				m.status = "single-note import only works on remote notes"
+				return m, nil
+			}
+			m.status = "importing remote note..."
+			return m, batchCmds(
+				importCurrentSyncedNoteCmd(m.rootDir, m.cfg.Sync, item.RemoteNote.ID),
+				m.startSyncVisual(item.RelPath),
+			)
+		}
+
+		if key.Matches(msg, keys.SyncImport) {
+			m.status = "importing synced notes..."
+			return m, importSyncedNotesCmd(m.rootDir, m.cfg.Sync)
 		}
 
 		if key.Matches(msg, keys.CreateCategory) {
@@ -1898,7 +2437,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.Refresh) {
 			m.status = "refreshing..."
-			return m, refreshAllCmd(m.rootDir)
+			return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 		}
 
 		if key.Matches(msg, keys.NewTemporaryNote) {

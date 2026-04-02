@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/notes"
+	notesync "atbuy/noteui/internal/sync"
 )
 
 func configForApply() config.KeysConfig {
@@ -526,12 +528,15 @@ func TestRenderTreeLineNote(t *testing.T) {
 	m.pinnedNotes = map[string]bool{}
 	m.pinnedCats = map[string]bool{}
 	m.markedTreeItems = map[string]bool{}
-	n := notes.Note{RelPath: "work/note.md", Name: "note.md", TitleText: "My Note"}
+	n := notes.Note{RelPath: "work/note.md", Name: "note.md", TitleText: "My Note", SyncClass: notes.SyncClassSynced}
 	item := treeItem{Kind: treeNote, RelPath: "work/note.md", Name: "My Note", Note: &n, Depth: 0}
 	rendered := m.renderTreeLine(item, false)
 	plain := stripANSI(rendered)
 	if !strings.Contains(plain, "My Note") {
 		require.Failf(t, "assertion failed", "expected 'My Note' in tree line, got %q", plain)
+	}
+	if !strings.Contains(plain, "●") {
+		require.Failf(t, "assertion failed", "expected synced marker in tree line, got %q", plain)
 	}
 }
 
@@ -549,4 +554,143 @@ func TestRenderTreeLineCategory(t *testing.T) {
 	if !strings.Contains(plain, "work") {
 		require.Failf(t, "assertion failed", "expected 'work' in category tree line, got %q", plain)
 	}
+}
+
+func TestRenderTreeLineLocalNoteMarker(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	m.pinnedNotes = map[string]bool{}
+	m.pinnedCats = map[string]bool{}
+	m.markedTreeItems = map[string]bool{}
+	n := notes.Note{RelPath: "work/local.md", Name: "local.md", TitleText: "Local Note", SyncClass: notes.SyncClassLocal}
+	item := treeItem{Kind: treeNote, RelPath: "work/local.md", Name: "Local Note", Note: &n, Depth: 0}
+	rendered := m.renderTreeLine(item, false)
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "○") {
+		require.Failf(t, "assertion failed", "expected local marker in tree line, got %q", plain)
+	}
+}
+
+func TestNoteSyncVisualStateUsesHealthyRecord(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now()},
+	}
+	require.Equal(t, noteSyncVisualHealthy, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncVisualStateUsesPendingWhenLastSyncFailed(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now(), LastSyncError: "network down"},
+	}
+	require.Equal(t, noteSyncVisualPending, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncVisualStateUsesSyncingWhenInFlight(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
+	m.syncInFlight = map[string]bool{"work/note.md": true}
+	require.Equal(t, noteSyncVisualSyncing, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncMarkerBlinksWhileRunning(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
+	m.syncInFlight = map[string]bool{"work/note.md": true}
+	m.syncSpinnerFrame = 0
+	mark, _ := m.noteSyncMarker(&n)
+	require.Equal(t, "● ", mark)
+	m.syncSpinnerFrame = 1
+	mark, _ = m.noteSyncMarker(&n)
+	require.Equal(t, "◌ ", mark)
+}
+
+func TestPendingSyncRelPathsOnlyMarksDirtyNotes(t *testing.T) {
+	m := newTestModel(t)
+	healthyPath := m.rootDir + "/healthy.md"
+	dirtyPath := m.rootDir + "/dirty.md"
+	require.NoError(t, os.WriteFile(healthyPath, []byte("healthy"), 0o644))
+	require.NoError(t, os.WriteFile(dirtyPath, []byte("dirty-new"), 0o644))
+	m.notes = []notes.Note{
+		{Path: healthyPath, RelPath: "healthy.md", SyncClass: notes.SyncClassSynced, Encrypted: false},
+		{Path: dirtyPath, RelPath: "dirty.md", SyncClass: notes.SyncClassSynced, Encrypted: false},
+	}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"healthy.md": {RelPath: "healthy.md", LastSyncAt: time.Now(), LastSyncedHash: notesync.HashContent("healthy"), Encrypted: false},
+		"dirty.md":   {RelPath: "dirty.md", LastSyncAt: time.Now(), LastSyncedHash: notesync.HashContent("dirty-old"), Encrypted: false},
+	}
+	pending := m.pendingSyncRelPaths()
+	require.False(t, pending["healthy.md"])
+	require.True(t, pending["dirty.md"])
+}
+
+func TestNoteSyncMarkerUsesHollowCircleForLocalNotes(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/local.md", SyncClass: notes.SyncClassLocal}
+	mark, _ := m.noteSyncMarker(&n)
+	require.Equal(t, "○ ", mark)
+}
+
+func TestNoteSyncMarkerUsesFilledCircleForPendingSync(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
+	mark, _ := m.noteSyncMarker(&n)
+	require.Equal(t, "● ", mark)
+}
+
+func TestRenderTreeLineRemoteOnlyNoteUsesMutedXMarker(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}, Depth: 0}
+	rendered := m.renderTreeLine(item, false)
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "x")
+	require.Contains(t, plain, "Remote Note")
+}
+
+func TestCurrentCategoryPrefixRemoteOnlyNote(t *testing.T) {
+	m := newTestModel(t)
+	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}
+	m.treeItems = []treeItem{item}
+	m.treeCursor = 0
+	require.Equal(t, "work/", m.currentCategoryPrefix())
+}
+
+func TestCurrentNotePathRemoteOnlyNoteIsEmpty(t *testing.T) {
+	m := newTestModel(t)
+	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}
+	m.treeItems = []treeItem{item}
+	m.treeCursor = 0
+	require.Equal(t, "", m.currentNotePath())
+}
+
+func TestRenderTreeLineRemoteOnlyNoteBlinksWhileImporting(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.syncInFlight = map[string]bool{"work/remote.md": true}
+	m.syncSpinnerFrame = 0
+	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}
+	rendered := m.renderTreeLine(item, false)
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "●")
+
+	m.syncSpinnerFrame = 1
+	rendered = m.renderTreeLine(item, false)
+	plain = stripANSI(rendered)
+	require.Contains(t, plain, "◌")
+}
+
+func TestNoteSyncVisualStateUsesPendingBeforeStartupSyncCheck(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
+	m.startupSyncChecked = false
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now(), LastSyncedHash: "sha256:ok"},
+	}
+	require.Equal(t, noteSyncVisualPending, m.noteSyncVisualState(&n))
 }

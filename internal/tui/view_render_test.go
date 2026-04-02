@@ -18,6 +18,20 @@ func TestRenderStatusContainsMessage(t *testing.T) {
 	}
 }
 
+func TestRenderStatusUsesErrorStyleForSyncFailures(t *testing.T) {
+	m := newTestModel(t)
+	m.status = "sync failed: network down"
+	line := strings.Join([]string{
+		m.renderModeSegment(),
+		m.renderSelectionSegment(),
+		m.renderPrivacySegment(),
+		m.renderSortSegment(),
+		m.status,
+	}, "  •  ")
+	rendered := m.renderStatus()
+	assert.Equal(t, statusErrStyle.Render(line), rendered)
+}
+
 func TestRenderModeSegmentHelp(t *testing.T) {
 	m := newTestModel(t)
 	m.showDashboard = false
@@ -223,4 +237,22 @@ func TestRenderSortSegmentAlpha(t *testing.T) {
 	if got := m.renderSortSegment(); got != "sort: alpha" {
 		require.Failf(t, "assertion failed", "expected 'sort: alpha', got %q", got)
 	}
+}
+
+func TestRenderStatusLineTreatsSyncImportFailureAsError(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.status = "sync import failed: remote unavailable"
+	rendered := m.renderStatus()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "sync import failed: remote unavailable")
+}
+
+func TestRenderStatusLineTreatsRemoteDeleteFailureAsError(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.status = "remote delete failed: remote unavailable"
+	rendered := m.renderStatus()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "remote delete failed: remote unavailable")
 }

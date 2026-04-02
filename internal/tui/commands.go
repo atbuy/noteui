@@ -1,11 +1,15 @@
 package tui
 
 import (
+	"context"
 	"os"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/notes"
+	notesync "atbuy/noteui/internal/sync"
 )
 
 func refreshAllCmd(root string) tea.Cmd {
@@ -229,5 +233,82 @@ func startWatchTeaCmd(root string) tea.Cmd {
 func waitForWatchTeaCmd(events <-chan teaMsg) tea.Cmd {
 	return func() tea.Msg {
 		return waitForWatchCmd(events)()
+	}
+}
+
+type syncStartMsg struct{}
+type syncDebouncedMsg struct{ token int }
+
+type syncFinishedMsg struct {
+	result notesync.SyncResult
+	err    error
+}
+
+type syncImportFinishedMsg struct {
+	result notesync.SyncResult
+	err    error
+}
+
+type noteSyncClassToggledMsg struct {
+	path      string
+	syncClass string
+	err       error
+}
+
+type remoteNoteDeletedMsg struct {
+	path string
+	err  error
+}
+
+func startSyncCmd() tea.Cmd {
+	return func() tea.Msg { return syncStartMsg{} }
+}
+
+func syncDebounceCmd(token int) tea.Cmd {
+	return tea.Tick(750*time.Millisecond, func(time.Time) tea.Msg {
+		return syncDebouncedMsg{token: token}
+	})
+}
+
+func syncNowCmd(root string, cfg config.SyncConfig, pinnedNotes []string, pinnedCats []string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		result, err := notesync.SyncRoot(ctx, root, cfg, pinnedNotes, pinnedCats, nil)
+		return syncFinishedMsg{result: result, err: err}
+	}
+}
+
+func toggleNoteSyncCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		syncClass, err := notes.ToggleNoteSyncClass(path)
+		return noteSyncClassToggledMsg{path: path, syncClass: syncClass, err: err}
+	}
+}
+
+func deleteRemoteNoteKeepLocalCmd(root, path string, cfg config.SyncConfig) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := notesync.DeleteRemoteNoteAndKeepLocal(ctx, root, path, cfg, nil)
+		return remoteNoteDeletedMsg{path: path, err: err}
+	}
+}
+
+func importCurrentSyncedNoteCmd(root string, cfg config.SyncConfig, noteID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		result, err := notesync.ImportRemoteNote(ctx, root, cfg, noteID, nil)
+		return syncImportFinishedMsg{result: result, err: err}
+	}
+}
+
+func importSyncedNotesCmd(root string, cfg config.SyncConfig) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		result, err := notesync.ImportRemoteNotes(ctx, root, cfg, nil)
+		return syncImportFinishedMsg{result: result, err: err}
 	}
 }

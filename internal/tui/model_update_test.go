@@ -6,6 +6,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
+
+	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/notes"
+	notesync "atbuy/noteui/internal/sync"
 )
 
 func keyMsg(s string) tea.KeyMsg {
@@ -184,6 +188,109 @@ func TestFocusKeyTogglesFocus(t *testing.T) {
 	if m.focus != focusTree {
 		require.FailNow(t, "expected focus to switch back to tree after second tab")
 	}
+}
+
+func TestToggleSyncKeyOnCategoryShowsStatus(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{{Kind: treeCategory, RelPath: "work", Name: "work"}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("S"))
+	require.Contains(t, m.status, "sync toggle only works on notes")
+}
+
+func TestDeleteRemoteKeepLocalKeyOnCategoryShowsStatus(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{{Kind: treeCategory, RelPath: "work", Name: "work"}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("U"))
+	require.Contains(t, m.status, "remote delete only works on synced local notes")
+}
+
+func TestDeleteRemoteKeepLocalKeyStartsForSyncedLinkedNote(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Sync = config.SyncConfig{
+		DefaultProfile: "homebox",
+		Profiles: map[string]config.SyncProfile{
+			"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/noteui", RemoteBin: "noteui-sync"},
+		},
+	}
+	n := &notes.Note{RelPath: "work/note.md", Path: "/notes/work/note.md", Name: "note.md", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: "work/note.md", Note: n}}
+	m.treeCursor = 0
+	m.syncRecords = map[string]notesync.NoteRecord{"work/note.md": {ID: "n1", RelPath: "work/note.md", RemoteRev: "1"}}
+	next, cmd := m.Update(keyMsg("U"))
+	m = next.(Model)
+	require.Equal(t, "deleting remote copy...", m.status)
+	require.NotNil(t, cmd)
+	require.False(t, m.syncRunning)
+	require.True(t, m.syncInFlight["work/note.md"])
+}
+
+func TestNoteSyncClassToggledToSyncedStartsImmediateSyncVisual(t *testing.T) {
+	m := newTestModel(t)
+	m.rootDir = "/notes"
+	next, cmd := m.Update(noteSyncClassToggledMsg{path: "/notes/work/note.md", syncClass: notes.SyncClassSynced})
+	m = next.(Model)
+	require.Equal(t, "note sync: synced", m.status)
+	require.NotNil(t, cmd)
+	require.False(t, m.syncRunning)
+	require.True(t, m.syncInFlight["work/note.md"])
+}
+
+func TestSyncDebouncedStartsRealSyncWhileImmediateVisualIsActive(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Sync = config.SyncConfig{
+		DefaultProfile: "homebox",
+		Profiles: map[string]config.SyncProfile{
+			"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/noteui", RemoteBin: "noteui-sync"},
+		},
+	}
+	m.syncDebounceToken = 3
+	m.syncInFlight = map[string]bool{"work/note.md": true}
+	next, cmd := m.Update(syncDebouncedMsg{token: 3})
+	m = next.(Model)
+	require.True(t, m.syncRunning)
+	require.NotNil(t, cmd)
+}
+
+func TestSyncImportKeyStartsImport(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Sync = config.SyncConfig{
+		DefaultProfile: "homebox",
+		Profiles: map[string]config.SyncProfile{
+			"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/noteui", RemoteBin: "noteui-sync"},
+		},
+	}
+	next, cmd := m.Update(keyMsg("I"))
+	m = next.(Model)
+	require.Equal(t, "importing synced notes...", m.status)
+	require.NotNil(t, cmd)
+}
+
+func TestSyncImportCurrentKeyStartsImportForRemoteOnlyNote(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Sync = config.SyncConfig{
+		DefaultProfile: "homebox",
+		Profiles: map[string]config.SyncProfile{
+			"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/noteui", RemoteBin: "noteui-sync"},
+		},
+	}
+	m.treeItems = []treeItem{{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}}
+	m.treeCursor = 0
+	next, cmd := m.Update(keyMsg("i"))
+	m = next.(Model)
+	require.Equal(t, "importing remote note...", m.status)
+	require.NotNil(t, cmd)
+	require.False(t, m.syncRunning)
+	require.True(t, m.syncInFlight["work/remote.md"])
+}
+
+func TestSyncImportCurrentKeyOnLocalNoteShowsStatus(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: "local.md", Note: &notes.Note{RelPath: "local.md", Path: "/notes/local.md", Name: "local.md"}}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("i"))
+	require.Contains(t, m.status, "single-note import only works on remote notes")
 }
 
 func TestSortToggleFlipsSortByModTime(t *testing.T) {
@@ -509,4 +616,30 @@ func TestCategoryDeletedMsgWithError(t *testing.T) {
 	if !strings.Contains(m.status, "delete failed") {
 		require.Failf(t, "assertion failed", "expected 'delete failed' in status, got %q", m.status)
 	}
+}
+
+func TestToggleSyncKeyOnRemoteOnlyNoteShowsImportStatus(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("S"))
+	require.Contains(t, m.status, "press i to import it or I to import all")
+}
+
+func TestRemoteOnlyNotePreviewExplainsImport(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}}
+	m.treeCursor = 0
+	m.refreshPreview()
+	plain := stripANSI(m.previewContent)
+	require.Contains(t, plain, "not stored locally")
+	require.Contains(t, plain, "Press i")
+}
+
+func TestEnterOnRemoteOnlyNoteShowsImportStatus(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("enter"))
+	require.Contains(t, m.status, "press i to import it or I to import all")
 }

@@ -17,6 +17,7 @@ It is built for people who want a keyboard-driven notes workflow without giving 
 - keep temporary notes separate from your main notes
 - create and manage todo notes
 - pin important notes and categories
+- optional SSH-based sync for `sync: synced` notes with tree sync markers
 - customize theme, preview behavior, icons, and keybindings
 - keep your notes as regular files on disk
 
@@ -41,6 +42,48 @@ By default, `noteui`:
 - stores temporary notes under `.tmp` inside the notes root
 - opens notes with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`
 - stores local UI state under `$HOME/.local/state/noteui/state.json`
+
+## Sync setup
+
+Sync is optional and SSH-based.
+
+1. Build or install both binaries:
+   - `noteui`
+   - `noteui-sync`
+2. Put `noteui-sync` on the remote machine in a path you can call over SSH.
+3. Pick a remote storage directory on that machine, for example `/srv/noteui`.
+4. Add a sync profile to your `config.toml`:
+
+```toml
+[sync]
+default_profile = "homebox"
+
+[sync.profiles.homebox]
+ssh_host = "notes-prod"
+remote_root = "/srv/noteui"
+remote_bin = "/usr/local/bin/noteui-sync"
+```
+
+5. Mark any note you want synced with frontmatter:
+
+```yaml
+---
+sync: synced
+---
+```
+
+Notes without that field, or with `sync: local`, stay local-only. Sync status in the tree works like this:
+
+- hollow red `○`: local-only note
+- green `●`: synced note with a confirmed healthy remote state
+- orange blinking dot: a sync, import, or remote-delete action is currently in flight for that note
+- filled red `●`: synced note that is not currently confirmed healthy
+
+When noteui starts, synced notes are treated as unconfirmed until the first remote check completes. That avoids showing stale green markers from old local metadata before the current remote state has been verified.
+
+Press `S` on a selected local note to toggle `sync: local` and `sync: synced`. Press `U` on a synced local note to delete only its remote copy and keep the local file, switching it back to `sync: local`.
+
+On another machine, noteui refreshes remote note metadata automatically but does not auto-download missing note bodies. Synced notes that exist on the server but not locally appear in the tree as muted `x` placeholder rows, show an import message in the preview, and cannot be edited until imported. Press `i` to import the selected remote-only note, or `I` to import all missing synced notes. This also works as recovery inside an existing notes root: if you delete a synced note locally, `I` will restore it from the server as long as the target path is free. noteui skips collisions instead of overwriting existing local files.
 
 ## Documentation
 

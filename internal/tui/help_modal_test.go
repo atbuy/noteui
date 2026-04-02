@@ -294,3 +294,14 @@ func TestHelpEntriesNotEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpEntriesIncludeSyncImport(t *testing.T) {
+	m := newTestModel(t)
+	entries := m.helpEntries()
+	for _, entry := range entries {
+		if entry.key == keys.SyncImport.Help().Key && strings.Contains(strings.ToLower(entry.desc), "import") {
+			return
+		}
+	}
+	require.FailNow(t, "expected help entries to include sync import")
+}
