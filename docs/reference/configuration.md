@@ -1,26 +1,93 @@
 # Configuration reference
 
-This page is the detailed reference for noteui’s configuration file.
+This page documents the supported `config.toml` keys for noteui.
 
-## Config file lookup
+## Config file lookup and validation
 
-If `NOTEUI_CONFIG` is set, noteui loads that file.
+noteui loads configuration in this order:
 
-Otherwise it looks in your user config directory for:
-
-```text
-noteui/config.toml
-```
+1. If `NOTEUI_CONFIG` is set, use that file path.
+2. Otherwise use `noteui/config.toml` inside the user config directory.
 
 If the file does not exist, noteui uses defaults.
 
-!!! note
+If the file contains unknown keys or invalid values, noteui rejects that load and falls back to defaults.
 
-    Unknown config keys are rejected. Invalid values are also rejected and noteui falls back to defaults for that failed load.
+## Minimal example
 
-## Top-level sections
+```toml
+dashboard = true
 
-The config supports these top-level keys:
+[theme]
+name = "nord"
+
+[preview]
+style = "auto"
+
+[sync]
+default_profile = "homebox"
+
+[sync.profiles.homebox]
+ssh_host = "notes-prod"
+remote_root = "/srv/noteui"
+remote_bin = "/usr/local/bin/noteui-sync"
+```
+
+## Full example
+
+```toml
+dashboard = true
+
+[theme]
+name = "default"
+border_style = "rounded"
+app_padding_x = 2
+app_padding_y = 1
+panel_padding_x = 1
+panel_padding_y = 0
+
+[typography]
+bold_title_bar = true
+bold_panel_titles = true
+bold_headers = true
+bold_selected = true
+bold_modal_titles = true
+
+[icons]
+category_expanded = "▾"
+category_collapsed = "▸"
+category_leaf = "•"
+note = "·"
+
+[modal]
+border_style = "rounded"
+padding_x = 2
+padding_y = 1
+
+[preview]
+render_markdown = true
+style = "dark"
+syntax_highlight = true
+code_style = "monokai"
+privacy = false
+line_numbers = true
+
+[sync]
+default_profile = "homebox"
+
+[sync.profiles.homebox]
+ssh_host = "notes-prod"
+remote_root = "/srv/noteui"
+remote_bin = "/usr/local/bin/noteui-sync"
+
+[keys]
+toggle_sync = ["S"]
+delete_remote_keep_local = ["U"]
+sync_import_current = ["i"]
+sync_import = ["I"]
+```
+
+## Top-level keys
 
 - `dashboard`
 - `theme`
@@ -33,47 +100,30 @@ The config supports these top-level keys:
 
 ## `dashboard`
 
-`dashboard` controls whether the dashboard is enabled.
+Type: boolean
 
-Example:
+Default:
 
 ```toml
 dashboard = true
 ```
 
+Controls whether the dashboard is enabled.
+
 ## `theme`
 
-Theme controls colors, borders, and spacing.
+Theme chooses the built-in theme and optional visual overrides.
 
-Supported fields include:
+### `theme.name`
 
-- `name`
-- `bg_color`
-- `panel_bg_color`
-- `border_color`
-- `focus_border_color`
-- `accent_color`
-- `accent_soft_color`
-- `text_color`
-- `muted_color`
-- `subtle_color`
-- `chip_bg_color`
-- `inline_code_bg_color`
-- `pinned_note_color`
-- `synced_note_color`
-- `unsynced_note_color`
-- `syncing_note_color`
-- `marked_item_color`
-- `error_color`
-- `success_color`
-- `selected_bg_color`
-- `selected_fg_color`
-- `highlight_bg_color`
-- `border_style`
-- `app_padding_x`
-- `app_padding_y`
-- `panel_padding_x`
-- `panel_padding_y`
+Type: string
+
+Default:
+
+```toml
+[theme]
+name = "default"
+```
 
 Valid built-in theme names:
 
@@ -98,7 +148,48 @@ Valid built-in theme names:
 - `github-dark`
 - `carbonfox`
 
-Valid `border_style` values:
+### Theme color overrides
+
+Type: string for each field
+
+Supported override fields:
+
+- `bg_color`
+- `panel_bg_color`
+- `border_color`
+- `focus_border_color`
+- `accent_color`
+- `accent_soft_color`
+- `text_color`
+- `muted_color`
+- `subtle_color`
+- `chip_bg_color`
+- `inline_code_bg_color`
+- `pinned_note_color`
+- `synced_note_color`
+- `unsynced_note_color`
+- `syncing_note_color`
+- `marked_item_color`
+- `error_color`
+- `success_color`
+- `selected_bg_color`
+- `selected_fg_color`
+- `highlight_bg_color`
+
+These fields default to the selected built-in theme. Leave them unset unless you want to override a specific color.
+
+### `theme.border_style`
+
+Type: string
+
+Default:
+
+```toml
+[theme]
+border_style = "rounded"
+```
+
+Valid values:
 
 - `rounded`
 - `normal`
@@ -106,9 +197,38 @@ Valid `border_style` values:
 - `thick`
 - `hidden`
 
+### Theme spacing
+
+Type: integer
+
+Defaults:
+
+```toml
+[theme]
+app_padding_x = 2
+app_padding_y = 1
+panel_padding_x = 1
+panel_padding_y = 0
+```
+
+These fields control outer app padding and per-panel padding.
+
 ## `typography`
 
-Typography fields:
+Type: booleans
+
+Defaults:
+
+```toml
+[typography]
+bold_title_bar = true
+bold_panel_titles = true
+bold_headers = true
+bold_selected = true
+bold_modal_titles = true
+```
+
+Supported fields:
 
 - `bold_title_bar`
 - `bold_panel_titles`
@@ -118,7 +238,19 @@ Typography fields:
 
 ## `icons`
 
-Icon fields:
+Type: strings
+
+Defaults:
+
+```toml
+[icons]
+category_expanded = "▾"
+category_collapsed = "▸"
+category_leaf = "•"
+note = "·"
+```
+
+Supported fields:
 
 - `category_expanded`
 - `category_collapsed`
@@ -127,7 +259,9 @@ Icon fields:
 
 ## `modal`
 
-Modal fields:
+Modal controls popup colors, border style, and padding.
+
+Supported fields:
 
 - `bg_color`
 - `border_color`
@@ -140,28 +274,78 @@ Modal fields:
 - `padding_x`
 - `padding_y`
 
-Valid `modal.border_style` values follow the same set as `theme.border_style`.
+Fields left unset inherit the app's effective visual styling.
+
+Defaults:
+
+```toml
+[modal]
+border_style = "rounded"
+padding_x = 2
+padding_y = 1
+```
+
+Valid `modal.border_style` values match `theme.border_style`.
 
 ## `preview`
 
-Preview fields:
+Preview controls terminal preview rendering.
 
-- `render_markdown`
-- `disable_paths`
-- `style`
-- `syntax_highlight`
-- `code_style`
-- `privacy`
-- `line_numbers`
+Defaults:
 
-Valid `preview.style` values:
+```toml
+[preview]
+render_markdown = true
+style = "dark"
+syntax_highlight = true
+code_style = "monokai"
+privacy = false
+line_numbers = true
+```
+
+### `preview.render_markdown`
+
+Type: boolean
+
+When true, noteui renders Markdown-style previews for supported note content.
+
+### `preview.disable_paths`
+
+Type: list of strings
+
+Default: unset
+
+Use this to turn off rich preview rendering for specific paths or subtrees.
+
+Example:
+
+```toml
+[preview]
+disable_paths = [".tmp/", "archive/large-exports/"]
+```
+
+### `preview.style`
+
+Type: string
+
+Valid values:
 
 - `dark`
 - `light`
 - `auto`
 - `notty`
 
-Recognized `preview.code_style` values include:
+### `preview.syntax_highlight`
+
+Type: boolean
+
+Enables syntax highlighting inside rendered code blocks.
+
+### `preview.code_style`
+
+Type: string
+
+Supported values:
 
 - `monokai`
 - `github`
@@ -172,16 +356,39 @@ Recognized `preview.code_style` values include:
 - `paraiso-dark`
 - `paraiso-light`
 
+### `preview.privacy`
+
+Type: boolean
+
+Controls privacy blur mode in the preview pane.
+
+### `preview.line_numbers`
+
+Type: boolean
+
+Controls line numbers in the preview pane.
+
 ## `sync`
 
-Sync is optional. If `sync.default_profile` is unset, noteui does not attempt network sync.
+Sync is optional. If `sync.default_profile` is empty, noteui does not attempt network sync.
 
-Supported fields:
+### `sync.default_profile`
 
-- `default_profile`
-- `profiles.<name>.ssh_host`
-- `profiles.<name>.remote_root`
-- `profiles.<name>.remote_bin`
+Type: string
+
+Default: empty
+
+If set, it must match one of the names under `sync.profiles`.
+
+### `sync.profiles.<name>`
+
+Each sync profile supports:
+
+- `ssh_host`
+- `remote_root`
+- `remote_bin`
+
+All three are required when the profile exists.
 
 Example:
 
@@ -195,83 +402,130 @@ remote_root = "/srv/noteui"
 remote_bin = "/usr/local/bin/noteui-sync"
 ```
 
-Notes are selected for sync per file with frontmatter:
-
-```yaml
----
-sync: synced
----
-```
-
-If the field is missing, or set to `local`, the note stays local-only and uses a hollow marker in `theme.unsynced_note_color`.
-
-For synced notes, the tree marker semantics are:
-
-- `theme.synced_note_color`: the note has a confirmed healthy remote state
-- `theme.syncing_note_color`: a sync, import, or remote-delete action is currently in flight for that note
-- `theme.unsynced_note_color`: the note is synced in intent, but its current remote state is not confirmed healthy
-
-On startup, noteui treats synced notes as unconfirmed until the first remote check completes. This prevents stale local metadata from showing a green marker before the current remote state has been verified.
-
-On a second machine, configure the same sync profile and use `sync_import_current` to import the selected remote-only note, or `sync_import` to pull all missing synced notes from the remote and initialize `.noteui-sync/` as needed. noteui refreshes only remote note metadata automatically; remote-only notes stay as muted placeholders in the tree until imported. The same action also restores deleted synced notes inside an existing root, but it skips any remote note whose target path already exists locally. To stop syncing one local note while keeping the file, use `delete_remote_keep_local` on a synced local note; this deletes the remote copy and switches the local file back to `sync: local`.
+For end-to-end sync setup, import flows, and recovery behavior, see the [Sync guide](../guide/sync.md).
 
 ## `keys`
 
-The `keys` section allows overriding default keybindings. Each field takes a list of key strings.
+Each `[keys]` field takes a list of key strings.
 
-Useful sync-related defaults:
+If a field is omitted or given an empty list, noteui keeps the built-in default binding.
 
-- `toggle_sync = ["S"]`
-- `delete_remote_keep_local = ["U"]`
-- `sync_import_current = ["i"]`
-- `sync_import = ["I"]`
+Example:
 
-Supported fields include:
+```toml
+[keys]
+open = ["enter", "o"]
+toggle_sync = ["S"]
+sync_import = ["I"]
+```
+
+### Everyday navigation and panes
 
 - `open`
+  Default: `["enter", "o"]`
 - `refresh`
+  Default: `["r"]`
 - `quit`
+  Default: `["q", "ctrl+c"]`
 - `focus`
-- `new_note`
-- `new_temporary_note`
-- `new_todo_list`
+  Default: `["tab"]`
 - `search`
-- `show_help`
-- `show_pins`
-- `create_category`
-- `toggle_category`
-- `delete`
-- `move`
-- `rename`
-- `add_tag`
-- `toggle_select`
-- `pin`
-- `toggle_sync`
-- `delete_remote_keep_local`
-- `sync_import_current`
-- `sync_import`
-- `toggle_preview_privacy`
-- `toggle_preview_line_numbers`
-- `sort_toggle`
-- `scroll_half_page_up`
-- `scroll_half_page_down`
-- `next_match`
-- `prev_match`
+  Default: `["/"]`
 - `move_up`
+  Default: `["k", "up"]`
 - `move_down`
+  Default: `["j", "down"]`
 - `collapse_category`
+  Default: `["h", "left"]`
 - `expand_category`
+  Default: `["l", "right"]`
 - `jump_bottom`
+  Default: `["G"]`
 - `pending_g`
-- `bracket_forward`
-- `bracket_backward`
-- `heading_jump_key`
-- `todo_key`
-- `todo_add`
-- `todo_delete`
-- `todo_edit`
-- `pending_z`
-- `delete_confirm`
+  Default: `["g"]`
+- `scroll_half_page_up`
+  Default: `["ctrl+u"]`
+- `scroll_half_page_down`
+  Default: `["ctrl+d"]`
 - `scroll_page_down`
+  Default: `["ctrl+f", "pgdown"]`
 - `scroll_page_up`
+  Default: `["ctrl+b", "pgup"]`
+- `next_match`
+  Default: `["n"]`
+- `prev_match`
+  Default: `["N"]`
+
+### Notes, categories, and organization
+
+- `new_note`
+  Default: `["n"]`
+- `new_temporary_note`
+  Default: `["N"]`
+- `new_todo_list`
+  Default: `["T"]`
+- `create_category`
+  Default: `["C"]`
+- `toggle_category`
+  Default: `[" "]`
+- `delete`
+  Default: `["d"]`
+- `move`
+  Default: `["m"]`
+- `rename`
+  Default: `["R"]`
+- `add_tag`
+  Default: `["A"]`
+- `toggle_select`
+  Default: `["v"]`
+- `pin`
+  Default: `["p"]`
+- `show_pins`
+  Default: `["P"]`
+- `sort_toggle`
+  Default: `["s"]`
+
+### Preview and help
+
+- `show_help`
+  Default: `["?"]`
+- `toggle_preview_privacy`
+  Default: `["B"]`
+- `toggle_preview_line_numbers`
+  Default: `["L"]`
+
+### Sync
+
+- `toggle_sync`
+  Default: `["S"]`
+- `delete_remote_keep_local`
+  Default: `["U"]`
+- `sync_import_current`
+  Default: `["i"]`
+- `sync_import`
+  Default: `["I"]`
+
+### Todo and extra motions
+
+- `bracket_forward`
+  Default: `["]"]`
+- `bracket_backward`
+  Default: `["["]`
+- `heading_jump_key`
+  Default: `["h"]`
+- `todo_key`
+  Default: `["t"]`
+- `todo_add`
+  Default: `["a"]`
+- `todo_delete`
+  Default: `["d"]`
+- `todo_edit`
+  Default: `["e"]`
+- `pending_z`
+  Default: `["z"]`
+- `delete_confirm`
+  Default: `["d"]`
 - `toggle_encryption`
+  Default: `["E"]`
+
+The in-app help modal is still the live source of truth if you change keybindings heavily.

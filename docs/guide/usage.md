@@ -100,8 +100,31 @@ Preview behavior can include:
 
 All of these can be influenced by configuration.
 
+For the exact config keys and defaults, see the [Configuration reference](../reference/configuration.md).
+
+## Sync workflows
+
+If sync is configured, noteui can mark local notes for sync, refresh remote metadata, and import remote-only notes on demand.
+
+Important behaviors:
+
+- `S` toggles the selected local note between `sync: local` and `sync: synced`
+- `U` deletes only the remote copy and keeps the local file
+- `i` imports the selected remote-only note
+- `I` imports all missing synced notes
+
+Remote-only notes appear as muted placeholder rows until imported.
+
+See the [Sync guide](sync.md) for setup and recovery details.
+
 ## Encrypted notes
 
 noteui supports encrypted note bodies for workflows that want encrypted content on disk with preview/edit support inside the app.
 
 See [Encrypted notes](../advanced/encryption.md) for details.
+
+## Where to go next
+
+- Need the full key list? Read [Keybindings](keybindings.md).
+- Need exact config keys and defaults? Read [Configuration reference](../reference/configuration.md).
+- Need sync setup and recovery? Read [Sync guide](sync.md).

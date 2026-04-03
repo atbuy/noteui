@@ -14,7 +14,8 @@ nav = [
   ]},
   {"Guide" = [
     "guide/usage.md",
-    "guide/keybindings.md"
+    "guide/keybindings.md",
+    "guide/sync.md"
   ]},
   {"Advanced" = [
     "advanced/encryption.md",
@@ -23,7 +24,9 @@ nav = [
   {"Reference" = [
     "reference/configuration.md",
     "reference/environment.md",
-    "reference/storage-and-state.md"
+    "reference/storage-and-state.md",
+    "reference/troubleshooting.md",
+    "reference/docs-maintenance.md"
   ]},
   {"FAQ" = "faq.md"}
 ]

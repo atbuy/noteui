@@ -43,9 +43,15 @@ This page documents the default keybindings that most users care about first.
 ## Advanced note actions
 
 - `E`: toggle encryption
+- `S`: toggle sync for the selected local note
+- `U`: delete only the remote copy of a synced local note
+- `i`: import the selected remote-only note
+- `I`: import all missing synced notes
 
 ## Customizing keybindings
 
 Keybindings can be overridden in the `[keys]` section of the config file.
 
 See [Configuration reference](../reference/configuration.md) for details.
+
+For end-to-end sync behavior, see the [Sync guide](sync.md).

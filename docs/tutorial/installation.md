@@ -16,6 +16,14 @@ Each release archive includes both `noteui` and `noteui-sync`. Most users only n
 
     If you just want to use noteui, prefer release binaries over building from source.
 
+## Choosing an install method
+
+Use release archives if you want the fastest and simplest install.
+
+Use `make install` if you are building from a local checkout and want both binaries installed through Go tooling.
+
+Use `go run ./cmd/noteui` mainly for development or quick local testing, not as a long-term install path.
+
 ## Install from a release archive
 
 === "Linux"
@@ -99,16 +107,16 @@ make build
 ./bin/noteui
 ```
 
-Or run directly from source:
-
-```bash
-go run ./cmd/noteui
-```
-
-Install from source:
+Install both binaries from source:
 
 ```bash
 make install
+```
+
+Or run directly from source without installing:
+
+```bash
+go run ./cmd/noteui
 ```
 
 ## Verify the version
@@ -119,4 +127,4 @@ noteui --version
 
 ## Next step
 
-Continue with [Getting started](getting-started.md) or [Your first notes workflow](first-notes.md).
+Continue with [Getting started](getting-started.md), [Your first notes workflow](first-notes.md), or the [Sync guide](../guide/sync.md) if you want remote sync.

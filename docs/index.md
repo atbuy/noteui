@@ -8,6 +8,15 @@ It helps you browse, search, preview, organize, and edit notes without moving th
 
     Start with the tutorial pages. They are written for first-time users and walk through installation, first launch, and the most common workflows.
 
+## Common tasks
+
+- Install noteui and the sync helper: [Installation](tutorial/installation.md)
+- Learn the core workflow: [Getting started](tutorial/getting-started.md)
+- Customize appearance, preview, and keys: [Configuration reference](reference/configuration.md)
+- Set up SSH-based sync: [Sync guide](guide/sync.md)
+- Understand encrypted notes: [Encrypted notes](advanced/encryption.md)
+- Recover remote-only or missing synced notes: [Troubleshooting](reference/troubleshooting.md)
+
 ## Why use noteui?
 
 - your notes stay as files on disk
@@ -27,6 +36,7 @@ It helps you browse, search, preview, organize, and edit notes without moving th
 
 - [Usage guide](guide/usage.md)
 - [Keybindings](guide/keybindings.md)
+- [Sync guide](guide/sync.md)
 
 ### Advanced usage
 
@@ -38,6 +48,8 @@ It helps you browse, search, preview, organize, and edit notes without moving th
 - [Configuration reference](reference/configuration.md)
 - [Environment variables](reference/environment.md)
 - [Storage and state](reference/storage-and-state.md)
+- [Troubleshooting](reference/troubleshooting.md)
+- [Docs maintenance](reference/docs-maintenance.md)
 - [FAQ](faq.md)
 
 ## Core concepts

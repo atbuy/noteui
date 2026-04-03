@@ -21,6 +21,20 @@ noteui supports encrypted note bodies for users who want notes stored in encrypt
 
     This is an application workflow for encrypted note bodies. It is not a general-purpose secret-management system.
 
+- noteui stores the note body encrypted on disk, but it still treats the file as part of your normal notes tree
+- the encrypted flag lives in frontmatter as `encrypted: true`
+- encrypted notes still rely on your own filesystem, backup, and SSH hygiene
+
+## Editing behavior
+
+When you open an encrypted note through noteui:
+
+- noteui decrypts the body for the editing workflow
+- the encrypted marker is removed from the editable temporary content
+- the file is written back encrypted when the edit completes successfully
+
+Outside noteui, encrypted notes remain ordinary files that contain encrypted bodies. You can move, rename, or sync them with normal file tools, but editing the encrypted payload directly in another editor is usually not useful.
+
 ## Frontmatter signal
 
 Encrypted notes use the `encrypted` frontmatter field.
@@ -33,7 +47,21 @@ encrypted: true
 ---
 ```
 
+## Sync behavior
+
+Encrypted notes can still participate in note sync because sync works on the note files and sync metadata rather than on decrypted in-memory text.
+
+Important boundaries:
+
+- `noteui-sync` does not store your passphrase
+- `.noteui-sync/` does not store decrypted note bodies
+- another machine still needs the passphrase in the current session before the note can be edited or previewed as decrypted text
+
+If you use encryption and sync together, treat sync as transport for the encrypted note file and sync metadata, not as a secrets-management layer.
+
 ## Related workflows
 
 - [Usage guide](../guide/usage.md)
+- [Sync guide](../guide/sync.md)
+- [Configuration reference](../reference/configuration.md)
 - [Storage and state](../reference/storage-and-state.md)
