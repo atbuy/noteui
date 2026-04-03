@@ -47,28 +47,33 @@ jobs:
           go-version: "1.26.0"
           cache: true
 
-      - name: Build binary
+      - name: Build binaries
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
         run: |
           mkdir -p dist
-          BIN_NAME="noteui-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          OUT="dist/${BIN_NAME}${{ matrix.ext }}"
+          ARCHIVE_BASENAME="noteui-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          NOTEUI_NAME="${ARCHIVE_BASENAME}${{ matrix.ext }}"
+          SYNC_NAME="noteui-sync-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
           go build -trimpath \
             -ldflags="-s -w -X atbuy/noteui/internal/buildinfo.Version=${VERSION}" \
-            -o "$OUT" ./cmd/noteui
+            -o "dist/${NOTEUI_NAME}" ./cmd/noteui
+          go build -trimpath \
+            -ldflags="-s -w -X atbuy/noteui/internal/buildinfo.Version=${VERSION}" \
+            -o "dist/${SYNC_NAME}" ./cmd/noteui-sync
 
       - name: Package archive
         run: |
           cd dist
-          BIN_NAME="noteui-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          FILE="${BIN_NAME}${{ matrix.ext }}"
+          ARCHIVE_BASENAME="noteui-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          NOTEUI_NAME="${ARCHIVE_BASENAME}${{ matrix.ext }}"
+          SYNC_NAME="noteui-sync-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip "${BIN_NAME}.zip" "$FILE"
+            zip "${ARCHIVE_BASENAME}.zip" "$NOTEUI_NAME" "$SYNC_NAME"
           else
-            tar -czf "${BIN_NAME}.tar.gz" "$FILE"
+            tar -czf "${ARCHIVE_BASENAME}.tar.gz" "$NOTEUI_NAME" "$SYNC_NAME"
           fi
 
       - name: Upload release asset
@@ -77,12 +82,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd dist
+          ARCHIVE_BASENAME="noteui-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}"
           if [ "${{ matrix.goos }}" = "windows" ]; then
             gh release upload "${VERSION}" \
-              "noteui-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.zip" \
+              "${ARCHIVE_BASENAME}.zip" \
               --clobber
           else
             gh release upload "${VERSION}" \
-              "noteui-${VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz" \
+              "${ARCHIVE_BASENAME}.tar.gz" \
               --clobber
           fi

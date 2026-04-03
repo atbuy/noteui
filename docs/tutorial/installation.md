@@ -10,6 +10,8 @@ The recommended way to install noteui is from the pre-built release archives on 
 - macOS: `.tar.gz`
 - Windows: `.zip`
 
+Each release archive includes both `noteui` and `noteui-sync`. Most users only need to run `noteui`; `noteui-sync` is used when you configure SSH-based sync.
+
 !!! tip
 
     If you just want to use noteui, prefer release binaries over building from source.
@@ -24,18 +26,20 @@ The recommended way to install noteui is from the pre-built release archives on 
     tar -xzf noteui-<version>-linux-amd64.tar.gz
     ```
 
-    Run the binary:
+    Run the binaries:
 
     ```bash
-    chmod +x noteui-<version>-linux-amd64
+    chmod +x noteui-<version>-linux-amd64 noteui-sync-<version>-linux-amd64
     ./noteui-<version>-linux-amd64
     ```
 
-    Install it on your `PATH`:
+    Install them on your `PATH`:
 
     ```bash
     mv noteui-<version>-linux-amd64 noteui
     sudo mv noteui /usr/local/bin/
+    mv noteui-sync-<version>-linux-amd64 noteui-sync
+    sudo mv noteui-sync /usr/local/bin/
     ```
 
 === "macOS"
@@ -49,15 +53,17 @@ The recommended way to install noteui is from the pre-built release archives on 
     Run it:
 
     ```bash
-    chmod +x noteui-<version>-darwin-arm64
+    chmod +x noteui-<version>-darwin-arm64 noteui-sync-<version>-darwin-arm64
     ./noteui-<version>-darwin-arm64
     ```
 
-    Install it globally:
+    Install both binaries globally:
 
     ```bash
     mv noteui-<version>-darwin-arm64 noteui
     sudo mv noteui /usr/local/bin/
+    mv noteui-sync-<version>-darwin-arm64 noteui-sync
+    sudo mv noteui-sync /usr/local/bin/
     ```
 
     Use `darwin-arm64` on Apple Silicon and `darwin-amd64` on Intel Macs.
@@ -78,7 +84,7 @@ The recommended way to install noteui is from the pre-built release archives on 
     .\noteui\noteui-<version>-windows-amd64.exe
     ```
 
-    If you want easier access, rename it to `noteui.exe` and place it in a directory on your `PATH`.
+    If you want easier access, rename `noteui-<version>-windows-amd64.exe` to `noteui.exe` and place it in a directory on your `PATH`. If you plan to use sync, also place `noteui-sync-<version>-windows-amd64.exe` somewhere available for your remote sync setup.
 
 ## Build from source
 

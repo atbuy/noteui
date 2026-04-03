@@ -32,10 +32,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.x"
 
       - name: Install Zensical
-        run: pip install zensical
+        run: pip install zensical==0.0.31
 
       - name: Build docs
         run: zensical build --clean

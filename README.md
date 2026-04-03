@@ -8,6 +8,21 @@
 
 It is built for people who want a keyboard-driven notes workflow without giving up normal files, directories, and external editors.
 
+## Documentation
+
+Full documentation is published at:
+
+<https://atbuy.github.io/noteui/>
+
+Recommended entry points:
+
+- [Getting started](https://atbuy.github.io/noteui/tutorial/getting-started/)
+- [Installation](https://atbuy.github.io/noteui/tutorial/installation/)
+- [Usage guide](https://atbuy.github.io/noteui/guide/usage/)
+- [Configuration reference](https://atbuy.github.io/noteui/reference/configuration/)
+- [Environment variables](https://atbuy.github.io/noteui/reference/environment/)
+- [FAQ](https://atbuy.github.io/noteui/faq/)
+
 ## Highlights
 
 - browse notes and categories in a tree view
@@ -27,13 +42,13 @@ The easiest way to install `noteui` is from the pre-built release archives:
 
 <https://github.com/atbuy/noteui/releases>
 
-Linux and macOS releases are published as `.tar.gz` archives. Windows releases are published as `.zip` archives.
+Linux and macOS releases are published as `.tar.gz` archives. Windows releases are published as `.zip` archives. Each release archive includes both `noteui` and `noteui-sync`.
 
 ## Quick start
 
 1. Download the right release archive for your platform from the releases page.
 2. Extract it.
-3. Run the binary.
+3. Run `noteui`.
 4. Start writing notes in your notes directory, which defaults to `$HOME/notes`.
 
 By default, `noteui`:
@@ -84,21 +99,6 @@ When noteui starts, synced notes are treated as unconfirmed until the first remo
 Press `S` on a selected local note to toggle `sync: local` and `sync: synced`. Press `U` on a synced local note to delete only its remote copy and keep the local file, switching it back to `sync: local`.
 
 On another machine, noteui refreshes remote note metadata automatically but does not auto-download missing note bodies. Synced notes that exist on the server but not locally appear in the tree as muted `x` placeholder rows, show an import message in the preview, and cannot be edited until imported. Press `i` to import the selected remote-only note, or `I` to import all missing synced notes. This also works as recovery inside an existing notes root: if you delete a synced note locally, `I` will restore it from the server as long as the target path is free. noteui skips collisions instead of overwriting existing local files.
-
-## Documentation
-
-Full documentation is published at:
-
-<https://atbuy.github.io/noteui/>
-
-Recommended entry points:
-
-- [Getting started](https://atbuy.github.io/noteui/tutorial/getting-started/)
-- [Installation](https://atbuy.github.io/noteui/tutorial/installation/)
-- [Usage guide](https://atbuy.github.io/noteui/guide/usage/)
-- [Configuration reference](https://atbuy.github.io/noteui/reference/configuration/)
-- [Environment variables](https://atbuy.github.io/noteui/reference/environment/)
-- [FAQ](https://atbuy.github.io/noteui/faq/)
 
 ## Build from source
 
