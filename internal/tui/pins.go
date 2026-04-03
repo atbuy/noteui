@@ -10,6 +10,14 @@ import (
 	notesync "atbuy/noteui/internal/sync"
 )
 
+func normalizeCategoryRelPath(relPath string) string {
+	relPath = filepath.ToSlash(strings.TrimSpace(relPath))
+	if relPath == "." {
+		return ""
+	}
+	return strings.Trim(relPath, "/")
+}
+
 func (m *Model) togglePinCurrent() error {
 	if m.listMode == listModePins {
 		item := m.currentPinItem()
@@ -133,7 +141,9 @@ func (m *Model) syncStateFromPins() {
 
 	m.state.PinnedCategories = m.state.PinnedCategories[:0]
 	for p := range m.pinnedCats {
-		m.state.PinnedCategories = append(m.state.PinnedCategories, p)
+		if normalized := normalizeCategoryRelPath(p); normalized != "" {
+			m.state.PinnedCategories = append(m.state.PinnedCategories, normalized)
+		}
 	}
 	sort.Strings(m.state.PinnedCategories)
 }
@@ -142,6 +152,7 @@ func (m *Model) syncStateFromExpanded() {
 	m.state.CollapsedCategories = m.state.CollapsedCategories[:0]
 
 	for relPath, expanded := range m.expanded {
+		relPath = normalizeCategoryRelPath(relPath)
 		if relPath == "" {
 			continue
 		}
@@ -167,25 +178,39 @@ func (m *Model) saveTreeState() error {
 }
 
 func (m *Model) pruneCategoryStateToExisting() {
-	existing := make(map[string]bool, len(m.categories))
-	for _, c := range m.categories {
-		if c.RelPath != "" {
-			existing[c.RelPath] = true
+	existing := make(map[string]bool, len(m.categories)+len(m.remoteCategories))
+	for _, source := range [][]notes.Category{m.categories, m.remoteCategories} {
+		for _, c := range source {
+			if normalized := normalizeCategoryRelPath(c.RelPath); normalized != "" {
+				existing[normalized] = true
+			}
 		}
 	}
 
-	for k := range m.expanded {
-		if k == "" {
+	for k, expanded := range m.expanded {
+		normalized := normalizeCategoryRelPath(k)
+		if normalized == "" {
 			continue
 		}
-		if !existing[k] {
+		if !existing[normalized] {
 			delete(m.expanded, k)
+			continue
+		}
+		if normalized != k {
+			delete(m.expanded, k)
+			m.expanded[normalized] = expanded
 		}
 	}
 
 	for k := range m.pinnedCats {
-		if !existing[k] {
+		normalized := normalizeCategoryRelPath(k)
+		if normalized == "" || !existing[normalized] {
 			delete(m.pinnedCats, k)
+			continue
+		}
+		if normalized != k {
+			delete(m.pinnedCats, k)
+			m.pinnedCats[normalized] = true
 		}
 	}
 }

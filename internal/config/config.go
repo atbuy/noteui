@@ -124,6 +124,8 @@ type KeysConfig struct {
 	ToggleSelect             []string `toml:"toggle_select"`
 	Pin                      []string `toml:"pin"`
 	ToggleSync               []string `toml:"toggle_sync"`
+	SelectSyncProfile        []string `toml:"select_sync_profile"`
+	OpenConflictCopy         []string `toml:"open_conflict_copy"`
 	DeleteRemoteKeepLocal    []string `toml:"delete_remote_keep_local"`
 	SyncImportCurrent        []string `toml:"sync_import_current"`
 	SyncImport               []string `toml:"sync_import"`

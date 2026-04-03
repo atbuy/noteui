@@ -81,15 +81,36 @@ Use:
 
 If imports are skipped, check whether a local file already exists at the target path. noteui avoids overwriting existing local files.
 
-## Synced notes stay unconfirmed on startup
+## Synced notes turn red after startup
 
-This is expected briefly. noteui treats synced notes as unconfirmed until the first remote check completes.
+Previously healthy synced notes start green from their saved local sync record. If they turn red after startup, the background sync found a real problem.
 
-If they stay unconfirmed:
+Check:
 
-- verify the sync profile is valid
-- verify SSH access still works
-- verify the remote root is accessible
+- that the sync profile is still valid
+- that SSH access still works
+- that the remote root is accessible
+- whether the note now has a conflict copy beside it
+
+## A synced note has a conflict
+
+When noteui reports a conflict, it keeps the local note untouched and writes the remote body into a sibling conflict copy such as `note.conflict-YYYYMMDD-HHMMSS.md`.
+
+Use this resolution flow:
+
+- select the conflicted synced note
+- press `O` to open the generated conflict copy
+- open the original note too
+- merge what you want into the original note
+- save the original note and sync again
+
+If the conflict does not clear, check:
+
+- that you edited the original note rather than only the conflict copy
+- that the next sync actually succeeded
+- that the remote host and profile are still reachable
+
+Repeated conflicts usually mean the same note is still being changed in two places before either side completes a clean sync cycle.
 
 ## Encryption is confusing across machines
 

@@ -3,9 +3,13 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"atbuy/noteui/internal/notes"
+	notesync "atbuy/noteui/internal/sync"
 )
 
 func TestRenderStatusContainsMessage(t *testing.T) {
@@ -255,4 +259,16 @@ func TestRenderStatusLineTreatsRemoteDeleteFailureAsError(t *testing.T) {
 	rendered := m.renderStatus()
 	plain := stripANSI(rendered)
 	require.Contains(t, plain, "remote delete failed: remote unavailable")
+}
+
+func TestRenderStatusShowsConflictHintForSelectedConflictedNote(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now(), Conflict: &notesync.ConflictInfo{CopyPath: "work/note.conflict-20260403-120000.md", OccurredAt: time.Now()}},
+	}
+	rendered := m.renderStatus()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "conflict: press O to open copy")
 }

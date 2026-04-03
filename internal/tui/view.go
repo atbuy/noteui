@@ -145,6 +145,28 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showSyncProfilePicker {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderSyncProfilePickerModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
+	if m.showSyncProfileMigration {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderSyncProfileMigrationModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showHelp {
 		return lipgloss.Place(
 			m.width,
@@ -925,6 +947,10 @@ func (m Model) renderStatus() string {
 		parts = append(parts, preview)
 	}
 
+	if conflict := m.renderConflictSegment(); conflict != "" {
+		parts = append(parts, conflict)
+	}
+
 	if m.status != "" {
 		parts = append(parts, m.status)
 	}
@@ -933,6 +959,7 @@ func (m Model) renderStatus() string {
 
 	switch {
 	case strings.HasPrefix(m.status, "error:"),
+		strings.HasPrefix(m.status, "sync profile check failed:"),
 		strings.HasPrefix(m.status, "editor error:"),
 		strings.HasPrefix(m.status, "create failed:"),
 		strings.HasPrefix(m.status, "category create failed:"),
@@ -950,7 +977,9 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "re-encryption failed:"),
 		strings.HasPrefix(m.status, "wrong passphrase"),
 		strings.HasPrefix(m.status, "error reading note:"),
-		strings.HasPrefix(m.status, "error opening note:"):
+		strings.HasPrefix(m.status, "error opening note:"),
+		strings.HasPrefix(m.status, "sync profile save failed:"),
+		strings.HasPrefix(m.status, "sync root rebind failed:"):
 		return statusErrStyle.Render(line)
 	default:
 		return statusOKStyle.Render(line)
@@ -971,6 +1000,10 @@ func (m Model) renderModeSegment() string {
 		return "MOVE"
 	case m.showRename:
 		return "RENAME"
+	case m.showSyncProfilePicker:
+		return "SYNC PROFILE"
+	case m.showSyncProfileMigration:
+		return "SYNC ROOT"
 	case m.showTodoAdd:
 		return "ADD TODO"
 	case m.showTodoEdit:
@@ -1060,6 +1093,13 @@ func (m Model) renderSelectionSegment() string {
 	}
 
 	return "selection"
+}
+
+func (m Model) renderConflictSegment() string {
+	if !m.hasConflictCopyForCurrentSelection() {
+		return ""
+	}
+	return "conflict: press " + keys.OpenConflictCopy.Help().Key + " to open copy"
 }
 
 func (m Model) renderFilterSegment() string {

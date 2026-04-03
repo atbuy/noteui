@@ -686,14 +686,14 @@ func TestRenderTreeLineRemoteOnlyNoteBlinksWhileImporting(t *testing.T) {
 	require.Contains(t, plain, "◌")
 }
 
-func TestNoteSyncVisualStateUsesPendingBeforeStartupSyncCheck(t *testing.T) {
+func TestNoteSyncVisualStateUsesHealthyRecordBeforeStartupSyncCheck(t *testing.T) {
 	m := newTestModel(t)
 	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
 	m.startupSyncChecked = false
 	m.syncRecords = map[string]notesync.NoteRecord{
 		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now(), LastSyncedHash: "sha256:ok"},
 	}
-	require.Equal(t, noteSyncVisualPending, m.noteSyncVisualState(&n))
+	require.Equal(t, noteSyncVisualHealthy, m.noteSyncVisualState(&n))
 }
 
 func TestRenderModalGapUsesStyledSpaces(t *testing.T) {

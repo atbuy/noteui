@@ -315,6 +315,13 @@ type Model struct {
 	tagInput   textinput.Model
 	helpInput  textinput.Model
 
+	showSyncProfilePicker      bool
+	syncProfileNames           []string
+	syncProfileCursor          int
+	showSyncProfileMigration   bool
+	syncProfileMigrationChoice int
+	pendingSyncProfileChange   *syncProfileChange
+
 	searchInput textinput.Model
 	searchMode  bool
 
@@ -462,12 +469,12 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 
 	pinnedNotes := make(map[string]bool, len(st.PinnedNotes))
 	for _, p := range st.PinnedNotes {
-		pinnedNotes[p] = true
+		pinnedNotes[filepath.ToSlash(strings.TrimSpace(p))] = true
 	}
 
 	pinnedCats := make(map[string]bool, len(st.PinnedCategories))
 	for _, p := range st.PinnedCategories {
-		pinnedCats[p] = true
+		pinnedCats[normalizeCategoryRelPath(p)] = true
 	}
 	if notesync.HasSyncProfile(cfg.Sync) {
 		if syncedNotes, syncedCats, err := notesync.LoadPinnedRelPaths(root); err == nil {
@@ -487,7 +494,9 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		"": true,
 	}
 	for _, p := range st.CollapsedCategories {
-		expanded[p] = false
+		if normalized := normalizeCategoryRelPath(p); normalized != "" {
+			expanded[normalized] = false
+		}
 	}
 
 	return Model{
@@ -640,17 +649,21 @@ func (m Model) noteSyncVisualState(note *notes.Note) noteSyncVisualState {
 	if m.syncInFlight[relPath] {
 		return noteSyncVisualSyncing
 	}
-	if !m.startupSyncChecked {
-		return noteSyncVisualPending
-	}
-	rec, ok := m.syncRecords[relPath]
-	if !ok {
-		return noteSyncVisualPending
-	}
-	if rec.Conflict != nil || strings.TrimSpace(rec.LastSyncError) != "" || rec.LastSyncAt.IsZero() {
+	if !m.hasHealthySyncRecord(relPath) {
 		return noteSyncVisualPending
 	}
 	return noteSyncVisualHealthy
+}
+
+func (m Model) hasHealthySyncRecord(relPath string) bool {
+	rec, ok := m.syncRecords[filepath.ToSlash(strings.TrimSpace(relPath))]
+	if !ok {
+		return false
+	}
+	if rec.Conflict != nil || strings.TrimSpace(rec.LastSyncError) != "" || rec.LastSyncAt.IsZero() {
+		return false
+	}
+	return true
 }
 
 func (m Model) blinkingSyncMarker() (string, lipgloss.Color) {
@@ -947,6 +960,27 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case syncProfileSavedMsg:
+		if msg.err != nil {
+			if msg.rebound {
+				m.status = "sync root rebind failed: " + msg.err.Error()
+			} else {
+				m.status = "sync profile save failed: " + msg.err.Error()
+			}
+			return m, nil
+		}
+		m.cfg = msg.cfg
+		ApplyConfigKeys(m.cfg.Keys)
+		status := "default sync profile set to " + msg.profile
+		if strings.TrimSpace(msg.showInfo) != "" {
+			status = fmt.Sprintf("default sync profile set to %s; current root stays on %s", msg.profile, msg.showInfo)
+		}
+		if msg.rebound {
+			status = "default sync profile set to " + msg.profile + "; current root rebound"
+		}
+		m.status = status
+		return m, m.scheduleSync()
+
 	case syncImportFinishedMsg:
 		if m.syncRunning || len(m.syncInFlight) > 0 {
 			m.finishSyncRun()
@@ -1237,11 +1271,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		_ = m.saveTreeState()
 
 		for _, c := range m.categories {
-			if c.RelPath == "" {
+			relPath := normalizeCategoryRelPath(c.RelPath)
+			if relPath == "" {
 				continue
 			}
-			if _, ok := m.expanded[c.RelPath]; !ok {
-				m.expanded[c.RelPath] = true
+			if _, ok := m.expanded[relPath]; !ok {
+				m.expanded[relPath] = true
 			}
 		}
 
@@ -1619,6 +1654,46 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			var cmd tea.Cmd
 			m.todoInput, cmd = m.todoInput.Update(msg)
 			return m, cmd
+		}
+
+		if m.showSyncProfilePicker {
+			switch {
+			case msg.String() == "esc":
+				m.closeSyncProfilePicker("sync profile change cancelled")
+				return m, nil
+			case msg.String() == "enter":
+				return m, m.confirmSelectedSyncProfile()
+			case key.Matches(msg, keys.MoveUp):
+				m.moveSyncProfileCursor(-1)
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				m.moveSyncProfileCursor(1)
+				return m, nil
+			}
+			return m, nil
+		}
+
+		if m.showSyncProfileMigration {
+			switch {
+			case msg.String() == "esc":
+				m.closeSyncProfileMigration("sync profile change cancelled")
+				return m, nil
+			case msg.String() == "enter":
+				return m, m.confirmSyncProfileMigration()
+			case msg.String() == "left", msg.String() == "up":
+				m.moveSyncProfileMigrationChoice(-1)
+				return m, nil
+			case msg.String() == "right", msg.String() == "down", msg.String() == "tab":
+				m.moveSyncProfileMigrationChoice(1)
+				return m, nil
+			case key.Matches(msg, keys.MoveUp):
+				m.moveSyncProfileMigrationChoice(-1)
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				m.moveSyncProfileMigrationChoice(1)
+				return m, nil
+			}
+			return m, nil
 		}
 
 		if m.showMoveBrowser {
@@ -2370,6 +2445,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.scheduleSync()
 		}
 
+		if key.Matches(msg, keys.SelectSyncProfile) {
+			m.openSyncProfilePicker()
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.ToggleSync) {
 			item := m.currentTreeItem()
 			if item != nil && item.Kind == treeRemoteNote {
@@ -2381,6 +2461,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, toggleNoteSyncCmd(item.Note.Path)
+		}
+
+		if key.Matches(msg, keys.OpenConflictCopy) {
+			return m, m.openCurrentConflictCopy()
 		}
 
 		if key.Matches(msg, keys.DeleteRemoteKeepLocal) {

@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
@@ -642,4 +645,74 @@ func TestEnterOnRemoteOnlyNoteShowsImportStatus(t *testing.T) {
 	m.treeCursor = 0
 	m = updateModel(m, keyMsg("enter"))
 	require.Contains(t, m.status, "press i to import it or I to import all")
+}
+
+func TestSelectSyncProfileOpensPicker(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Sync.DefaultProfile = "homebox"
+	cfg.Sync.Profiles = map[string]config.SyncProfile{
+		"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/homebox", RemoteBin: "noteui-sync"},
+		"backup":  {SSHHost: "backup-host", RemoteRoot: "/srv/backup", RemoteBin: "noteui-sync"},
+	}
+	m := New(t.TempDir(), "", cfg, "test")
+	m = updateModel(m, keyMsg("F"))
+	require.True(t, m.showSyncProfilePicker)
+	require.Equal(t, "homebox", m.selectedSyncProfileName())
+}
+
+func TestConfirmSelectedSyncProfileShowsMigrationForBoundRoot(t *testing.T) {
+	root := t.TempDir()
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Sync.DefaultProfile = "homebox"
+	cfg.Sync.Profiles = map[string]config.SyncProfile{
+		"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/homebox", RemoteBin: "noteui-sync"},
+		"backup":  {SSHHost: "backup-host", RemoteRoot: "/srv/backup", RemoteBin: "noteui-sync"},
+	}
+	require.NoError(t, notesync.SaveRootConfig(root, notesync.RootConfig{SchemaVersion: notesync.SchemaVersion, ClientID: notesync.NewClientID(), Profile: "homebox"}))
+	m := New(root, "", cfg, "test")
+	m.openSyncProfilePicker()
+	m.moveSyncProfileCursor(-1)
+	m = updateModel(m, keyMsg("enter"))
+	require.True(t, m.showSyncProfileMigration)
+	require.NotNil(t, m.pendingSyncProfileChange)
+	require.Equal(t, "backup", m.pendingSyncProfileChange.selectedDefault)
+	require.Equal(t, "homebox", m.pendingSyncProfileChange.boundProfile)
+}
+
+func TestDataLoadedPreservesCollapsedCategoryState(t *testing.T) {
+	m := newTestModel(t)
+	m.expanded = map[string]bool{"": true, "work": false}
+	m = updateModel(m, dataLoadedMsg{categories: []notes.Category{{Name: "All notes", RelPath: ""}, {Name: "work", RelPath: "work"}}})
+	require.False(t, m.expanded["work"])
+	require.Contains(t, m.state.CollapsedCategories, "work")
+}
+
+func TestOpenConflictCopyKeyReturnsEditorCommandForConflictedNote(t *testing.T) {
+	m := newTestModel(t)
+	notePath := m.rootDir + "/work/note.md"
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte("local"), 0o644))
+	conflictPath := m.rootDir + "/work/note.conflict-20260403-120000.md"
+	require.NoError(t, os.WriteFile(conflictPath, []byte("remote"), 0o644))
+	n := notes.Note{Path: notePath, RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now(), Conflict: &notesync.ConflictInfo{CopyPath: "work/note.conflict-20260403-120000.md", OccurredAt: time.Now()}},
+	}
+	next, cmd := m.Update(keyMsg("O"))
+	updated := next.(Model)
+	require.NotNil(t, cmd)
+	require.Equal(t, "opening conflict copy", updated.status)
+}
+
+func TestOpenConflictCopyKeyShowsStatusWithoutConflict(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	next, cmd := m.Update(keyMsg("O"))
+	updated := next.(Model)
+	require.Nil(t, cmd)
+	require.Equal(t, "conflict copy only works on conflicted synced notes", updated.status)
 }
