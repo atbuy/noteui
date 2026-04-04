@@ -974,3 +974,97 @@ func TestResolveConflictKeepLocalPushesAndCleansUpConflict(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "---\nsync: synced\n---\nlocal edited\n", fetched.Note.Content)
 }
+
+func TestSyncRootSharedNoteAlwaysPullsRemoteOnDivergence(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "shared.md")
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+
+	// Register the note and do initial sync
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: shared\n---\noriginal\n"), 0o644))
+	_, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	var noteID string
+	for id := range records {
+		noteID = id
+	}
+
+	// Simulate independent remote edit by pushing a new revision directly
+	_, err = client.PushNote(context.Background(), cfg.Profiles["local"], PushNoteRequest{
+		RemoteRoot:       remote,
+		NoteID:           noteID,
+		ExpectedRevision: records[noteID].RemoteRev,
+		RelPath:          "shared.md",
+		Content:          "---\nsync: shared\n---\nremote edit\n",
+	})
+	require.NoError(t, err)
+
+	// Also modify local content — this would normally be a conflict
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: shared\n---\nlocal edit\n"), 0o644))
+
+	// Sync should apply remote without creating a conflict
+	result, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Zero(t, result.Conflicts, "shared notes must never produce conflicts")
+	require.True(t, result.NotesChanged)
+
+	// Local file should now contain the remote version
+	content, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "remote edit")
+	require.NotContains(t, string(content), "local edit")
+
+	// No conflict copy should exist
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	for _, e := range entries {
+		require.NotContains(t, e.Name(), ".conflict-", "expected no conflict copy file")
+	}
+}
+
+func TestSyncRootRegistersAndUpdatesSharedNote(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "shared.md")
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: shared
+---
+# Shared Note
+
+Body
+`), 0o644))
+
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	result, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RegisteredNotes)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	var noteID string
+	for id := range records {
+		noteID = id
+	}
+
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: shared
+---
+# Shared Note
+
+Updated body
+`), 0o644))
+	result, err = SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.UpdatedNotes)
+
+	fetched, err := client.FetchNote(context.Background(), cfg.Profiles["local"], FetchNoteRequest{RemoteRoot: remote, NoteID: noteID})
+	require.NoError(t, err)
+	require.Contains(t, fetched.Note.Content, "Updated body")
+}

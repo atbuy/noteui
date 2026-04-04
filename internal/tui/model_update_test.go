@@ -835,3 +835,37 @@ func TestDeletePendingSecondDConfirmsDelete(t *testing.T) {
 	require.NotNil(t, cmd)
 	require.NotNil(t, updated.deletePending)
 }
+
+func TestMakeSharedKeyOnNoteWritesSharedClass(t *testing.T) {
+	m := newTestModel(t)
+	notePath := filepath.Join(m.rootDir, "note.md")
+	require.NoError(t, os.WriteFile(notePath, []byte("# Note\n"), 0o644))
+	n := &notes.Note{RelPath: "note.md", Path: notePath, Name: "note.md", SyncClass: notes.SyncClassLocal}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: "note.md", Note: n}}
+	m.treeCursor = 0
+	next, cmd := m.Update(keyMsg("ctrl+s"))
+	m = next.(Model)
+	require.NotNil(t, cmd, "expected a command to be dispatched")
+	_ = cmd()
+	content, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "sync: shared")
+}
+
+func TestMakeSharedKeyOnAlreadySharedNoteShowsStatus(t *testing.T) {
+	m := newTestModel(t)
+	n := &notes.Note{RelPath: "shared.md", Path: m.rootDir + "/shared.md", Name: "shared.md", SyncClass: notes.SyncClassShared}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: "shared.md", Note: n}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("ctrl+s"))
+	require.Equal(t, "note is already shared", m.status)
+}
+
+func TestToggleSyncKeyOnSharedNoteShowsStatus(t *testing.T) {
+	m := newTestModel(t)
+	n := &notes.Note{RelPath: "work/shared.md", Path: m.rootDir + "/work/shared.md", Name: "shared.md", SyncClass: notes.SyncClassShared}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: "work/shared.md", Note: n}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("S"))
+	require.Contains(t, m.status, "shared notes cannot be toggled")
+}

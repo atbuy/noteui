@@ -1,6 +1,7 @@
 package notes
 
 import (
+	"errors"
 	"os"
 	"strings"
 )
@@ -82,12 +83,15 @@ func FrontMatterString(fm FrontMatter, key string) string {
 const (
 	SyncClassLocal  = "local"
 	SyncClassSynced = "synced"
+	SyncClassShared = "shared"
 )
 
 func ParseSyncClass(fm FrontMatter) string {
 	switch strings.ToLower(FrontMatterString(fm, "sync")) {
 	case SyncClassSynced:
 		return SyncClassSynced
+	case SyncClassShared:
+		return SyncClassShared
 	default:
 		return SyncClassLocal
 	}
@@ -169,8 +173,11 @@ func SetNoteSyncClass(path, syncClass string) error {
 	}
 
 	value := SyncClassLocal
-	if strings.EqualFold(strings.TrimSpace(syncClass), SyncClassSynced) {
+	switch strings.ToLower(strings.TrimSpace(syncClass)) {
+	case SyncClassSynced:
 		value = SyncClassSynced
+	case SyncClassShared:
+		value = SyncClassShared
 	}
 
 	updated := setFrontMatterField(normalizedRaw, body, "sync", "sync: "+value)
@@ -186,6 +193,10 @@ func ToggleNoteSyncClass(path string) (string, error) {
 	fm, _, err := ParseFrontMatter(strings.ReplaceAll(raw, "\r\n", "\n"))
 	if err != nil {
 		return "", err
+	}
+
+	if ParseSyncClass(fm) == SyncClassShared {
+		return SyncClassShared, errors.New("shared notes cannot be toggled; edit frontmatter directly to change sync class")
 	}
 
 	next := SyncClassSynced

@@ -84,8 +84,34 @@ func TestParseSyncClassDefaultsToLocal(t *testing.T) {
 	require.Equal(t, SyncClassLocal, ParseSyncClass(fm))
 	fm["sync"] = "synced"
 	require.Equal(t, SyncClassSynced, ParseSyncClass(fm))
+	fm["sync"] = "shared"
+	require.Equal(t, SyncClassShared, ParseSyncClass(fm))
 	fm["sync"] = "bogus"
 	require.Equal(t, SyncClassLocal, ParseSyncClass(fm))
+}
+
+func TestToggleNoteSyncClassBlocksSharedNotes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shared.md")
+	require.NoError(t, os.WriteFile(path, []byte("---\nsync: shared\n---\n# Shared\n"), 0o644))
+
+	result, err := ToggleNoteSyncClass(path)
+	require.Error(t, err)
+	require.Equal(t, SyncClassShared, result)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), "sync: shared")
+}
+
+func TestSetNoteSyncClassAcceptsShared(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "note.md")
+	require.NoError(t, os.WriteFile(path, []byte("# Body\n"), 0o644))
+	require.NoError(t, SetNoteSyncClass(path, SyncClassShared))
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), "sync: shared")
 }
 
 func TestToggleNoteSyncClassRewritesFrontmatter(t *testing.T) {

@@ -37,6 +37,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Tree", key: keys.AddTag.Help().Key, desc: "Add tag to selected note"},
 		{section: "Tree", key: keys.Pin.Help().Key, desc: "Pin or unpin current item"},
 		{section: "Tree", key: keys.ToggleSync.Help().Key, desc: "Toggle selected note sync"},
+		{section: "Tree", key: keys.MakeShared.Help().Key, desc: "Make selected note shared"},
 		{section: "Tree", key: keys.SelectSyncProfile.Help().Key, desc: "Select default sync profile"},
 		{section: "Tree", key: keys.OpenConflictCopy.Help().Key, desc: "Resolve selected conflict"},
 		{section: "Tree", key: keys.ShowSyncDebug.Help().Key, desc: "Show sync details"},

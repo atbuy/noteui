@@ -572,7 +572,7 @@ func (m *Model) refreshSyncRecords() {
 func (m Model) pendingSyncRelPaths() map[string]bool {
 	out := make(map[string]bool)
 	for _, note := range m.notes {
-		if note.SyncClass != notes.SyncClassSynced {
+		if note.SyncClass != notes.SyncClassSynced && note.SyncClass != notes.SyncClassShared {
 			continue
 		}
 		relPath := filepath.ToSlash(note.RelPath)
@@ -643,6 +643,9 @@ const (
 	noteSyncVisualPending
 	noteSyncVisualSyncing
 	noteSyncVisualHealthy
+	noteSyncVisualSharedHealthy
+	noteSyncVisualSharedPending
+	noteSyncVisualSharedSyncing
 )
 
 func (m Model) noteSyncVisualState(note *notes.Note) noteSyncVisualState {
@@ -650,6 +653,15 @@ func (m Model) noteSyncVisualState(note *notes.Note) noteSyncVisualState {
 		return noteSyncVisualLocal
 	}
 	relPath := filepath.ToSlash(strings.TrimSpace(note.RelPath))
+	if note.SyncClass == notes.SyncClassShared {
+		if m.syncInFlight[relPath] {
+			return noteSyncVisualSharedSyncing
+		}
+		if !m.hasHealthySyncRecord(relPath) {
+			return noteSyncVisualSharedPending
+		}
+		return noteSyncVisualSharedHealthy
+	}
 	if note.SyncClass != notes.SyncClassSynced {
 		return noteSyncVisualLocal
 	}
@@ -688,6 +700,12 @@ func (m Model) noteSyncMarker(note *notes.Note) (string, lipgloss.Color) {
 		return "● ", syncedNoteColor
 	case noteSyncVisualSyncing:
 		return m.blinkingSyncMarker()
+	case noteSyncVisualSharedHealthy:
+		return "◆ ", sharedNoteColor
+	case noteSyncVisualSharedSyncing:
+		return m.blinkingSyncMarker()
+	case noteSyncVisualSharedPending:
+		return "◆ ", unsyncedNoteColor
 	default:
 		return "● ", unsyncedNoteColor
 	}
@@ -882,7 +900,7 @@ func (m Model) localPinnedCategories() []string {
 func (m *Model) applySyncedPins(noteRelPaths, cats []string) {
 	syncedSet := make(map[string]bool, len(m.notes))
 	for _, note := range m.notes {
-		if note.SyncClass == notes.SyncClassSynced {
+		if note.SyncClass == notes.SyncClassSynced || note.SyncClass == notes.SyncClassShared {
 			syncedSet[note.RelPath] = true
 		}
 	}
@@ -1218,6 +1236,23 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.scheduleSync(),
 				)
 			}
+		}
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+
+	case noteMadeSharedMsg:
+		if msg.err != nil {
+			m.status = "make shared failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.previewPath = ""
+		m.status = "note is now shared"
+		relPath, err := filepath.Rel(m.rootDir, msg.path)
+		if err == nil {
+			return m, batchCmds(
+				refreshAllCmd(m.rootDir),
+				m.startSyncVisual(filepath.ToSlash(relPath)),
+				m.scheduleSync(),
+			)
 		}
 		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
@@ -2543,7 +2578,24 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.status = "sync toggle only works on notes"
 				return m, nil
 			}
+			if item.Note.SyncClass == notes.SyncClassShared {
+				m.status = "shared notes cannot be toggled"
+				return m, nil
+			}
 			return m, toggleNoteSyncCmd(item.Note.Path)
+		}
+
+		if key.Matches(msg, keys.MakeShared) {
+			item := m.currentTreeItem()
+			if item == nil || item.Kind != treeNote || item.Note == nil {
+				m.status = "make shared only works on notes"
+				return m, nil
+			}
+			if item.Note.SyncClass == notes.SyncClassShared {
+				m.status = "note is already shared"
+				return m, nil
+			}
+			return m, makeNoteSharedCmd(item.Note.Path)
 		}
 
 		if key.Matches(msg, keys.OpenConflictCopy) {

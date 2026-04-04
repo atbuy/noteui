@@ -712,3 +712,35 @@ func TestRenderModalGapUsesStyledSpaces(t *testing.T) {
 	require.Equal(t, "   ", stripANSI(rendered))
 	require.Equal(t, 3, lipgloss.Width(rendered))
 }
+
+func TestNoteSyncVisualStateSharedHealthy(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/shared.md": {RelPath: "work/shared.md", LastSyncAt: time.Now()},
+	}
+	require.Equal(t, noteSyncVisualSharedHealthy, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncVisualStateSharedPendingWhenNoRecord(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	require.Equal(t, noteSyncVisualSharedPending, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncVisualStateSharedSyncingWhenInFlight(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	m.syncInFlight = map[string]bool{"work/shared.md": true}
+	require.Equal(t, noteSyncVisualSharedSyncing, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncMarkerSharedUsesFilledDiamond(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/shared.md": {RelPath: "work/shared.md", LastSyncAt: time.Now()},
+	}
+	mark, _ := m.noteSyncMarker(&n)
+	require.Equal(t, "◆ ", mark)
+}

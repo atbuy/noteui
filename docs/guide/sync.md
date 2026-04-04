@@ -66,12 +66,26 @@ Inside noteui:
 - synced notes are checked against the remote state after startup
 - `F` opens the in-app default sync profile picker
 
+## Shared notes
+
+A shared note uses `sync: shared` in its frontmatter and is permanently synced to the remote. Unlike `sync: synced`, a shared note cannot be toggled to local-only with `S` — the sync class must be changed by editing the frontmatter directly.
+
+```yaml
+---
+sync: shared
+---
+```
+
+Shared notes appear in the tree with a `◆` marker instead of `●`. They participate in all sync operations identically to `sync: synced` notes.
+
 ## Understanding sync state in the tree
 
 - hollow red `○`: local-only note
 - green `●`: synced note with a previously successful sync record
+- blue `◆`: shared note with a previously successful sync record
 - orange blinking marker: sync, import, or remote-delete action in progress
 - filled red `●`: note is intended to be synced, but noteui has a conflict or the latest sync check failed
+- filled red `◆`: shared note with a conflict or failed sync check
 - muted placeholder row: note exists on the server but not in the local notes tree yet
 
 At startup, noteui uses the last healthy local sync record immediately. If the background sync later finds a conflict or remote problem, that note falls back to the red state.

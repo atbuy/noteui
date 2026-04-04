@@ -50,7 +50,7 @@ func classifySyncIssue(rec notesync.NoteRecord, rawErr string) (string, string, 
 
 func (m Model) currentSyncDebugDetails() (*syncDebugDetails, bool) {
 	note := m.currentLocalNote()
-	if note == nil || note.SyncClass != notes.SyncClassSynced {
+	if note == nil || (note.SyncClass != notes.SyncClassSynced && note.SyncClass != notes.SyncClassShared) {
 		return nil, false
 	}
 	return m.syncDebugDetailsForNote(*note)
@@ -209,7 +209,7 @@ func (m Model) selectedConflictChoiceLabel() string {
 
 func (m Model) currentConflictResolutionRecord() (*notes.Note, notesync.NoteRecord, string, bool) {
 	note := m.currentLocalNote()
-	if note == nil || note.SyncClass != notes.SyncClassSynced {
+	if note == nil || (note.SyncClass != notes.SyncClassSynced && note.SyncClass != notes.SyncClassShared) {
 		return nil, notesync.NoteRecord{}, "", false
 	}
 	rec, ok := m.syncRecords[filepath.ToSlash(strings.TrimSpace(note.RelPath))]

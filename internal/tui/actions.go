@@ -546,7 +546,7 @@ func (m Model) currentLocalNote() *notes.Note {
 
 func (m Model) currentConflictCopyPath() string {
 	note := m.currentLocalNote()
-	if note == nil || note.SyncClass != notes.SyncClassSynced {
+	if note == nil || (note.SyncClass != notes.SyncClassSynced && note.SyncClass != notes.SyncClassShared) {
 		return ""
 	}
 	rec, ok := m.syncRecords[filepath.ToSlash(strings.TrimSpace(note.RelPath))]

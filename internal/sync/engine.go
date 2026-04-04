@@ -13,6 +13,10 @@ import (
 	"atbuy/noteui/internal/notes"
 )
 
+func isSyncedClass(syncClass string) bool {
+	return syncClass == notes.SyncClassSynced || syncClass == notes.SyncClassShared
+}
+
 func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinnedNotes []string, localPinnedCats []string, client Client) (SyncResult, error) {
 	var result SyncResult
 	if !HasSyncProfile(cfg) {
@@ -87,7 +91,7 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 		remoteMeta, ok := remoteByID[id]
 		localNote, hasLocal := noteByRelPath[filepath.ToSlash(rec.RelPath)]
 		if !ok {
-			if hasLocal && localNote.SyncClass == notes.SyncClassSynced {
+			if hasLocal && isSyncedClass(localNote.SyncClass) {
 				if err := recordSyncFailure(root, rec, &RPCError{Code: ErrCodeNotFound, Message: "note missing on remote"}); err != nil {
 					return result, err
 				}
@@ -97,7 +101,7 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 		if !hasLocal {
 			continue
 		}
-		if localNote.SyncClass != notes.SyncClassSynced {
+		if !isSyncedClass(localNote.SyncClass) {
 			continue
 		}
 		raw, err := notes.ReadAll(localNote.Path)
@@ -112,11 +116,18 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 				return result, err
 			}
 		case rec.RemoteRev != remoteMeta.Revision && rec.LastSyncedHash != localHash:
-			if err := createConflict(ctx, client, profile, root, rec, remoteMeta, localHash); err != nil {
-				_ = recordSyncFailure(root, rec, err)
-				return result, err
+			if localNote.SyncClass == notes.SyncClassShared {
+				if err := applyRemoteNote(ctx, client, profile, root, rec, remoteMeta, &result); err != nil {
+					_ = recordSyncFailure(root, rec, err)
+					return result, err
+				}
+			} else {
+				if err := createConflict(ctx, client, profile, root, rec, remoteMeta, localHash); err != nil {
+					_ = recordSyncFailure(root, rec, err)
+					return result, err
+				}
+				result.Conflicts++
 			}
-			result.Conflicts++
 		case filepath.ToSlash(rec.RelPath) != filepath.ToSlash(remoteMeta.RelPath) && rec.LastSyncedHash == localHash:
 			if err := moveLocalFile(root, rec.RelPath, remoteMeta.RelPath); err != nil {
 				return result, err
@@ -145,7 +156,7 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 	claimedOrphanedRecordIDs := make(map[string]bool, len(orphanedRecords))
 
 	for _, note := range allNotes {
-		if note.SyncClass != notes.SyncClassSynced {
+		if !isSyncedClass(note.SyncClass) {
 			continue
 		}
 		raw, err := notes.ReadAll(note.Path)
@@ -365,7 +376,7 @@ func matchOrphanedRecord(note notes.Note, raw string, orphaned []NoteRecord, cla
 func syncedRelPathsFromNotes(allNotes []notes.Note) []string {
 	out := make([]string, 0, len(allNotes))
 	for _, note := range allNotes {
-		if note.SyncClass == notes.SyncClassSynced {
+		if isSyncedClass(note.SyncClass) {
 			out = append(out, filepath.ToSlash(note.RelPath))
 		}
 	}

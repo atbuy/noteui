@@ -28,6 +28,7 @@ type keyMap struct {
 	ToggleSelect             key.Binding
 	Pin                      key.Binding
 	ToggleSync               key.Binding
+	MakeShared               key.Binding
 	SelectSyncProfile        key.Binding
 	OpenConflictCopy         key.Binding
 	ShowSyncDebug            key.Binding
@@ -146,6 +147,10 @@ var keys = keyMap{
 	ToggleSync: key.NewBinding(
 		key.WithKeys("S"),
 		key.WithHelp("S", "Toggle sync"),
+	),
+	MakeShared: key.NewBinding(
+		key.WithKeys("ctrl+s"),
+		key.WithHelp("ctrl+s", "Make note shared"),
 	),
 	SelectSyncProfile: key.NewBinding(
 		key.WithKeys("F"),
@@ -297,6 +302,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.ToggleSelect, cfg.ToggleSelect)
 	apply(&keys.Pin, cfg.Pin)
 	apply(&keys.ToggleSync, cfg.ToggleSync)
+	apply(&keys.MakeShared, cfg.MakeShared)
 	apply(&keys.SelectSyncProfile, cfg.SelectSyncProfile)
 	apply(&keys.OpenConflictCopy, cfg.OpenConflictCopy)
 	apply(&keys.ShowSyncDebug, cfg.ShowSyncDebug)
