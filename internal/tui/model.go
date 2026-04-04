@@ -282,6 +282,12 @@ type Model struct {
 	pinnedNotes map[string]bool
 	pinnedCats  map[string]bool
 
+	showCommandPalette     bool
+	commandPaletteInput    textinput.Model
+	commandPaletteItems    []paletteItem
+	commandPaletteFiltered []paletteItem
+	commandPaletteCursor   int
+
 	showHelp             bool
 	helpScroll           int
 	helpRowsCache        []string
@@ -462,6 +468,12 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	todoInput.CharLimit = 300
 	todoInput.Width = 48
 
+	commandPaletteInput := textinput.New()
+	commandPaletteInput.Placeholder = "Search notes…"
+	commandPaletteInput.Prompt = "> "
+	commandPaletteInput.CharLimit = 200
+	commandPaletteInput.Width = 60
+
 	passphraseInput := textinput.New()
 	passphraseInput.Placeholder = "Passphrase"
 	passphraseInput.Prompt = ""
@@ -511,6 +523,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		version:                   version,
 		status:                    "loading notes...",
 		expanded:                  expanded,
+		commandPaletteInput:       commandPaletteInput,
 		categoryInput:             categoryInput,
 		searchInput:               searchInput,
 		moveInput:                 moveInput,
@@ -1064,7 +1077,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		case msg.result.ImportedNotes > 0:
 			status = fmt.Sprintf("sync import complete: %d notes", msg.result.ImportedNotes)
 		case msg.result.SkippedImports > 0:
-			status = fmt.Sprintf("sync import complete: %d skipped", msg.result.SkippedImports)
+			status = fmt.Sprintf("sync import: %d skipped (note already exists locally — run sync to reconcile)", msg.result.SkippedImports)
 		case msg.result.PinsChanged:
 			status = "sync import updated pins"
 		}
@@ -1152,6 +1165,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		m.previewWidth = rightWidth
 		m.searchInput.Width = max(16, leftWidth-8)
+		m.commandPaletteInput.Width = max(40, min(86, m.width-8))
 		m.categoryInput.Width = max(24, min(50, m.width-16))
 		m.moveInput.Width = max(24, min(60, m.width-16))
 		m.renameInput.Width = max(24, min(60, m.width-16))
@@ -1226,7 +1240,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.previewPath = ""
-		m.status = "note sync: " + msg.syncClass
+		if msg.syncClass == notes.SyncClassLocal {
+			m.status = "note unsynced locally — remote copy still exists. Press U to delete it from remote"
+		} else {
+			m.status = "note sync: " + msg.syncClass
+		}
 		if msg.syncClass == notes.SyncClassSynced {
 			relPath, err := filepath.Rel(m.rootDir, msg.path)
 			if err == nil {
@@ -1581,6 +1599,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, m.openDashboardRecent(3)
 			case msg.String() == "5":
 				return m, m.openDashboardRecent(4)
+
+			case key.Matches(msg, keys.CommandPalette):
+				m.showDashboard = false
+				m.openCommandPalette()
+				m.status = "quick open"
+				return m, nil
 
 			case key.Matches(msg, keys.Quit):
 				if m.watcher != nil {
@@ -2055,6 +2079,30 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
+		if m.showCommandPalette {
+			switch {
+			case msg.Type == tea.KeyEsc || key.Matches(msg, keys.Quit):
+				m.showCommandPalette = false
+				m.commandPaletteInput.Blur()
+			case msg.Type == tea.KeyEnter:
+				m.commitPaletteSelection()
+			case key.Matches(msg, keys.MoveUp):
+				if m.commandPaletteCursor > 0 {
+					m.commandPaletteCursor--
+				}
+			case key.Matches(msg, keys.MoveDown):
+				if m.commandPaletteCursor < len(m.commandPaletteFiltered)-1 {
+					m.commandPaletteCursor++
+				}
+			default:
+				var cmd tea.Cmd
+				m.commandPaletteInput, cmd = m.commandPaletteInput.Update(msg)
+				m.rebuildPaletteFiltered()
+				return m, cmd
+			}
+			return m, nil
+		}
+
 		if m.showCreateCategory {
 			switch msg.String() {
 			case "esc":
@@ -2213,6 +2261,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.rebuildHelpModalCache(max(8, min(20, m.height-16)))
 			m.pendingG = false
 			m.status = "help"
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.CommandPalette) {
+			m.openCommandPalette()
+			m.status = "quick open"
 			return m, nil
 		}
 

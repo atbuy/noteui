@@ -9,19 +9,16 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
+	xansi "github.com/charmbracelet/x/ansi"
 
 	"atbuy/noteui/internal/notes"
 )
 
-func (m Model) View() string {
-	if m.showDashboard {
-		return m.renderDashboardView()
-	}
-
+// renderBaseView renders the full tree + preview layout without any modal overlays.
+func (m Model) renderBaseView() string {
 	usableWidth := max(40, m.width-6)
 	leftWidth, rightWidth := m.panelWidths()
 
-	// Inner usable content area for each panel (after border and padding).
 	leftInnerWidth := max(18, leftWidth-2-2*panelPaddingX)
 	rightInnerWidth := max(18, rightWidth-2-2*panelPaddingX)
 
@@ -60,10 +57,8 @@ func (m Model) View() string {
 		Width(usableWidth).
 		Render(m.renderStatus())
 
-	// A background-filled spacer replaces the removed footerStyle MarginTop.
 	spacer := lipgloss.NewStyle().Width(usableWidth).Background(bgColor).Render("")
 
-	// Full-height gap so JoinHorizontal never falls back to plain spaces.
 	gapHeight := max(10, m.height-6)
 	gap := lipgloss.NewStyle().
 		Width(panelGapWidth).
@@ -83,12 +78,24 @@ func (m Model) View() string {
 		),
 	)
 
-	// Full-screen background wrapper ensures no terminal bg bleeds at the edges.
-	fullScreen := lipgloss.NewStyle().
+	return lipgloss.NewStyle().
 		Width(m.width).
 		Height(m.height).
 		Background(bgColor).
 		Render(base)
+}
+
+func (m Model) View() string {
+	if m.showDashboard {
+		return m.renderDashboardView()
+	}
+
+	if m.showCommandPalette {
+		return placeOverlay(m.renderBaseView(), m.renderCommandPaletteModal(), m.width, m.height)
+	}
+
+	// For all other modals, compute the base view once and use it as the background canvas.
+	fullScreen := m.renderBaseView()
 
 	if m.showCreateCategory {
 		return lipgloss.Place(
@@ -1897,6 +1904,40 @@ func (m Model) renderSortSegment() string {
 		return "sort: modified"
 	}
 	return "sort: alpha"
+}
+
+// placeOverlay composites the modal string centered over the base string using
+// ANSI-aware line splicing. Unlike lipgloss.Place with whitespace options, this
+// preserves the base view content visible around the modal border.
+func placeOverlay(base, modal string, width, height int) string {
+	baseLines := strings.Split(base, "\n")
+	modalLines := strings.Split(modal, "\n")
+	modalH := len(modalLines)
+	modalW := 0
+	for _, l := range modalLines {
+		if w := lipgloss.Width(l); w > modalW {
+			modalW = w
+		}
+	}
+	startY := (height - modalH) / 2
+	startX := (width - modalW) / 2
+	if startX < 0 {
+		startX = 0
+	}
+	if startY < 0 {
+		startY = 0
+	}
+	for i, overlayLine := range modalLines {
+		baseIdx := startY + i
+		if baseIdx < 0 || baseIdx >= len(baseLines) {
+			continue
+		}
+		baseLine := baseLines[baseIdx]
+		left := xansi.Truncate(baseLine, startX, "")
+		right := xansi.TruncateLeft(baseLine, startX+modalW, "")
+		baseLines[baseIdx] = left + overlayLine + right
+	}
+	return strings.Join(baseLines, "\n")
 }
 
 func highlightMatch(text, query string) string {

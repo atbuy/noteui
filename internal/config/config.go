@@ -127,6 +127,7 @@ type KeysConfig struct {
 	ToggleSync               []string `toml:"toggle_sync"`
 	MakeShared               []string `toml:"make_shared"`
 	ToggleTemporary          []string `toml:"toggle_temporary"`
+	CommandPalette           []string `toml:"command_palette"`
 	SelectSyncProfile        []string `toml:"select_sync_profile"`
 	OpenConflictCopy         []string `toml:"open_conflict_copy"`
 	ShowSyncDebug           []string `toml:"show_sync_debug"`

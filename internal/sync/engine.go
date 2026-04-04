@@ -83,8 +83,10 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 		noteByRelPath[filepath.ToSlash(note.RelPath)] = note
 	}
 	remoteByID := make(map[string]RemoteNoteMeta, len(remoteIndex.Notes))
+	remoteByRelPath := make(map[string]RemoteNoteMeta, len(remoteIndex.Notes))
 	for _, meta := range remoteIndex.Notes {
 		remoteByID[meta.ID] = meta
+		remoteByRelPath[filepath.ToSlash(meta.RelPath)] = meta
 	}
 
 	for id, rec := range records {
@@ -168,17 +170,37 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 			rec, ok = matchOrphanedRecord(note, raw, orphanedRecords, claimedOrphanedRecordIDs)
 		}
 		if !ok {
-			resp, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{RemoteRoot: profile.RemoteRoot, RelPath: filepath.ToSlash(note.RelPath), Content: raw, Encrypted: note.Encrypted})
-			if err != nil {
-				return result, err
+			if remoteMeta, adoptable := remoteByRelPath[filepath.ToSlash(note.RelPath)]; adoptable {
+				// Remote already has a note at this path. Adopt its ID instead of
+				// registering a new one, which would create a duplicate on the server.
+				// This happens when local sync records are missing (e.g. fresh install,
+				// .noteui-sync deleted) but the note was previously synced from another device.
+				rec = NoteRecord{
+					ID:                remoteMeta.ID,
+					RelPath:           filepath.ToSlash(note.RelPath),
+					Class:             ClassSynced,
+					RemoteRev:         remoteMeta.Revision,
+					Encrypted:         note.Encrypted,
+					LastSyncAttemptAt: time.Now().UTC(),
+				}
+				if err := SaveNoteRecord(root, rec); err != nil {
+					return result, err
+				}
+				recordsByRelPath[filepath.ToSlash(note.RelPath)] = rec
+				// Fall through to the push/pull logic below — do not continue.
+			} else {
+				resp, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{RemoteRoot: profile.RemoteRoot, RelPath: filepath.ToSlash(note.RelPath), Content: raw, Encrypted: note.Encrypted})
+				if err != nil {
+					return result, err
+				}
+				rec = NoteRecord{ID: resp.ID, RelPath: filepath.ToSlash(note.RelPath), Class: ClassSynced, RemoteRev: resp.Revision, LastSyncedHash: HashContent(raw), Encrypted: note.Encrypted, LastSyncAt: time.Now().UTC(), LastSyncAttemptAt: time.Now().UTC()}
+				rec.LastSyncError = ""
+				if err := SaveNoteRecord(root, rec); err != nil {
+					return result, err
+				}
+				result.RegisteredNotes++
+				continue
 			}
-			rec = NoteRecord{ID: resp.ID, RelPath: filepath.ToSlash(note.RelPath), Class: ClassSynced, RemoteRev: resp.Revision, LastSyncedHash: HashContent(raw), Encrypted: note.Encrypted, LastSyncAt: time.Now().UTC(), LastSyncAttemptAt: time.Now().UTC()}
-			rec.LastSyncError = ""
-			if err := SaveNoteRecord(root, rec); err != nil {
-				return result, err
-			}
-			result.RegisteredNotes++
-			continue
 		}
 		if _, exists := remoteByID[rec.ID]; !exists {
 			continue
@@ -341,7 +363,7 @@ func orphanedSyncedRecords(records map[string]NoteRecord, remoteByID map[string]
 			continue
 		}
 		localNote, hasLocal := localByRelPath[filepath.ToSlash(rec.RelPath)]
-		if hasLocal && localNote.SyncClass == notes.SyncClassSynced {
+		if hasLocal && isSyncedClass(localNote.SyncClass) {
 			continue
 		}
 		out = append(out, rec)
