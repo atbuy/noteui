@@ -26,7 +26,7 @@ func (m Model) helpEntries() []helpEntry {
 	bf := keys.BracketForward.Help().Key
 	bb := keys.BracketBackward.Help().Key
 	return []helpEntry{
-		{section: "Tree", key: keys.CommandPalette.Help().Key, desc: "Command palette — quick open any note"},
+		{section: "Tree", key: keys.CommandPalette.Help().Key, desc: "Command palette — notes and actions"},
 		{section: "Tree", key: keys.MoveDown.Help().Key + " / " + keys.MoveUp.Help().Key, desc: "Move up and down"},
 		{section: "Tree", key: keys.ScrollHalfPageUp.Help().Key + " / " + keys.ScrollHalfPageDown.Help().Key, desc: "Scroll half page up / down"},
 		{section: "Tree", key: keys.CollapseCategory.Help().Key + "/" + keys.ExpandCategory.Help().Key, desc: "Collapse/Expand category"},

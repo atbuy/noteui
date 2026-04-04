@@ -469,7 +469,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	todoInput.Width = 48
 
 	commandPaletteInput := textinput.New()
-	commandPaletteInput.Placeholder = "Search notes…"
+	commandPaletteInput.Placeholder = "Search notes and commands..."
 	commandPaletteInput.Prompt = "> "
 	commandPaletteInput.CharLimit = 200
 	commandPaletteInput.Width = 60
@@ -1603,7 +1603,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case key.Matches(msg, keys.CommandPalette):
 				m.showDashboard = false
 				m.openCommandPalette()
-				m.status = "quick open"
+				m.status = "command palette"
 				return m, nil
 
 			case key.Matches(msg, keys.Quit):
@@ -2080,17 +2080,22 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if m.showCommandPalette {
-			switch {
-			case msg.Type == tea.KeyEsc || key.Matches(msg, keys.Quit):
+			var paletteCmd tea.Cmd
+			switch msg.Type {
+			case tea.KeyEsc:
 				m.showCommandPalette = false
 				m.commandPaletteInput.Blur()
-			case msg.Type == tea.KeyEnter:
-				m.commitPaletteSelection()
-			case key.Matches(msg, keys.MoveUp):
+			case tea.KeyEnter:
+				if len(m.commandPaletteFiltered) > 0 {
+					paletteCmd = m.commitPaletteSelection()
+				}
+			case tea.KeyTab:
+				m.tabCompletePalette()
+			case tea.KeyUp:
 				if m.commandPaletteCursor > 0 {
 					m.commandPaletteCursor--
 				}
-			case key.Matches(msg, keys.MoveDown):
+			case tea.KeyDown:
 				if m.commandPaletteCursor < len(m.commandPaletteFiltered)-1 {
 					m.commandPaletteCursor++
 				}
@@ -2100,7 +2105,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.rebuildPaletteFiltered()
 				return m, cmd
 			}
-			return m, nil
+			return m, paletteCmd
 		}
 
 		if m.showCreateCategory {
@@ -2240,33 +2245,18 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, keys.SortToggle) {
-			m.sortByModTime = !m.sortByModTime
-			_ = m.saveTreeState()
-			m.rebuildTree()
-			if m.sortByModTime {
-				m.status = "sorting by modified time"
-			} else {
-				m.status = "sorting alphabetically"
-			}
+			m.toggleSortOrder()
 			return m, nil
 		}
 
 		if key.Matches(msg, keys.ShowHelp) {
-			m.showHelp = true
-			m.helpScroll = 0
-			m.helpMouseSuppressed = false
-			m.helpInput.SetValue("")
-			m.helpInput.Focus()
-			m.rebuildHelpRowsCache()
-			m.rebuildHelpModalCache(max(8, min(20, m.height-16)))
-			m.pendingG = false
-			m.status = "help"
+			m.openHelpModal()
 			return m, nil
 		}
 
 		if key.Matches(msg, keys.CommandPalette) {
 			m.openCommandPalette()
-			m.status = "quick open"
+			m.status = "command palette"
 			return m, nil
 		}
 
@@ -2617,33 +2607,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, keys.ToggleSync) {
-			item := m.currentTreeItem()
-			if item != nil && item.Kind == treeRemoteNote {
-				m.status = "note is only on the server; press i to import it or I to import all"
-				return m, nil
-			}
-			if item == nil || item.Kind != treeNote || item.Note == nil {
-				m.status = "sync toggle only works on notes"
-				return m, nil
-			}
-			if item.Note.SyncClass == notes.SyncClassShared {
-				m.status = "shared notes cannot be toggled"
-				return m, nil
-			}
-			return m, toggleNoteSyncCmd(item.Note.Path)
+			return m, m.toggleNoteSyncCurrent()
 		}
 
 		if key.Matches(msg, keys.MakeShared) {
-			item := m.currentTreeItem()
-			if item == nil || item.Kind != treeNote || item.Note == nil {
-				m.status = "make shared only works on notes"
-				return m, nil
-			}
-			if item.Note.SyncClass == notes.SyncClassShared {
-				m.status = "note is already shared"
-				return m, nil
-			}
-			return m, makeNoteSharedCmd(item.Note.Path)
+			return m, m.makeCurrentNoteShared()
 		}
 
 		if key.Matches(msg, keys.OpenConflictCopy) {
@@ -2656,60 +2624,24 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, keys.DeleteRemoteKeepLocal) {
-			item := m.currentTreeItem()
-			if item == nil || item.Kind != treeNote || item.Note == nil {
-				m.status = "remote delete only works on synced local notes"
-				return m, nil
-			}
-			if item.Note.SyncClass != notes.SyncClassSynced {
-				m.status = "remote delete only works on synced local notes"
-				return m, nil
-			}
-			if _, ok := m.syncRecords[filepath.ToSlash(item.Note.RelPath)]; !ok {
-				m.status = "note is not linked to a remote copy"
-				return m, nil
-			}
-			m.status = "deleting remote copy..."
-			return m, batchCmds(
-				deleteRemoteNoteKeepLocalCmd(m.rootDir, item.Note.Path, m.cfg.Sync),
-				m.startSyncVisual(item.Note.RelPath),
-			)
+			return m, m.deleteRemoteCopyCurrent()
 		}
 
 		if key.Matches(msg, keys.SyncImportCurrent) {
-			item := m.currentTreeItem()
-			if item == nil || item.Kind != treeRemoteNote || item.RemoteNote == nil {
-				m.status = "single-note import only works on remote notes"
-				return m, nil
-			}
-			m.status = "importing remote note..."
-			return m, batchCmds(
-				importCurrentSyncedNoteCmd(m.rootDir, m.cfg.Sync, item.RemoteNote.ID),
-				m.startSyncVisual(remoteOnlySyncVisualKey(item.RemoteNote.ID)),
-			)
+			return m, m.importCurrentRemoteNote()
 		}
 
 		if key.Matches(msg, keys.SyncImport) {
-			m.status = "importing synced notes..."
-			return m, importSyncedNotesCmd(m.rootDir, m.cfg.Sync)
+			return m, m.importAllRemoteNotes()
 		}
 
 		if key.Matches(msg, keys.CreateCategory) {
-			if m.listMode != listModeNotes {
-				m.status = "categories only available in notes tree"
-				return m, nil
-			}
-			m.showCreateCategory = true
-			m.categoryInput.SetValue(m.currentCategoryPrefix())
-			m.categoryInput.Focus()
-			m.categoryInput.CursorEnd()
-			m.status = "new category"
+			m.openCreateCategory()
 			return m, nil
 		}
 
 		if key.Matches(msg, keys.Refresh) {
-			m.status = "refreshing..."
-			return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+			return m, m.startRefresh()
 		}
 
 		if key.Matches(msg, keys.NewTemporaryNote) {
@@ -2717,54 +2649,20 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, keys.NewTodoList) {
-			if m.listMode == listModeTemporary || m.listMode == listModePins {
-				m.status = "todo lists only available in notes tree"
-				return m, nil
-			}
-			return m, createTodoNoteCmd(m.rootDir, m.currentTargetDir())
+			return m, m.startNewTodoList()
 		}
 
 		if key.Matches(msg, keys.NewNote) {
-			if m.listMode == listModeTemporary {
-				return m, createTemporaryNoteCmd(m.rootDir)
-			}
-			if m.listMode == listModePins {
-				m.status = "press enter to jump to item first"
-				return m, nil
-			}
-			return m, createNoteCmd(m.rootDir, m.currentTargetDir())
+			return m, m.startNewNote()
 		}
 
 		if key.Matches(msg, keys.TogglePreviewPrivacy) {
-			if m.cfg.Preview.Privacy {
-				m.status = "preview privacy forced by config"
-				return m, nil
-			}
-
-			m.previewPrivacyEnabled = !m.previewPrivacyEnabled
-			m.previewPath = ""
-
-			if m.previewPrivacyEnabled {
-				m.status = "preview privacy enabled"
-			} else {
-				m.status = "preview privacy disabled"
-			}
-
-			m.refreshPreview()
+			m.togglePreviewPrivacy()
 			return m, nil
 		}
 
 		if key.Matches(msg, keys.TogglePreviewLineNumbers) {
-			m.previewLineNumbersEnabled = !m.previewLineNumbersEnabled
-			m.previewPath = ""
-
-			if m.previewLineNumbersEnabled {
-				m.status = "preview line numbers enabled"
-			} else {
-				m.status = "preview line numbers disabled"
-			}
-
-			m.refreshPreview()
+			m.togglePreviewLineNumbers()
 			return m, nil
 		}
 
