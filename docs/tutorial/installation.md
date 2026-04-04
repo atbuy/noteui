@@ -1,8 +1,62 @@
 # Installation
 
-The recommended way to install noteui is from the pre-built release archives on GitHub:
+## Quick install
 
-<https://github.com/atbuy/noteui/releases>
+=== "Linux / macOS"
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/atbuy/noteui/main/install.sh | sh
+    ```
+
+    This detects your OS and architecture, downloads the latest release, and installs both binaries to `~/.local/bin`. If that directory is not on your `PATH` yet, the script will tell you how to add it.
+
+    **Install a specific version:**
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/atbuy/noteui/main/install.sh | sh -s -- --version v0.9.1
+    ```
+
+    **Install to `/usr/local/bin` (system-wide, requires sudo):**
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/atbuy/noteui/main/install.sh | sh -s -- --system
+    ```
+
+    **Skip `noteui-sync` (not needed unless you use SSH sync):**
+
+    ```sh
+    curl -fsSL https://raw.githubusercontent.com/atbuy/noteui/main/install.sh | sh -s -- --no-sync
+    ```
+
+=== "Windows"
+
+    Run this in PowerShell:
+
+    ```powershell
+    irm https://raw.githubusercontent.com/atbuy/noteui/main/install.ps1 | iex
+    ```
+
+    This installs both binaries to `%LOCALAPPDATA%\noteui\bin` and adds that directory to your user PATH.
+
+    **Install a specific version (download the script first):**
+
+    ```powershell
+    .\install.ps1 -Version v0.9.1
+    ```
+
+    **Skip `noteui-sync`:**
+
+    ```powershell
+    .\install.ps1 -NoSync
+    ```
+
+    !!! note
+
+        If you see an execution policy error, run `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser` first.
+
+---
+
+The manual install and build-from-source options are documented below if you prefer them.
 
 ## Release archive formats
 
