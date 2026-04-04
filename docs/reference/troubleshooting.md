@@ -133,6 +133,6 @@ If local docs look correct but GitHub Pages does not:
 - confirm the docs workflow uses the pinned `zensical` version
 - hard-refresh the browser or test in a private window to rule out cached CSS and JS
 
-If a rerun fails with multiple `github-pages` artifacts, verify the workflow is using a unique artifact name per run attempt.
+If Pages deploys only after a manual rerun, verify the workflow is still using separate `build` and `deploy` jobs rather than building and deploying in a single job.
 
 See [Docs maintenance](docs-maintenance.md) for the docs pipeline setup.
