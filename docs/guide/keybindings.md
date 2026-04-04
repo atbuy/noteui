@@ -13,6 +13,7 @@ This page documents the default keybindings that most users care about first.
 - `enter` or `o`: open note in editor
 - `/`: search
 - `tab`: switch focused pane
+- `t`: toggle between Notes and Temporary mode (tree focus)
 - `q`: quit
 - `?`: show help
 - `F`: select the default sync profile

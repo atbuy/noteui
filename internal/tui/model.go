@@ -1555,12 +1555,6 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.status = "workspace"
 				return m, nil
 
-			case key.Matches(msg, keys.BracketForward):
-				m.showDashboard = false
-				m.switchToTemporaryMode()
-				m.status = "temporary"
-				return m, nil
-
 			case key.Matches(msg, keys.ShowPins):
 				m.showDashboard = false
 				m.listMode = listModePins
@@ -2721,18 +2715,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		switch {
-		case key.Matches(msg, keys.BracketBackward):
-			if m.listMode == listModePins {
-				m.switchToNotesMode()
-			} else {
-				m.toggleNotesTemporaryMode()
-			}
-			return m, nil
-
-		case key.Matches(msg, keys.BracketForward):
-			if m.listMode == listModePins {
-				m.switchToTemporaryMode()
-			} else {
+		case key.Matches(msg, keys.ToggleTemporary):
+			if m.listMode != listModePins {
 				m.toggleNotesTemporaryMode()
 			}
 			return m, nil

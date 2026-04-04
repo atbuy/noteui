@@ -1733,14 +1733,16 @@ func fillWidthBackground(content string, width int, bg lipgloss.Color) string {
 	}
 
 	lines := strings.Split(content, "\n")
-	fillStyle := lipgloss.NewStyle().
-		Width(width).
-		MaxWidth(width).
-		Background(bg)
+	padStyle := lipgloss.NewStyle().Background(bg)
 
 	for i, line := range lines {
 		trimmed := strings.TrimRight(line, " ")
-		lines[i] = fillStyle.Render(trimOrPad(trimmed, width))
+		w := lipgloss.Width(trimmed)
+		if w < width {
+			lines[i] = trimmed + padStyle.Render(strings.Repeat(" ", width-w))
+		} else {
+			lines[i] = trimmed
+		}
 	}
 
 	return strings.Join(lines, "\n")

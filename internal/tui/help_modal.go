@@ -48,7 +48,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Tree", key: keys.NewTodoList.Help().Key, desc: "New todo list (tree focus)"},
 		{section: "Notes", key: keys.NewNote.Help().Key, desc: "New note in current view"},
 		{section: "Notes", key: keys.NewTemporaryNote.Help().Key, desc: "New temporary note"},
-		{section: "Notes", key: bf + "/" + bb, desc: "Switch Notes / Temporary"},
+		{section: "Notes", key: keys.ToggleTemporary.Help().Key, desc: "Toggle Notes / Temporary (tree focus)"},
 		{section: "Notes", key: keys.ShowPins.Help().Key, desc: "Toggle Pins view"},
 		{section: "Preview", key: keys.NextMatch.Help().Key + " / " + keys.PrevMatch.Help().Key, desc: "Next / previous match in preview"},
 		{section: "Preview", key: keys.PendingZ.Help().Key + keys.PendingZ.Help().Key, desc: "Center current match in preview"},

@@ -79,6 +79,8 @@ This is useful for:
 - short-lived task notes
 - material you do not want mixed with your main note hierarchy yet
 
+Switch between your normal notes and temporary notes using `t` when focused on the tree.
+
 ## Todos
 
 Todo note helpers support:

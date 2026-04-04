@@ -126,6 +126,7 @@ type KeysConfig struct {
 	Pin                      []string `toml:"pin"`
 	ToggleSync               []string `toml:"toggle_sync"`
 	MakeShared               []string `toml:"make_shared"`
+	ToggleTemporary          []string `toml:"toggle_temporary"`
 	SelectSyncProfile        []string `toml:"select_sync_profile"`
 	OpenConflictCopy         []string `toml:"open_conflict_copy"`
 	ShowSyncDebug           []string `toml:"show_sync_debug"`

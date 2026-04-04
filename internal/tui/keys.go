@@ -29,6 +29,7 @@ type keyMap struct {
 	Pin                      key.Binding
 	ToggleSync               key.Binding
 	MakeShared               key.Binding
+	ToggleTemporary          key.Binding
 	SelectSyncProfile        key.Binding
 	OpenConflictCopy         key.Binding
 	ShowSyncDebug            key.Binding
@@ -152,6 +153,10 @@ var keys = keyMap{
 		key.WithKeys("ctrl+s"),
 		key.WithHelp("ctrl+s", "Make note shared"),
 	),
+	ToggleTemporary: key.NewBinding(
+		key.WithKeys("t"),
+		key.WithHelp("t", "Toggle temporary notes"),
+	),
 	SelectSyncProfile: key.NewBinding(
 		key.WithKeys("F"),
 		key.WithHelp("F", "Select sync profile"),
@@ -223,11 +228,11 @@ var keys = keyMap{
 	),
 	BracketForward: key.NewBinding(
 		key.WithKeys("]"),
-		key.WithHelp("]", "Next / temporary mode"),
+		key.WithHelp("]", "Next heading/todo in preview"),
 	),
 	BracketBackward: key.NewBinding(
 		key.WithKeys("["),
-		key.WithHelp("[", "Prev / notes mode"),
+		key.WithHelp("[", "Prev heading/todo in preview"),
 	),
 	HeadingJumpKey: key.NewBinding(
 		key.WithKeys("h"),
@@ -303,6 +308,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.Pin, cfg.Pin)
 	apply(&keys.ToggleSync, cfg.ToggleSync)
 	apply(&keys.MakeShared, cfg.MakeShared)
+	apply(&keys.ToggleTemporary, cfg.ToggleTemporary)
 	apply(&keys.SelectSyncProfile, cfg.SelectSyncProfile)
 	apply(&keys.OpenConflictCopy, cfg.OpenConflictCopy)
 	apply(&keys.ShowSyncDebug, cfg.ShowSyncDebug)

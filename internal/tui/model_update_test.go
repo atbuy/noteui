@@ -522,21 +522,53 @@ func TestEncryptConfirmEscCancels(t *testing.T) {
 	}
 }
 
-func TestBracketForwardSwitchesToTemporaryMode(t *testing.T) {
+func TestBracketForwardDoesNotSwitchToTemporaryMode(t *testing.T) {
 	m := newTestModel(t)
 	m.listMode = listModeNotes
+	m.focus = focusTree
 	m = updateModel(m, keyMsg("]"))
-	if m.listMode != listModeTemporary {
-		require.Failf(t, "assertion failed", "expected listModeTemporary after ']', got %v", m.listMode)
+	if m.listMode != listModeNotes {
+		require.Failf(t, "assertion failed", "expected listModeNotes unchanged after ']' in tree focus, got %v", m.listMode)
 	}
 }
 
-func TestBracketBackwardFromTemporarySwitchesToNotesMode(t *testing.T) {
+func TestBracketBackwardDoesNotSwitchFromTemporaryMode(t *testing.T) {
 	m := newTestModel(t)
 	m.listMode = listModeTemporary
+	m.focus = focusTree
 	m = updateModel(m, keyMsg("["))
+	if m.listMode != listModeTemporary {
+		require.Failf(t, "assertion failed", "expected listModeTemporary unchanged after '[' in tree focus, got %v", m.listMode)
+	}
+}
+
+func TestToggleTemporaryKeySwitchesToTemporaryMode(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeNotes
+	m.focus = focusTree
+	m = updateModel(m, keyMsg("t"))
+	if m.listMode != listModeTemporary {
+		require.Failf(t, "assertion failed", "expected listModeTemporary after 't', got %v", m.listMode)
+	}
+}
+
+func TestToggleTemporaryKeyFromTemporarySwitchesToNotesMode(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.focus = focusTree
+	m = updateModel(m, keyMsg("t"))
 	if m.listMode != listModeNotes {
-		require.Failf(t, "assertion failed", "expected listModeNotes after '[' from temporary mode, got %v", m.listMode)
+		require.Failf(t, "assertion failed", "expected listModeNotes after 't' from temporary mode, got %v", m.listMode)
+	}
+}
+
+func TestToggleTemporaryKeyIgnoredInPinsMode(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModePins
+	m.focus = focusTree
+	m = updateModel(m, keyMsg("t"))
+	if m.listMode != listModePins {
+		require.Failf(t, "assertion failed", "expected listModePins unchanged after 't' in pins mode, got %v", m.listMode)
 	}
 }
 
