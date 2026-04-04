@@ -46,6 +46,7 @@ This page documents the default keybindings that most users care about first.
 - `E`: toggle encryption
 - `S`: toggle sync for the selected local note
 - `O`: open the generated conflict copy for the selected conflicted synced note
+- `ctrl+e`: open full sync debug details for the selected unhealthy synced note
 - `U`: delete only the remote copy of a synced local note
 - `i`: import the selected remote-only note
 - `I`: import all missing synced notes

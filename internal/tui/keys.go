@@ -30,6 +30,7 @@ type keyMap struct {
 	ToggleSync               key.Binding
 	SelectSyncProfile        key.Binding
 	OpenConflictCopy         key.Binding
+	ShowSyncDebug            key.Binding
 	DeleteRemoteKeepLocal    key.Binding
 	SyncImportCurrent        key.Binding
 	SyncImport               key.Binding
@@ -152,7 +153,11 @@ var keys = keyMap{
 	),
 	OpenConflictCopy: key.NewBinding(
 		key.WithKeys("O"),
-		key.WithHelp("O", "Open conflict copy"),
+		key.WithHelp("O", "Resolve conflict"),
+	),
+	ShowSyncDebug: key.NewBinding(
+		key.WithKeys("ctrl+e"),
+		key.WithHelp("ctrl+e", "Sync details"),
 	),
 	DeleteRemoteKeepLocal: key.NewBinding(
 		key.WithKeys("U"),
@@ -294,6 +299,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.ToggleSync, cfg.ToggleSync)
 	apply(&keys.SelectSyncProfile, cfg.SelectSyncProfile)
 	apply(&keys.OpenConflictCopy, cfg.OpenConflictCopy)
+	apply(&keys.ShowSyncDebug, cfg.ShowSyncDebug)
 	apply(&keys.DeleteRemoteKeepLocal, cfg.DeleteRemoteKeepLocal)
 	apply(&keys.SyncImportCurrent, cfg.SyncImportCurrent)
 	apply(&keys.SyncImport, cfg.SyncImport)

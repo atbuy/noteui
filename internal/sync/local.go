@@ -125,6 +125,17 @@ func DeleteNoteRecord(root, noteID string) error {
 	return nil
 }
 
+func DeleteConflictRecord(root, noteID string) error {
+	noteID = strings.TrimSpace(noteID)
+	if noteID == "" {
+		return nil
+	}
+	if err := os.Remove(ConflictPath(root, noteID)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
 func SaveConflictRecord(root string, rec ConflictRecord) error {
 	if strings.TrimSpace(rec.NoteID) == "" {
 		return errors.New("conflict record note id cannot be empty")

@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -270,5 +272,66 @@ func TestRenderStatusShowsConflictHintForSelectedConflictedNote(t *testing.T) {
 	}
 	rendered := m.renderStatus()
 	plain := stripANSI(rendered)
-	require.Contains(t, plain, "conflict: press O to open copy")
+	require.Contains(t, plain, "conflict: press O to resolve")
+}
+
+func TestRenderModeSegmentSyncDebug(t *testing.T) {
+	m := newTestModel(t)
+	m.showSyncDebugModal = true
+	require.Equal(t, "SYNC DEBUG", m.renderModeSegment())
+}
+
+func TestRenderStatusShowsSyncDebugHintForSelectedErroredNote(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", LastSyncError: "remote unavailable"},
+	}
+
+	rendered := m.renderStatus()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "sync issue: press ctrl+e for details")
+}
+
+func TestRenderSyncDebugModalContainsRawError(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", ID: "n1", LastSyncError: "dial tcp timeout", LastSyncAttemptAt: time.Date(2026, 4, 4, 10, 0, 0, 0, time.UTC)},
+	}
+
+	rendered := m.renderSyncDebugModal()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Sync details")
+	require.Contains(t, plain, "dial tcp timeout")
+	require.Contains(t, plain, "Remote ID")
+	require.Contains(t, plain, "y copy detail")
+}
+
+func TestRenderConflictResolutionModalShowsBothSides(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 140
+	m.height = 42
+	notePath := m.rootDir + "/work/note.md"
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte("local body"), 0o644))
+	conflictPath := m.rootDir + "/work/note.conflict-20260403-120000.md"
+	require.NoError(t, os.WriteFile(conflictPath, []byte("remote body"), 0o644))
+	n := notes.Note{Path: notePath, RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", ID: "n1", LastSyncAt: time.Now(), Conflict: &notesync.ConflictInfo{CopyPath: "work/note.conflict-20260403-120000.md", OccurredAt: time.Now()}},
+	}
+
+	rendered := m.renderSyncDebugModal()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Resolve conflict")
+	require.Contains(t, plain, "Keep local")
+	require.Contains(t, plain, "Keep remote")
+	require.Contains(t, plain, "local body")
+	require.Contains(t, plain, "remote body")
 }

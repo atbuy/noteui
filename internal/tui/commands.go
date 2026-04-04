@@ -260,6 +260,11 @@ type remoteNoteDeletedMsg struct {
 	err  error
 }
 
+type conflictResolvedMsg struct {
+	keepRemote bool
+	err        error
+}
+
 func startSyncCmd() tea.Cmd {
 	return func() tea.Msg { return syncStartMsg{} }
 }

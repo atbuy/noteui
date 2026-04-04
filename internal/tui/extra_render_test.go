@@ -654,6 +654,16 @@ func TestRenderTreeLineRemoteOnlyNoteUsesMutedXMarker(t *testing.T) {
 	require.Contains(t, plain, "Remote Note")
 }
 
+func TestRenderTreeLineRemoteOnlyDuplicateShowsIDBadge(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.remoteOnlyNotes = []notesync.RemoteNoteMeta{{ID: "n1aaaa", RelPath: "work/remote.md", Title: "Remote Note"}, {ID: "n2bbbb", RelPath: "work/remote.md", Title: "Remote Note"}}
+	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: m.remoteOnlyDisplayTitle(m.remoteOnlyNotes[0]), RemoteNote: &m.remoteOnlyNotes[0], Depth: 0}
+	rendered := m.renderTreeLine(item, false)
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Remote Note [n1aaaa]")
+}
+
 func TestCurrentCategoryPrefixRemoteOnlyNote(t *testing.T) {
 	m := newTestModel(t)
 	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}
@@ -673,7 +683,7 @@ func TestCurrentNotePathRemoteOnlyNoteIsEmpty(t *testing.T) {
 func TestRenderTreeLineRemoteOnlyNoteBlinksWhileImporting(t *testing.T) {
 	m := newTestModel(t)
 	m.width = 120
-	m.syncInFlight = map[string]bool{"work/remote.md": true}
+	m.syncInFlight = map[string]bool{remoteOnlySyncVisualKey("n1"): true}
 	m.syncSpinnerFrame = 0
 	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}
 	rendered := m.renderTreeLine(item, false)

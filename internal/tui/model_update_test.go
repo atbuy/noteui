@@ -31,6 +31,8 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyHome}
 	case "end":
 		return tea.KeyMsg{Type: tea.KeyEnd}
+	case "ctrl+e":
+		return tea.KeyMsg{Type: tea.KeyCtrlE}
 	default:
 		if len(s) == 1 {
 			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
@@ -285,7 +287,7 @@ func TestSyncImportCurrentKeyStartsImportForRemoteOnlyNote(t *testing.T) {
 	require.Equal(t, "importing remote note...", m.status)
 	require.NotNil(t, cmd)
 	require.False(t, m.syncRunning)
-	require.True(t, m.syncInFlight["work/remote.md"])
+	require.True(t, m.syncInFlight[remoteOnlySyncVisualKey("n1")])
 }
 
 func TestSyncImportCurrentKeyOnLocalNoteShowsStatus(t *testing.T) {
@@ -639,6 +641,17 @@ func TestRemoteOnlyNotePreviewExplainsImport(t *testing.T) {
 	require.Contains(t, plain, "Press i")
 }
 
+func TestRemoteOnlyDuplicatePreviewShowsRemoteID(t *testing.T) {
+	m := newTestModel(t)
+	m.remoteOnlyNotes = []notesync.RemoteNoteMeta{{ID: "n1aaaa", RelPath: "work/remote.md", Title: "Remote Note"}, {ID: "n2bbbb", RelPath: "work/remote.md", Title: "Remote Note"}}
+	m.treeItems = []treeItem{{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: m.remoteOnlyDisplayTitle(m.remoteOnlyNotes[0]), RemoteNote: &m.remoteOnlyNotes[0]}}
+	m.treeCursor = 0
+	m.refreshPreview()
+	plain := stripANSI(m.previewContent)
+	require.Contains(t, plain, "Remote ID")
+	require.Contains(t, plain, "n1aaaa")
+}
+
 func TestEnterOnRemoteOnlyNoteShowsImportStatus(t *testing.T) {
 	m := newTestModel(t)
 	m.treeItems = []treeItem{{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}}
@@ -689,7 +702,7 @@ func TestDataLoadedPreservesCollapsedCategoryState(t *testing.T) {
 	require.Contains(t, m.state.CollapsedCategories, "work")
 }
 
-func TestOpenConflictCopyKeyReturnsEditorCommandForConflictedNote(t *testing.T) {
+func TestOpenConflictCopyKeyOpensConflictResolutionModal(t *testing.T) {
 	m := newTestModel(t)
 	notePath := m.rootDir + "/work/note.md"
 	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
@@ -703,8 +716,9 @@ func TestOpenConflictCopyKeyReturnsEditorCommandForConflictedNote(t *testing.T) 
 	}
 	next, cmd := m.Update(keyMsg("O"))
 	updated := next.(Model)
-	require.NotNil(t, cmd)
-	require.Equal(t, "opening conflict copy", updated.status)
+	require.Nil(t, cmd)
+	require.True(t, updated.showSyncDebugModal)
+	require.Equal(t, "resolve conflict", updated.status)
 }
 
 func TestOpenConflictCopyKeyShowsStatusWithoutConflict(t *testing.T) {
@@ -714,5 +728,110 @@ func TestOpenConflictCopyKeyShowsStatusWithoutConflict(t *testing.T) {
 	next, cmd := m.Update(keyMsg("O"))
 	updated := next.(Model)
 	require.Nil(t, cmd)
-	require.Equal(t, "conflict copy only works on conflicted synced notes", updated.status)
+	require.Equal(t, "conflict resolution only works on conflicted synced notes", updated.status)
+}
+
+func TestShowSyncDebugKeyOpensModalForErroredSyncedNote(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", ID: "n1", LastSyncError: "remote unavailable"},
+	}
+
+	m = updateModel(m, keyMsg("ctrl+e"))
+	require.True(t, m.showSyncDebugModal)
+	require.Equal(t, "sync details", m.status)
+}
+
+func TestShowSyncDebugKeyOnHealthyNoteShowsStatus(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", ID: "n1", LastSyncAt: time.Now()},
+	}
+
+	m = updateModel(m, keyMsg("ctrl+e"))
+	require.False(t, m.showSyncDebugModal)
+	require.Equal(t, "sync details only work on unhealthy synced notes", m.status)
+}
+
+func TestEscClosesSyncDebugModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showSyncDebugModal = true
+	m = updateModel(m, keyMsg("esc"))
+	require.False(t, m.showSyncDebugModal)
+	require.Equal(t, "sync details closed", m.status)
+}
+
+func TestSyncDebugCopyUsesClipboard(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", ID: "n1", LastSyncError: "remote unavailable"},
+	}
+	m.showSyncDebugModal = true
+
+	var copied string
+	oldWriteClipboard := writeClipboard
+	writeClipboard = func(s string) error {
+		copied = s
+		return nil
+	}
+	defer func() { writeClipboard = oldWriteClipboard }()
+
+	m = updateModel(m, keyMsg("y"))
+	require.Equal(t, "remote unavailable", copied)
+	require.Equal(t, "copied sync detail to clipboard", m.status)
+}
+
+func TestErroredSyncedNotePreviewShowsSyncSummary(t *testing.T) {
+	m := newTestModel(t)
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {RelPath: "work/note.md", ID: "n1", LastSyncError: "remote unavailable", LastSyncAttemptAt: time.Date(2026, 4, 4, 10, 0, 0, 0, time.UTC)},
+	}
+
+	rendered, offset := m.renderNotePreview("work/note.md", "---\ntags: alpha\n---\n# Body", []string{"alpha"})
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Sync status")
+	require.Contains(t, plain, "Sync failed")
+	require.Contains(t, plain, "ctrl+e")
+	require.Contains(t, plain, "Body")
+	require.Greater(t, offset, 2)
+}
+
+func TestEnterInConflictModalStartsResolutionCommand(t *testing.T) {
+	m := newTestModel(t)
+	notePath := m.rootDir + "/work/note.md"
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte("local"), 0o644))
+	conflictPath := m.rootDir + "/work/note.conflict-20260403-120000.md"
+	require.NoError(t, os.WriteFile(conflictPath, []byte("remote"), 0o644))
+	n := notes.Note{Path: notePath, RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/note.md": {ID: "n1", RelPath: "work/note.md", RemoteRev: "2", LastSyncAt: time.Now(), Conflict: &notesync.ConflictInfo{CopyPath: "work/note.conflict-20260403-120000.md", OccurredAt: time.Now()}},
+	}
+	m.showSyncDebugModal = true
+	m.conflictResolutionChoice = conflictResolutionKeepRemote
+	next, cmd := m.Update(keyMsg("enter"))
+	updated := next.(Model)
+	require.NotNil(t, cmd)
+	require.Equal(t, "resolving conflict: keep remote", updated.status)
+}
+
+func TestDeletePendingSecondDConfirmsDelete(t *testing.T) {
+	m := newTestModel(t)
+	notePath := m.rootDir + "/work/note.md"
+	n := notes.Note{Path: notePath, RelPath: "work/note.md", Name: "note.md", TitleText: "Note"}
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.treeCursor = 0
+	m = updateModel(m, keyMsg("d"))
+	require.NotNil(t, m.deletePending)
+	next, cmd := m.Update(keyMsg("d"))
+	updated := next.(Model)
+	require.NotNil(t, cmd)
+	require.NotNil(t, updated.deletePending)
 }

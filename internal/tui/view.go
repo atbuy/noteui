@@ -145,6 +145,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showSyncDebugModal {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderSyncDebugModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showSyncProfilePicker {
 		return lipgloss.Place(
 			m.width,
@@ -566,7 +577,7 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	if item.Kind == treeNote && item.Note != nil {
 		syncMark, syncColor = m.noteSyncMarker(item.Note)
 	} else if item.Kind == treeRemoteNote {
-		if m.syncInFlight[item.RelPath] {
+		if item.RemoteNote != nil && m.syncInFlight[remoteOnlySyncVisualKey(item.RemoteNote.ID)] {
 			syncMark, syncColor = m.blinkingSyncMarker()
 		} else {
 			syncMark = "x "
@@ -951,6 +962,10 @@ func (m Model) renderStatus() string {
 		parts = append(parts, conflict)
 	}
 
+	if syncHint := m.renderSelectedSyncIssueHint(); syncHint != "" {
+		parts = append(parts, syncHint)
+	}
+
 	if m.status != "" {
 		parts = append(parts, m.status)
 	}
@@ -979,7 +994,8 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "error reading note:"),
 		strings.HasPrefix(m.status, "error opening note:"),
 		strings.HasPrefix(m.status, "sync profile save failed:"),
-		strings.HasPrefix(m.status, "sync root rebind failed:"):
+		strings.HasPrefix(m.status, "sync root rebind failed:"),
+		strings.HasPrefix(m.status, "sync debug copy failed:"):
 		return statusErrStyle.Render(line)
 	default:
 		return statusOKStyle.Render(line)
@@ -1000,6 +1016,8 @@ func (m Model) renderModeSegment() string {
 		return "MOVE"
 	case m.showRename:
 		return "RENAME"
+	case m.showSyncDebugModal:
+		return "SYNC DEBUG"
 	case m.showSyncProfilePicker:
 		return "SYNC PROFILE"
 	case m.showSyncProfileMigration:
@@ -1099,7 +1117,7 @@ func (m Model) renderConflictSegment() string {
 	if !m.hasConflictCopyForCurrentSelection() {
 		return ""
 	}
-	return "conflict: press " + keys.OpenConflictCopy.Help().Key + " to open copy"
+	return "conflict: press " + keys.OpenConflictCopy.Help().Key + " to resolve"
 }
 
 func (m Model) renderFilterSegment() string {
@@ -1716,18 +1734,13 @@ func fillWidthBackground(content string, width int, bg lipgloss.Color) string {
 
 	lines := strings.Split(content, "\n")
 	fillStyle := lipgloss.NewStyle().
+		Width(width).
+		MaxWidth(width).
 		Background(bg)
 
 	for i, line := range lines {
 		trimmed := strings.TrimRight(line, " ")
-		trimmedWidth := lipgloss.Width(trimmed)
-		if trimmedWidth >= width {
-			lines[i] = fillStyle.Render(trimOrPad(trimmed, width))
-			continue
-		}
-
-		fillWidth := width - trimmedWidth
-		lines[i] = trimmed + fillStyle.Width(fillWidth).Render(strings.Repeat(" ", fillWidth))
+		lines[i] = fillStyle.Render(trimOrPad(trimmed, width))
 	}
 
 	return strings.Join(lines, "\n")

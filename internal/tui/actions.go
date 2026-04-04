@@ -7,7 +7,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"atbuy/noteui/internal/editor"
 	"atbuy/noteui/internal/notes"
 )
 
@@ -568,11 +567,12 @@ func (m Model) hasConflictCopyForCurrentSelection() bool {
 func (m *Model) openCurrentConflictCopy() tea.Cmd {
 	copyPath := m.currentConflictCopyPath()
 	if copyPath == "" {
-		m.status = "conflict copy only works on conflicted synced notes"
+		m.status = "conflict resolution only works on conflicted synced notes"
 		return nil
 	}
-	m.status = "opening conflict copy"
-	return editor.Open(copyPath)
+	_ = copyPath
+	m.openCurrentSyncDebugModal()
+	return nil
 }
 
 func (m *Model) armToggleEncryption() {

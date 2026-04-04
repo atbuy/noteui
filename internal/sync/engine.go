@@ -141,6 +141,8 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 	for _, rec := range records {
 		recordsByRelPath[filepath.ToSlash(rec.RelPath)] = rec
 	}
+	orphanedRecords := orphanedSyncedRecords(records, remoteByID, noteByRelPath)
+	claimedOrphanedRecordIDs := make(map[string]bool, len(orphanedRecords))
 
 	for _, note := range allNotes {
 		if note.SyncClass != notes.SyncClassSynced {
@@ -151,6 +153,9 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 			return result, err
 		}
 		rec, ok := recordsByRelPath[filepath.ToSlash(note.RelPath)]
+		if !ok {
+			rec, ok = matchOrphanedRecord(note, raw, orphanedRecords, claimedOrphanedRecordIDs)
+		}
 		if !ok {
 			resp, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{RemoteRoot: profile.RemoteRoot, RelPath: filepath.ToSlash(note.RelPath), Content: raw, Encrypted: note.Encrypted})
 			if err != nil {
@@ -182,6 +187,9 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 			if err := SaveNoteRecord(root, rec); err != nil {
 				return result, err
 			}
+			if err := DeleteConflictRecord(root, rec.ID); err != nil {
+				return result, err
+			}
 			result.UpdatedNotes++
 			continue
 		}
@@ -210,6 +218,9 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 		rec.LastSyncError = ""
 		rec.Conflict = nil
 		if err := SaveNoteRecord(root, rec); err != nil {
+			return result, err
+		}
+		if err := DeleteConflictRecord(root, rec.ID); err != nil {
 			return result, err
 		}
 		result.UpdatedNotes++
@@ -264,6 +275,9 @@ func applyRemoteNote(ctx context.Context, client Client, profile config.SyncProf
 	if err := SaveNoteRecord(root, rec); err != nil {
 		return err
 	}
+	if err := DeleteConflictRecord(root, rec.ID); err != nil {
+		return err
+	}
 	result.NotesChanged = true
 	return nil
 }
@@ -307,6 +321,45 @@ func moveLocalFile(root, oldRelPath, newRelPath string) error {
 		return err
 	}
 	return os.Rename(oldPath, newPath)
+}
+
+func orphanedSyncedRecords(records map[string]NoteRecord, remoteByID map[string]RemoteNoteMeta, localByRelPath map[string]notes.Note) []NoteRecord {
+	out := make([]NoteRecord, 0, len(records))
+	for _, rec := range records {
+		if _, exists := remoteByID[rec.ID]; !exists {
+			continue
+		}
+		localNote, hasLocal := localByRelPath[filepath.ToSlash(rec.RelPath)]
+		if hasLocal && localNote.SyncClass == notes.SyncClassSynced {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out
+}
+
+func matchOrphanedRecord(note notes.Note, raw string, orphaned []NoteRecord, claimed map[string]bool) (NoteRecord, bool) {
+	localHash := HashContent(raw)
+	var matched NoteRecord
+	matchCount := 0
+	for _, rec := range orphaned {
+		if claimed[rec.ID] {
+			continue
+		}
+		if rec.LastSyncedHash != localHash || rec.Encrypted != note.Encrypted {
+			continue
+		}
+		matched = rec
+		matchCount++
+		if matchCount > 1 {
+			return NoteRecord{}, false
+		}
+	}
+	if matchCount != 1 {
+		return NoteRecord{}, false
+	}
+	claimed[matched.ID] = true
+	return matched, true
 }
 
 func syncedRelPathsFromNotes(allNotes []notes.Note) []string {

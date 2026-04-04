@@ -142,16 +142,22 @@ func (m *Model) refreshPreview() {
 			return
 		}
 		pathText := filepath.Join("~/notes", filepath.FromSlash(item.RemoteNote.RelPath))
-		content := strings.Join([]string{
-			"# " + remoteOnlyNoteTitle(*item.RemoteNote),
+		lines := []string{
+			"# " + m.remoteOnlyDisplayTitle(*item.RemoteNote),
 			"",
 			"This note exists on the server but is not stored locally.",
 			"",
 			"- Path: `" + filepath.ToSlash(item.RemoteNote.RelPath) + "`",
 			"- Status: remote only",
+		}
+		if m.hasRemoteOnlyPathDuplicate(item.RemoteNote.RelPath) {
+			lines = append(lines, "- Remote ID: `"+item.RemoteNote.ID+"`")
+		}
+		lines = append(lines,
 			"",
 			"Press `i` to import this note or `I` to import all missing synced notes.",
-		}, "\n")
+		)
+		content := strings.Join(lines, "\n")
 		rendered := m.renderPreviewMarkdown(pathText, content)
 		m.previewPath = previewKey
 		m.previewContent = rendered
@@ -706,10 +712,16 @@ func (m Model) renderNotePreview(relPath string, raw string, tags []string) (str
 	rendered := m.renderPreviewMarkdown(relPath, body)
 	lineNumberStart := 0
 
+	if syncSummary := m.syncIssuePreviewMarkdown(relPath); syncSummary != "" {
+		summaryRendered := m.renderPreviewMarkdown(relPath, syncSummary)
+		rendered = summaryRendered + "\n\n" + rendered
+		lineNumberStart += strings.Count(stripANSI(summaryRendered), "\n") + 2
+	}
+
 	tagsHeader := renderTagsHeader(tags)
 	if tagsHeader != "" {
 		rendered = tagsHeader + "\n\n" + rendered
-		lineNumberStart = 2
+		lineNumberStart += 2
 	}
 
 	return rendered, lineNumberStart

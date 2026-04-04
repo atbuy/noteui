@@ -78,6 +78,11 @@ const (
 	renameTargetCategory
 )
 
+const (
+	conflictResolutionKeepLocal = iota
+	conflictResolutionKeepRemote
+)
+
 type dashboardRecentNote struct {
 	Note    notes.Note
 	IsTemp  bool
@@ -316,6 +321,8 @@ type Model struct {
 	helpInput  textinput.Model
 
 	showSyncProfilePicker      bool
+	showSyncDebugModal         bool
+	conflictResolutionChoice   int
 	syncProfileNames           []string
 	syncProfileCursor          int
 	showSyncProfileMigration   bool
@@ -772,6 +779,48 @@ func (m Model) currentRemoteOnlyNote() *notesync.RemoteNoteMeta {
 	return item.RemoteNote
 }
 
+func remoteOnlySyncVisualKey(noteID string) string {
+	noteID = strings.TrimSpace(noteID)
+	if noteID == "" {
+		return ""
+	}
+	return "remote:" + noteID
+}
+
+func shortRemoteNoteID(noteID string) string {
+	noteID = strings.TrimSpace(noteID)
+	if len(noteID) <= 6 {
+		return noteID
+	}
+	return noteID[:6]
+}
+
+func (m Model) hasRemoteOnlyPathDuplicate(relPath string) bool {
+	relPath = filepath.ToSlash(strings.TrimSpace(relPath))
+	if relPath == "" {
+		return false
+	}
+	count := 0
+	for _, item := range m.remoteOnlyNotes {
+		if filepath.ToSlash(strings.TrimSpace(item.RelPath)) != relPath {
+			continue
+		}
+		count++
+		if count > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) remoteOnlyDisplayTitle(meta notesync.RemoteNoteMeta) string {
+	title := remoteOnlyNoteTitle(meta)
+	if !m.hasRemoteOnlyPathDuplicate(meta.RelPath) {
+		return title
+	}
+	return title + " [" + shortRemoteNoteID(meta.ID) + "]"
+}
+
 func (m *Model) blockRemoteOnlyAction() bool {
 	remote := m.currentRemoteOnlyNote()
 	if remote == nil {
@@ -1137,6 +1186,20 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.previewPath = ""
 		m.deferredStatus = "deleted remote copy; note kept locally"
+		return m, refreshAllCmd(m.rootDir)
+
+	case conflictResolvedMsg:
+		if msg.err != nil {
+			m.status = "conflict resolution failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.closeSyncDebugModal("")
+		m.previewPath = ""
+		if msg.keepRemote {
+			m.deferredStatus = "conflict resolved: kept remote version"
+		} else {
+			m.deferredStatus = "conflict resolved: kept local version"
+		}
 		return m, refreshAllCmd(m.rootDir)
 
 	case noteSyncClassToggledMsg:
@@ -1656,6 +1719,26 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.showSyncDebugModal {
+			switch {
+			case msg.String() == "esc":
+				m.closeSyncDebugModal("sync details closed")
+				return m, nil
+			case m.hasConflictCopyForCurrentSelection() && (key.Matches(msg, keys.CollapseCategory) || msg.String() == "left"):
+				m.conflictResolutionChoice = conflictResolutionKeepLocal
+				return m, nil
+			case m.hasConflictCopyForCurrentSelection() && (key.Matches(msg, keys.ExpandCategory) || msg.String() == "right"):
+				m.conflictResolutionChoice = conflictResolutionKeepRemote
+				return m, nil
+			case m.hasConflictCopyForCurrentSelection() && msg.String() == "enter":
+				return m, m.confirmCurrentConflictResolution()
+			case msg.String() == "y":
+				m.copyCurrentSyncDebugRawError()
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.showSyncProfilePicker {
 			switch {
 			case msg.String() == "esc":
@@ -1865,7 +1948,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.deletePending = nil
 				m.status = "delete cancelled"
 				return m, nil
-			case key.Matches(msg, keys.DeleteConfirm):
+			case key.Matches(msg, keys.DeleteConfirm) || msg.String() == "d":
 				return m, m.confirmDeleteCurrent()
 			default:
 				m.deletePending = nil
@@ -2467,6 +2550,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.openCurrentConflictCopy()
 		}
 
+		if key.Matches(msg, keys.ShowSyncDebug) {
+			m.openCurrentSyncDebugModal()
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.DeleteRemoteKeepLocal) {
 			item := m.currentTreeItem()
 			if item == nil || item.Kind != treeNote || item.Note == nil {
@@ -2497,7 +2585,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.status = "importing remote note..."
 			return m, batchCmds(
 				importCurrentSyncedNoteCmd(m.rootDir, m.cfg.Sync, item.RemoteNote.ID),
-				m.startSyncVisual(item.RelPath),
+				m.startSyncVisual(remoteOnlySyncVisualKey(item.RemoteNote.ID)),
 			)
 		}
 
@@ -2659,7 +2747,7 @@ func (m Model) lockedPreviewText() string {
 }
 
 func (m Model) modalDimensions(minWidth, maxWidth int) (int, int) {
-	modalWidth := min(maxWidth, max(minWidth, m.width-10))
+	modalWidth := min(maxWidth, max(minWidth, m.width-4))
 	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
 	return modalWidth, innerWidth
 }

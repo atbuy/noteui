@@ -23,6 +23,7 @@ func TestDefaultProvidesExpectedBaseline(t *testing.T) {
 	require.Equal(t, []string{"U"}, cfg.Keys.DeleteRemoteKeepLocal)
 	require.Equal(t, []string{"i"}, cfg.Keys.SyncImportCurrent)
 	require.Equal(t, []string{"I"}, cfg.Keys.SyncImport)
+	require.Equal(t, []string{"ctrl+e"}, cfg.Keys.ShowSyncDebug)
 }
 
 func TestValidateAcceptsValidConfig(t *testing.T) {
@@ -122,6 +123,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 		`delete_remote_keep_local = ["gu"]`,
 		`sync_import_current = ["ii"]`,
 		`sync_import = ["gi"]`,
+		`show_sync_debug = ["gd"]`,
 		"",
 		"[sync]",
 		`default_profile = "homebox"`,
@@ -150,6 +152,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 	require.Equal(t, []string{"gu"}, cfg.Keys.DeleteRemoteKeepLocal)
 	require.Equal(t, []string{"ii"}, cfg.Keys.SyncImportCurrent)
 	require.Equal(t, []string{"gi"}, cfg.Keys.SyncImport)
+	require.Equal(t, []string{"gd"}, cfg.Keys.ShowSyncDebug)
 	require.Equal(t, "homebox", cfg.Sync.DefaultProfile)
 	require.Equal(t, "notes-prod", cfg.Sync.Profiles["homebox"].SSHHost)
 }

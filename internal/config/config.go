@@ -126,6 +126,7 @@ type KeysConfig struct {
 	ToggleSync               []string `toml:"toggle_sync"`
 	SelectSyncProfile        []string `toml:"select_sync_profile"`
 	OpenConflictCopy         []string `toml:"open_conflict_copy"`
+	ShowSyncDebug           []string `toml:"show_sync_debug"`
 	DeleteRemoteKeepLocal    []string `toml:"delete_remote_keep_local"`
 	SyncImportCurrent        []string `toml:"sync_import_current"`
 	SyncImport               []string `toml:"sync_import"`
@@ -196,6 +197,7 @@ func Default() Config {
 		},
 		Keys: KeysConfig{
 			ToggleSync:            []string{"S"},
+			ShowSyncDebug:         []string{"ctrl+e"},
 			DeleteRemoteKeepLocal: []string{"U"},
 			SyncImportCurrent:     []string{"i"},
 			SyncImport:            []string{"I"},

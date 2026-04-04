@@ -84,6 +84,7 @@ remote_bin = "/usr/local/bin/noteui-sync"
 toggle_sync = ["S"]
 select_sync_profile = ["F"]
 open_conflict_copy = ["O"]
+show_sync_debug = ["ctrl+e"]
 delete_remote_keep_local = ["U"]
 sync_import_current = ["i"]
 sync_import = ["I"]
@@ -537,3 +538,18 @@ sync_import = ["I"]
   Default: `["E"]`
 
 The in-app help modal is still the live source of truth if you change keybindings heavily.
+
+
+## `[keys]`
+
+The `[keys]` section overrides default bindings.
+
+Sync-related key defaults:
+
+- `toggle_sync = ["S"]`
+- `select_sync_profile = ["F"]`
+- `open_conflict_copy = ["O"]`
+- `show_sync_debug = ["ctrl+e"]`
+- `delete_remote_keep_local = ["U"]`
+- `sync_import_current = ["i"]`
+- `sync_import = ["I"]`
