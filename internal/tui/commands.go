@@ -255,9 +255,19 @@ type noteSyncClassToggledMsg struct {
 	err       error
 }
 
+type noteMadeSharedMsg struct {
+	path string
+	err  error
+}
+
 type remoteNoteDeletedMsg struct {
 	path string
 	err  error
+}
+
+type conflictResolvedMsg struct {
+	keepRemote bool
+	err        error
 }
 
 func startSyncCmd() tea.Cmd {
@@ -283,6 +293,13 @@ func toggleNoteSyncCmd(path string) tea.Cmd {
 	return func() tea.Msg {
 		syncClass, err := notes.ToggleNoteSyncClass(path)
 		return noteSyncClassToggledMsg{path: path, syncClass: syncClass, err: err}
+	}
+}
+
+func makeNoteSharedCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.SetNoteSyncClass(path, notes.SyncClassShared)
+		return noteMadeSharedMsg{path: path, err: err}
 	}
 }
 

@@ -23,6 +23,7 @@ func TestDefaultProvidesExpectedBaseline(t *testing.T) {
 	require.Equal(t, []string{"U"}, cfg.Keys.DeleteRemoteKeepLocal)
 	require.Equal(t, []string{"i"}, cfg.Keys.SyncImportCurrent)
 	require.Equal(t, []string{"I"}, cfg.Keys.SyncImport)
+	require.Equal(t, []string{"ctrl+e"}, cfg.Keys.ShowSyncDebug)
 }
 
 func TestValidateAcceptsValidConfig(t *testing.T) {
@@ -122,6 +123,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 		`delete_remote_keep_local = ["gu"]`,
 		`sync_import_current = ["ii"]`,
 		`sync_import = ["gi"]`,
+		`show_sync_debug = ["gd"]`,
 		"",
 		"[sync]",
 		`default_profile = "homebox"`,
@@ -150,6 +152,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 	require.Equal(t, []string{"gu"}, cfg.Keys.DeleteRemoteKeepLocal)
 	require.Equal(t, []string{"ii"}, cfg.Keys.SyncImportCurrent)
 	require.Equal(t, []string{"gi"}, cfg.Keys.SyncImport)
+	require.Equal(t, []string{"gd"}, cfg.Keys.ShowSyncDebug)
 	require.Equal(t, "homebox", cfg.Sync.DefaultProfile)
 	require.Equal(t, "notes-prod", cfg.Sync.Profiles["homebox"].SSHHost)
 }
@@ -201,4 +204,39 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown config key(s): theme.unexpected")
 	require.Empty(t, cmp.Diff(Default(), cfg))
+}
+
+func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := strings.Join([]string{
+		"dashboard = false",
+		"",
+		"[sync]",
+		`default_profile = "homebox"`,
+		"",
+		"[sync.profiles.homebox]",
+		`ssh_host = "notes-prod"`,
+		`remote_root = "/srv/homebox"`,
+		`remote_bin = "noteui-sync"`,
+		"",
+		"[sync.profiles.backup]",
+		`ssh_host = "backup-host"`,
+		`remote_root = "/srv/backup"`,
+		`remote_bin = "noteui-sync"`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, writtenPath, err := SaveDefaultSyncProfile("backup")
+	require.NoError(t, err)
+	require.Equal(t, path, writtenPath)
+	require.Equal(t, "backup", cfg.Sync.DefaultProfile)
+
+	reloaded, err := Load()
+	require.NoError(t, err)
+	require.False(t, reloaded.Dashboard)
+	require.Equal(t, "backup", reloaded.Sync.DefaultProfile)
+	require.Equal(t, "notes-prod", reloaded.Sync.Profiles["homebox"].SSHHost)
+	require.Equal(t, "backup-host", reloaded.Sync.Profiles["backup"].SSHHost)
 }

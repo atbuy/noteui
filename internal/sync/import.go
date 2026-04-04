@@ -48,6 +48,7 @@ func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, 
 		return result, err
 	}
 
+	reservedRelPaths := reservedImportRelPaths(root, records)
 	now := time.Now().UTC()
 	foundTarget := onlyNoteID == ""
 	for _, meta := range remoteIndex.Notes {
@@ -60,15 +61,18 @@ func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, 
 			return result, fmt.Errorf("invalid remote note path: %q", meta.RelPath)
 		}
 
-		targetPath := filepath.Join(root, filepath.FromSlash(relPath))
+		importRelPath, ok := resolveImportRelPath(root, relPath, meta.ID, reservedRelPaths)
+		if !ok {
+			result.SkippedImports++
+			continue
+		}
+		targetPath := filepath.Join(root, filepath.FromSlash(importRelPath))
 		rec, hasRecord := records[meta.ID]
 		if hasRecord {
-			currentPath := filepath.Join(root, filepath.FromSlash(filepath.ToSlash(strings.TrimSpace(rec.RelPath))))
-			if fileExists(currentPath) {
-				continue
-			}
-			if currentPath != targetPath && fileExists(targetPath) {
-				result.SkippedImports++
+			currentRelPath := filepath.ToSlash(strings.TrimSpace(rec.RelPath))
+			currentPath := filepath.Join(root, filepath.FromSlash(currentRelPath))
+			if currentRelPath != "" && fileExists(currentPath) {
+				reservedRelPaths[currentRelPath] = rec.ID
 				continue
 			}
 			content, err := fetchRemoteNoteContent(ctx, client, profile, meta)
@@ -78,7 +82,7 @@ func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, 
 			if err := writeImportedNote(targetPath, content); err != nil {
 				return result, err
 			}
-			rec.RelPath = relPath
+			rec.RelPath = importRelPath
 			rec.Class = ClassSynced
 			rec.RemoteRev = meta.Revision
 			rec.LastSyncedHash = HashContent(content)
@@ -90,14 +94,14 @@ func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, 
 			if err := SaveNoteRecord(root, rec); err != nil {
 				return result, err
 			}
+			if err := DeleteConflictRecord(root, rec.ID); err != nil {
+				return result, err
+			}
+			records[meta.ID] = rec
 			result.ImportedNotes++
 			continue
 		}
 
-		if fileExists(targetPath) {
-			result.SkippedImports++
-			continue
-		}
 		content, err := fetchRemoteNoteContent(ctx, client, profile, meta)
 		if err != nil {
 			return result, err
@@ -107,7 +111,7 @@ func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, 
 		}
 		rec = NoteRecord{
 			ID:                meta.ID,
-			RelPath:           relPath,
+			RelPath:           importRelPath,
 			Class:             ClassSynced,
 			RemoteRev:         meta.Revision,
 			LastSyncedHash:    HashContent(content),
@@ -116,6 +120,9 @@ func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, 
 			LastSyncAttemptAt: now,
 		}
 		if err := SaveNoteRecord(root, rec); err != nil {
+			return result, err
+		}
+		if err := DeleteConflictRecord(root, rec.ID); err != nil {
 			return result, err
 		}
 		records[meta.ID] = rec
@@ -152,6 +159,106 @@ func writeImportedNote(path string, content string) error {
 		return err
 	}
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func reservedImportRelPaths(root string, records map[string]NoteRecord) map[string]string {
+	out := make(map[string]string, len(records))
+	for _, rec := range records {
+		relPath := filepath.ToSlash(strings.TrimSpace(rec.RelPath))
+		if relPath == "" {
+			continue
+		}
+		if fileExists(filepath.Join(root, filepath.FromSlash(relPath))) {
+			out[relPath] = rec.ID
+		}
+	}
+	return out
+}
+
+func resolveImportRelPath(root, desiredRelPath, noteID string, reserved map[string]string) (string, bool) {
+	desiredRelPath = filepath.ToSlash(strings.TrimSpace(desiredRelPath))
+	if desiredRelPath == "" {
+		return "", false
+	}
+	if ownerID, exists := reserved[desiredRelPath]; exists && strings.TrimSpace(ownerID) != strings.TrimSpace(noteID) {
+		candidate := duplicateImportRelPath(root, desiredRelPath, noteID, reserved)
+		return candidate, candidate != ""
+	}
+	if fileExists(filepath.Join(root, filepath.FromSlash(desiredRelPath))) {
+		return "", false
+	}
+	reserved[desiredRelPath] = noteID
+	return desiredRelPath, true
+}
+
+func duplicateImportRelPath(root, desiredRelPath, noteID string, reserved map[string]string) string {
+	ext := filepath.Ext(desiredRelPath)
+	base := strings.TrimSuffix(desiredRelPath, ext)
+	for _, suffix := range duplicateImportSuffixCandidates(noteID) {
+		candidate := base + "~" + suffix + ext
+		if ownerID, exists := reserved[candidate]; exists && strings.TrimSpace(ownerID) != strings.TrimSpace(noteID) {
+			continue
+		}
+		if fileExists(filepath.Join(root, filepath.FromSlash(candidate))) {
+			continue
+		}
+		reserved[candidate] = noteID
+		return candidate
+	}
+	return ""
+}
+
+func duplicateImportSuffixCandidates(noteID string) []string {
+	sanitized := sanitizeImportIDSuffix(noteID)
+	if sanitized == "" {
+		sanitized = "remote"
+	}
+	lengths := []int{6, 8, 12, len(sanitized)}
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(lengths)+4)
+	for _, n := range lengths {
+		if n <= 0 {
+			continue
+		}
+		if n > len(sanitized) {
+			n = len(sanitized)
+		}
+		candidate := sanitized[:n]
+		if candidate == "" || seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		out = append(out, candidate)
+	}
+	base := out[len(out)-1]
+	for i := 2; i <= 9; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, i)
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		out = append(out, candidate)
+	}
+	return out
+}
+
+func sanitizeImportIDSuffix(noteID string) string {
+	noteID = strings.TrimSpace(noteID)
+	if noteID == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range noteID {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return strings.Trim(b.String(), "_-")
 }
 
 func fileExists(path string) bool {

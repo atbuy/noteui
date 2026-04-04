@@ -42,19 +42,18 @@ When you add a new page, update the nav there so the page is included in the bui
 
 GitHub Pages is deployed by the `Documentation` workflow in `.github/workflows/docs.yml`.
 
-The workflow:
+The workflow uses the standard two-job GitHub Pages pattern:
 
-1. checks out the repo
-2. installs the pinned `zensical` version
-3. runs `zensical build --clean`
-4. uploads the generated `site/` directory as the Pages artifact
-5. deploys that artifact with `actions/deploy-pages`
-
-The workflow uses a run-attempt-specific artifact name so reruns do not collide with older `github-pages` artifacts from the same workflow run.
+1. the `build` job checks out the repo
+2. configures Pages metadata
+3. installs the pinned `zensical` version
+4. runs `zensical build --clean`
+5. uploads the generated `site/` directory as the Pages artifact
+6. the `deploy` job publishes that artifact with `actions/deploy-pages`
 
 ## Common contributor checks
 
 - If a page is missing from the site, verify it is present in `zensical.toml` navigation.
 - If rendering differs between local and CI, compare the `zensical` version first.
 - If deployment succeeds but the live site still looks old, verify the latest workflow run is the active Pages deployment and rule out browser caching.
-- If `deploy-pages` reports multiple `github-pages` artifacts, confirm the workflow is still passing the same unique artifact name to both upload and deploy.
+- If Pages deployment fails, verify the workflow is still using the standard separate `build` and `deploy` jobs and that `site/` is uploaded by `actions/upload-pages-artifact`.

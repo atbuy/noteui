@@ -29,6 +29,7 @@ var (
 	syncedNoteColor   lipgloss.Color
 	unsyncedNoteColor lipgloss.Color
 	syncingNoteColor  lipgloss.Color
+	sharedNoteColor   lipgloss.Color
 	markedItemColor   lipgloss.Color
 	selectedBgColor   lipgloss.Color
 	selectedFgColor   lipgloss.Color
@@ -102,6 +103,7 @@ type themePalette struct {
 	SyncedNoteColor   string
 	UnsyncedNoteColor string
 	SyncingNoteColor  string
+	SharedNoteColor   string
 	MarkedItemColor   string
 	ErrorColor        string
 	SuccessColor      string
@@ -134,6 +136,7 @@ func ApplyTheme(cfg config.Config) {
 	override(&p.SyncedNoteColor, cfg.Theme.SyncedNoteColor)
 	override(&p.UnsyncedNoteColor, cfg.Theme.UnsyncedNoteColor)
 	override(&p.SyncingNoteColor, cfg.Theme.SyncingNoteColor)
+	override(&p.SharedNoteColor, cfg.Theme.SharedNoteColor)
 	override(&p.MarkedItemColor, cfg.Theme.MarkedItemColor)
 	override(&p.ErrorColor, cfg.Theme.ErrorColor)
 	override(&p.SuccessColor, cfg.Theme.SuccessColor)
@@ -157,6 +160,9 @@ func ApplyTheme(cfg config.Config) {
 	if strings.TrimSpace(p.SyncingNoteColor) == "" {
 		p.SyncingNoteColor = "#F59E0B"
 	}
+	if strings.TrimSpace(p.SharedNoteColor) == "" {
+		p.SharedNoteColor = "#7C9EFF"
+	}
 	if strings.TrimSpace(p.MarkedItemColor) == "" {
 		p.MarkedItemColor = "#E5A524"
 	}
@@ -176,6 +182,7 @@ func ApplyTheme(cfg config.Config) {
 	syncedNoteColor = lipgloss.Color(p.SyncedNoteColor)
 	unsyncedNoteColor = lipgloss.Color(p.UnsyncedNoteColor)
 	syncingNoteColor = lipgloss.Color(p.SyncingNoteColor)
+	sharedNoteColor = lipgloss.Color(p.SharedNoteColor)
 	markedItemColor = lipgloss.Color(p.MarkedItemColor)
 	errorColor = lipgloss.Color(p.ErrorColor)
 	successColor = lipgloss.Color(p.SuccessColor)

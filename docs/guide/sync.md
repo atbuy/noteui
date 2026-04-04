@@ -64,16 +64,52 @@ Inside noteui:
 
 - `S` toggles the selected local note between `sync: local` and `sync: synced`
 - synced notes are checked against the remote state after startup
+- `F` opens the in-app default sync profile picker
+
+## Shared notes
+
+A shared note uses `sync: shared` in its frontmatter and is permanently synced to the remote. Unlike `sync: synced`, a shared note cannot be toggled to local-only with `S` — the sync class must be changed by editing the frontmatter directly.
+
+```yaml
+---
+sync: shared
+---
+```
+
+Shared notes appear in the tree with a `◆` marker instead of `●`. They participate in all sync operations identically to `sync: synced` notes.
 
 ## Understanding sync state in the tree
 
 - hollow red `○`: local-only note
-- green `●`: synced note with confirmed healthy remote state
+- green `●`: synced note with a previously successful sync record
+- blue `◆`: shared note with a previously successful sync record
 - orange blinking marker: sync, import, or remote-delete action in progress
-- filled red `●`: note is intended to be synced, but the current remote state is not yet confirmed healthy
+- filled red `●`: note is intended to be synced, but noteui has a conflict or the latest sync check failed
+- filled red `◆`: shared note with a conflict or failed sync check
 - muted placeholder row: note exists on the server but not in the local notes tree yet
 
-On startup, synced notes are treated as unconfirmed until the first remote check completes. This avoids showing stale healthy markers from old local metadata.
+At startup, noteui uses the last healthy local sync record immediately. If the background sync later finds a conflict or remote problem, that note falls back to the red state.
+
+## Resolving conflicts
+
+A sync conflict means noteui kept your local note unchanged and wrote the remote body to a separate conflict copy beside it.
+
+Use this workflow:
+
+1. Select the conflicted synced note.
+2. Press `O` to open the generated conflict copy in your editor.
+3. Open the original local note as well.
+4. Merge the content you want to keep into the original local note.
+5. Save the original local note and sync again.
+
+Important details:
+
+- the original local note stays canonical for future sync
+- editing only the conflict copy does not resolve the conflict
+- the conflict state clears only after a later successful sync of the original note
+- the conflict copy is left on disk intentionally as a safety file
+
+If you prefer to inspect the file directly, the conflict copy is written beside the original note with a timestamped name such as `note.conflict-YYYYMMDD-HHMMSS.md`.
 
 ## Remote-only notes and import flows
 

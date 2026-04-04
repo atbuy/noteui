@@ -157,6 +157,153 @@ Remote change
 	require.Contains(t, string(data), "Remote change")
 }
 
+func TestSyncRootCreatesAndClearsConflictCopy(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "work", "plan.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: synced
+---
+# Plan
+
+Local body
+`), 0o644))
+
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	_, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	var rec NoteRecord
+	for _, candidate := range records {
+		rec = candidate
+	}
+
+	_, err = client.PushNote(context.Background(), cfg.Profiles["local"], PushNoteRequest{
+		RemoteRoot:       remote,
+		NoteID:           rec.ID,
+		ExpectedRevision: rec.RemoteRev,
+		RelPath:          rec.RelPath,
+		Content: `---
+sync: synced
+---
+# Plan
+
+Remote body
+`,
+		Encrypted: false,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: synced
+---
+# Plan
+
+Local edit
+`), 0o644))
+
+	result, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Conflicts)
+
+	localRaw, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(localRaw), "Local edit")
+	require.NotContains(t, string(localRaw), "Remote body")
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.NotNil(t, rec.Conflict)
+	require.Equal(t, "conflict", rec.LastSyncError)
+	require.FileExists(t, ConflictPath(root, rec.ID))
+
+	conflictCopyPath := filepath.Join(root, filepath.FromSlash(rec.Conflict.CopyPath))
+	conflictRaw, err := os.ReadFile(conflictCopyPath)
+	require.NoError(t, err)
+	require.Contains(t, string(conflictRaw), "Remote body")
+
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: synced
+---
+# Plan
+
+Merged body
+`), 0o644))
+
+	result, err = SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.UpdatedNotes)
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.Nil(t, rec.Conflict)
+	require.Empty(t, rec.LastSyncError)
+	require.NoFileExists(t, ConflictPath(root, rec.ID))
+	require.FileExists(t, conflictCopyPath)
+
+	fetched, err := client.FetchNote(context.Background(), cfg.Profiles["local"], FetchNoteRequest{
+		RemoteRoot: remote,
+		NoteID:     rec.ID,
+	})
+	require.NoError(t, err)
+	require.Contains(t, fetched.Note.Content, "Merged body")
+}
+
+func TestSyncRootPreservesRemoteIdentityForUnchangedLocalMove(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	oldPath := filepath.Join(root, "work", "plan.md")
+	newPath := filepath.Join(root, "archive", "plan.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(oldPath), 0o755))
+	require.NoError(t, os.WriteFile(oldPath, []byte(`---
+sync: synced
+---
+# Plan
+
+Body
+`), 0o644))
+
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	_, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	var original NoteRecord
+	for _, candidate := range records {
+		original = candidate
+	}
+
+	require.NoError(t, os.MkdirAll(filepath.Dir(newPath), 0o755))
+	require.NoError(t, os.Rename(oldPath, newPath))
+
+	result, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.UpdatedNotes)
+	require.Zero(t, result.RegisteredNotes)
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	updated := records[original.ID]
+	require.Equal(t, "archive/plan.md", updated.RelPath)
+
+	index, err := client.PullIndex(context.Background(), cfg.Profiles["local"], PullIndexRequest{RemoteRoot: remote})
+	require.NoError(t, err)
+	require.Len(t, index.Notes, 1)
+	require.Equal(t, original.ID, index.Notes[0].ID)
+	require.Equal(t, "archive/plan.md", index.Notes[0].RelPath)
+}
+
 func TestSSHClientSendsPayloadOverStdin(t *testing.T) {
 	var gotStdin []byte
 	var gotName string
@@ -336,6 +483,121 @@ sync: synced
 	require.NoError(t, err)
 	_, err = os.Stat(filepath.Join(root, "ideas.md"))
 	require.Error(t, err)
+}
+
+func TestImportRemoteNoteImportsOnlySelectedDuplicatePath(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	first, err := client.RegisterNote(context.Background(), cfg.Profiles["local"], RegisterNoteRequest{
+		RemoteRoot: remote,
+		RelPath:    "work/plan.md",
+		Content: `---
+sync: synced
+---
+# Plan
+
+First body
+`,
+		Encrypted: false,
+	})
+	require.NoError(t, err)
+	second, err := client.RegisterNote(context.Background(), cfg.Profiles["local"], RegisterNoteRequest{
+		RemoteRoot: remote,
+		RelPath:    "work/plan.md",
+		Content: `---
+sync: synced
+---
+# Plan
+
+Second body
+`,
+		Encrypted: false,
+	})
+	require.NoError(t, err)
+
+	result, err := ImportRemoteNote(context.Background(), root, cfg, second.ID, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ImportedNotes)
+	require.Zero(t, result.SkippedImports)
+	require.Len(t, result.RemoteOnlyNotes, 1)
+	require.Equal(t, first.ID, result.RemoteOnlyNotes[0].ID)
+
+	data, err := os.ReadFile(filepath.Join(root, "work", "plan.md"))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "Second body")
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Contains(t, records, second.ID)
+	require.Equal(t, "work/plan.md", records[second.ID].RelPath)
+	require.NotContains(t, records, first.ID)
+
+	result, err = ImportRemoteNote(context.Background(), root, cfg, first.ID, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.ImportedNotes)
+	require.Zero(t, result.SkippedImports)
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Contains(t, records, first.ID)
+	require.Equal(t, "work/plan~"+duplicateImportSuffixCandidates(first.ID)[0]+".md", records[first.ID].RelPath)
+
+	data, err = os.ReadFile(filepath.Join(root, filepath.FromSlash(records[first.ID].RelPath)))
+	require.NoError(t, err)
+	require.Contains(t, string(data), "First body")
+}
+
+func TestImportRemoteNotesImportsDuplicatePathsWithIDSuffix(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	_, err := client.RegisterNote(context.Background(), cfg.Profiles["local"], RegisterNoteRequest{
+		RemoteRoot: remote,
+		RelPath:    "work/plan.md",
+		Content: `---
+sync: synced
+---
+# Plan
+
+First body
+`,
+		Encrypted: false,
+	})
+	require.NoError(t, err)
+	_, err = client.RegisterNote(context.Background(), cfg.Profiles["local"], RegisterNoteRequest{
+		RemoteRoot: remote,
+		RelPath:    "work/plan.md",
+		Content: `---
+sync: synced
+---
+# Plan
+
+Second body
+`,
+		Encrypted: false,
+	})
+	require.NoError(t, err)
+
+	result, err := ImportRemoteNotes(context.Background(), root, cfg, client)
+	require.NoError(t, err)
+	require.Equal(t, 2, result.ImportedNotes)
+	require.Zero(t, result.SkippedImports)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 2)
+	paths := make(map[string]bool, len(records))
+	for _, rec := range records {
+		paths[rec.RelPath] = true
+	}
+	require.True(t, paths["work/plan.md"])
+
+	globbed, err := filepath.Glob(filepath.Join(root, "work", "plan*.md"))
+	require.NoError(t, err)
+	require.Len(t, globbed, 2)
 }
 
 func TestImportRemoteNotesRestoresMissingTrackedNote(t *testing.T) {
@@ -603,4 +865,206 @@ Body
 	require.Len(t, records, 1)
 	rec = records[rec.ID]
 	require.Contains(t, rec.LastSyncError, "note missing on remote")
+}
+
+func TestResolveConflictKeepRemoteReplacesLocalAndCleansUpConflict(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "work", "plan.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: synced\n---\nlocal body\n"), 0o644))
+
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	_, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	var rec NoteRecord
+	for _, candidate := range records {
+		rec = candidate
+	}
+
+	_, err = client.PushNote(context.Background(), cfg.Profiles["local"], PushNoteRequest{
+		RemoteRoot:       remote,
+		NoteID:           rec.ID,
+		ExpectedRevision: rec.RemoteRev,
+		RelPath:          rec.RelPath,
+		Content:          "---\nsync: synced\n---\nremote body\n",
+		Encrypted:        false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: synced\n---\nlocal edited\n"), 0o644))
+	_, err = SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.NotNil(t, rec.Conflict)
+	conflictCopyPath := filepath.Join(root, filepath.FromSlash(rec.Conflict.CopyPath))
+	require.FileExists(t, conflictCopyPath)
+
+	require.NoError(t, ResolveConflictKeepRemote(root, rec))
+
+	data, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Equal(t, "---\nsync: synced\n---\nremote body\n", string(data))
+	require.NoFileExists(t, conflictCopyPath)
+	require.NoFileExists(t, ConflictPath(root, rec.ID))
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.Nil(t, rec.Conflict)
+	require.Empty(t, rec.LastSyncError)
+}
+
+func TestResolveConflictKeepLocalPushesAndCleansUpConflict(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "work", "plan.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: synced\n---\nlocal body\n"), 0o644))
+
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	_, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	var rec NoteRecord
+	for _, candidate := range records {
+		rec = candidate
+	}
+
+	_, err = client.PushNote(context.Background(), cfg.Profiles["local"], PushNoteRequest{
+		RemoteRoot:       remote,
+		NoteID:           rec.ID,
+		ExpectedRevision: rec.RemoteRev,
+		RelPath:          rec.RelPath,
+		Content:          "---\nsync: synced\n---\nremote body\n",
+		Encrypted:        false,
+	})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: synced\n---\nlocal edited\n"), 0o644))
+	_, err = SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.NotNil(t, rec.Conflict)
+	conflictCopyPath := filepath.Join(root, filepath.FromSlash(rec.Conflict.CopyPath))
+	require.FileExists(t, conflictCopyPath)
+
+	require.NoError(t, ResolveConflictKeepLocal(context.Background(), root, notePath, cfg, rec, client))
+
+	require.NoFileExists(t, conflictCopyPath)
+	require.NoFileExists(t, ConflictPath(root, rec.ID))
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.Nil(t, rec.Conflict)
+	require.Empty(t, rec.LastSyncError)
+
+	fetched, err := client.FetchNote(context.Background(), cfg.Profiles["local"], FetchNoteRequest{RemoteRoot: remote, NoteID: rec.ID})
+	require.NoError(t, err)
+	require.Equal(t, "---\nsync: synced\n---\nlocal edited\n", fetched.Note.Content)
+}
+
+func TestSyncRootSharedNoteAlwaysPullsRemoteOnDivergence(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "shared.md")
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+
+	// Register the note and do initial sync
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: shared\n---\noriginal\n"), 0o644))
+	_, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	var noteID string
+	for id := range records {
+		noteID = id
+	}
+
+	// Simulate independent remote edit by pushing a new revision directly
+	_, err = client.PushNote(context.Background(), cfg.Profiles["local"], PushNoteRequest{
+		RemoteRoot:       remote,
+		NoteID:           noteID,
+		ExpectedRevision: records[noteID].RemoteRev,
+		RelPath:          "shared.md",
+		Content:          "---\nsync: shared\n---\nremote edit\n",
+	})
+	require.NoError(t, err)
+
+	// Also modify local content — this would normally be a conflict
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: shared\n---\nlocal edit\n"), 0o644))
+
+	// Sync should apply remote without creating a conflict
+	result, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Zero(t, result.Conflicts, "shared notes must never produce conflicts")
+	require.True(t, result.NotesChanged)
+
+	// Local file should now contain the remote version
+	content, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "remote edit")
+	require.NotContains(t, string(content), "local edit")
+
+	// No conflict copy should exist
+	entries, err := os.ReadDir(root)
+	require.NoError(t, err)
+	for _, e := range entries {
+		require.NotContains(t, e.Name(), ".conflict-", "expected no conflict copy file")
+	}
+}
+
+func TestSyncRootRegistersAndUpdatesSharedNote(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "shared.md")
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: shared
+---
+# Shared Note
+
+Body
+`), 0o644))
+
+	client := localClient{}
+	cfg := testSyncConfig(remote)
+	result, err := SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.RegisteredNotes)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	var noteID string
+	for id := range records {
+		noteID = id
+	}
+
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: shared
+---
+# Shared Note
+
+Updated body
+`), 0o644))
+	result, err = SyncRoot(context.Background(), root, cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.UpdatedNotes)
+
+	fetched, err := client.FetchNote(context.Background(), cfg.Profiles["local"], FetchNoteRequest{RemoteRoot: remote, NoteID: noteID})
+	require.NoError(t, err)
+	require.Contains(t, fetched.Note.Content, "Updated body")
 }

@@ -511,6 +511,70 @@ func (m Model) currentNotePath() string {
 	return item.Note.Path
 }
 
+func (m Model) currentLocalNote() *notes.Note {
+	if m.listMode == listModeTemporary {
+		return m.currentTempNote()
+	}
+
+	if m.listMode == listModePins {
+		item := m.currentPinItem()
+		if item == nil || (item.Kind != pinItemNote && item.Kind != pinItemTemporaryNote) {
+			return nil
+		}
+		for _, note := range m.notes {
+			if note.Path == item.Path {
+				noteCopy := note
+				return &noteCopy
+			}
+		}
+		for _, note := range m.tempNotes {
+			if note.Path == item.Path {
+				noteCopy := note
+				return &noteCopy
+			}
+		}
+		return nil
+	}
+
+	item := m.currentTreeItem()
+	if item == nil || item.Kind != treeNote || item.Note == nil {
+		return nil
+	}
+	noteCopy := *item.Note
+	return &noteCopy
+}
+
+func (m Model) currentConflictCopyPath() string {
+	note := m.currentLocalNote()
+	if note == nil || (note.SyncClass != notes.SyncClassSynced && note.SyncClass != notes.SyncClassShared) {
+		return ""
+	}
+	rec, ok := m.syncRecords[filepath.ToSlash(strings.TrimSpace(note.RelPath))]
+	if !ok || rec.Conflict == nil {
+		return ""
+	}
+	copyPath := filepath.FromSlash(strings.TrimSpace(rec.Conflict.CopyPath))
+	if copyPath == "" {
+		return ""
+	}
+	return filepath.Join(m.rootDir, copyPath)
+}
+
+func (m Model) hasConflictCopyForCurrentSelection() bool {
+	return m.currentConflictCopyPath() != ""
+}
+
+func (m *Model) openCurrentConflictCopy() tea.Cmd {
+	copyPath := m.currentConflictCopyPath()
+	if copyPath == "" {
+		m.status = "conflict resolution only works on conflicted synced notes"
+		return nil
+	}
+	_ = copyPath
+	m.openCurrentSyncDebugModal()
+	return nil
+}
+
 func (m *Model) armToggleEncryption() {
 	if m.blockRemoteOnlyAction() {
 		return

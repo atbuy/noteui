@@ -53,6 +53,12 @@ That means the note exists on the sync server but has not been imported into the
 
 Use `i` to import the selected remote-only note or `I` to import all missing synced notes.
 
+## How do I resolve a sync conflict?
+
+Select the conflicted synced note, press `O` to open the generated conflict copy, merge the content you want into the original note, then sync again.
+
+The conflict copy is a safety file, not the canonical note path for future sync.
+
 ## Where should I look for common problems?
 
 Start with [Troubleshooting](reference/troubleshooting.md). It covers editor launch problems, sync setup errors, remote-only notes, and contributor docs build issues.

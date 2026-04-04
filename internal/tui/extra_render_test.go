@@ -654,6 +654,16 @@ func TestRenderTreeLineRemoteOnlyNoteUsesMutedXMarker(t *testing.T) {
 	require.Contains(t, plain, "Remote Note")
 }
 
+func TestRenderTreeLineRemoteOnlyDuplicateShowsIDBadge(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.remoteOnlyNotes = []notesync.RemoteNoteMeta{{ID: "n1aaaa", RelPath: "work/remote.md", Title: "Remote Note"}, {ID: "n2bbbb", RelPath: "work/remote.md", Title: "Remote Note"}}
+	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: m.remoteOnlyDisplayTitle(m.remoteOnlyNotes[0]), RemoteNote: &m.remoteOnlyNotes[0], Depth: 0}
+	rendered := m.renderTreeLine(item, false)
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Remote Note [n1aaaa]")
+}
+
 func TestCurrentCategoryPrefixRemoteOnlyNote(t *testing.T) {
 	m := newTestModel(t)
 	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}
@@ -673,7 +683,7 @@ func TestCurrentNotePathRemoteOnlyNoteIsEmpty(t *testing.T) {
 func TestRenderTreeLineRemoteOnlyNoteBlinksWhileImporting(t *testing.T) {
 	m := newTestModel(t)
 	m.width = 120
-	m.syncInFlight = map[string]bool{"work/remote.md": true}
+	m.syncInFlight = map[string]bool{remoteOnlySyncVisualKey("n1"): true}
 	m.syncSpinnerFrame = 0
 	item := treeItem{Kind: treeRemoteNote, RelPath: "work/remote.md", Name: "Remote Note", RemoteNote: &notesync.RemoteNoteMeta{ID: "n1", RelPath: "work/remote.md", Title: "Remote Note"}}
 	rendered := m.renderTreeLine(item, false)
@@ -686,14 +696,14 @@ func TestRenderTreeLineRemoteOnlyNoteBlinksWhileImporting(t *testing.T) {
 	require.Contains(t, plain, "◌")
 }
 
-func TestNoteSyncVisualStateUsesPendingBeforeStartupSyncCheck(t *testing.T) {
+func TestNoteSyncVisualStateUsesHealthyRecordBeforeStartupSyncCheck(t *testing.T) {
 	m := newTestModel(t)
 	n := notes.Note{RelPath: "work/note.md", SyncClass: notes.SyncClassSynced}
 	m.startupSyncChecked = false
 	m.syncRecords = map[string]notesync.NoteRecord{
 		"work/note.md": {RelPath: "work/note.md", LastSyncAt: time.Now(), LastSyncedHash: "sha256:ok"},
 	}
-	require.Equal(t, noteSyncVisualPending, m.noteSyncVisualState(&n))
+	require.Equal(t, noteSyncVisualHealthy, m.noteSyncVisualState(&n))
 }
 
 func TestRenderModalGapUsesStyledSpaces(t *testing.T) {
@@ -701,4 +711,36 @@ func TestRenderModalGapUsesStyledSpaces(t *testing.T) {
 	rendered := m.renderModalGap(3)
 	require.Equal(t, "   ", stripANSI(rendered))
 	require.Equal(t, 3, lipgloss.Width(rendered))
+}
+
+func TestNoteSyncVisualStateSharedHealthy(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/shared.md": {RelPath: "work/shared.md", LastSyncAt: time.Now()},
+	}
+	require.Equal(t, noteSyncVisualSharedHealthy, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncVisualStateSharedPendingWhenNoRecord(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	require.Equal(t, noteSyncVisualSharedPending, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncVisualStateSharedSyncingWhenInFlight(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	m.syncInFlight = map[string]bool{"work/shared.md": true}
+	require.Equal(t, noteSyncVisualSharedSyncing, m.noteSyncVisualState(&n))
+}
+
+func TestNoteSyncMarkerSharedUsesFilledDiamond(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{RelPath: "work/shared.md", SyncClass: notes.SyncClassShared}
+	m.syncRecords = map[string]notesync.NoteRecord{
+		"work/shared.md": {RelPath: "work/shared.md", LastSyncAt: time.Now()},
+	}
+	mark, _ := m.noteSyncMarker(&n)
+	require.Equal(t, "◆ ", mark)
 }

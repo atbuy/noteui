@@ -78,6 +78,11 @@ const (
 	renameTargetCategory
 )
 
+const (
+	conflictResolutionKeepLocal = iota
+	conflictResolutionKeepRemote
+)
+
 type dashboardRecentNote struct {
 	Note    notes.Note
 	IsTemp  bool
@@ -315,6 +320,15 @@ type Model struct {
 	tagInput   textinput.Model
 	helpInput  textinput.Model
 
+	showSyncProfilePicker      bool
+	showSyncDebugModal         bool
+	conflictResolutionChoice   int
+	syncProfileNames           []string
+	syncProfileCursor          int
+	showSyncProfileMigration   bool
+	syncProfileMigrationChoice int
+	pendingSyncProfileChange   *syncProfileChange
+
 	searchInput textinput.Model
 	searchMode  bool
 
@@ -462,12 +476,12 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 
 	pinnedNotes := make(map[string]bool, len(st.PinnedNotes))
 	for _, p := range st.PinnedNotes {
-		pinnedNotes[p] = true
+		pinnedNotes[filepath.ToSlash(strings.TrimSpace(p))] = true
 	}
 
 	pinnedCats := make(map[string]bool, len(st.PinnedCategories))
 	for _, p := range st.PinnedCategories {
-		pinnedCats[p] = true
+		pinnedCats[normalizeCategoryRelPath(p)] = true
 	}
 	if notesync.HasSyncProfile(cfg.Sync) {
 		if syncedNotes, syncedCats, err := notesync.LoadPinnedRelPaths(root); err == nil {
@@ -487,7 +501,9 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		"": true,
 	}
 	for _, p := range st.CollapsedCategories {
-		expanded[p] = false
+		if normalized := normalizeCategoryRelPath(p); normalized != "" {
+			expanded[normalized] = false
+		}
 	}
 
 	return Model{
@@ -556,7 +572,7 @@ func (m *Model) refreshSyncRecords() {
 func (m Model) pendingSyncRelPaths() map[string]bool {
 	out := make(map[string]bool)
 	for _, note := range m.notes {
-		if note.SyncClass != notes.SyncClassSynced {
+		if note.SyncClass != notes.SyncClassSynced && note.SyncClass != notes.SyncClassShared {
 			continue
 		}
 		relPath := filepath.ToSlash(note.RelPath)
@@ -627,6 +643,9 @@ const (
 	noteSyncVisualPending
 	noteSyncVisualSyncing
 	noteSyncVisualHealthy
+	noteSyncVisualSharedHealthy
+	noteSyncVisualSharedPending
+	noteSyncVisualSharedSyncing
 )
 
 func (m Model) noteSyncVisualState(note *notes.Note) noteSyncVisualState {
@@ -634,23 +653,36 @@ func (m Model) noteSyncVisualState(note *notes.Note) noteSyncVisualState {
 		return noteSyncVisualLocal
 	}
 	relPath := filepath.ToSlash(strings.TrimSpace(note.RelPath))
+	if note.SyncClass == notes.SyncClassShared {
+		if m.syncInFlight[relPath] {
+			return noteSyncVisualSharedSyncing
+		}
+		if !m.hasHealthySyncRecord(relPath) {
+			return noteSyncVisualSharedPending
+		}
+		return noteSyncVisualSharedHealthy
+	}
 	if note.SyncClass != notes.SyncClassSynced {
 		return noteSyncVisualLocal
 	}
 	if m.syncInFlight[relPath] {
 		return noteSyncVisualSyncing
 	}
-	if !m.startupSyncChecked {
-		return noteSyncVisualPending
-	}
-	rec, ok := m.syncRecords[relPath]
-	if !ok {
-		return noteSyncVisualPending
-	}
-	if rec.Conflict != nil || strings.TrimSpace(rec.LastSyncError) != "" || rec.LastSyncAt.IsZero() {
+	if !m.hasHealthySyncRecord(relPath) {
 		return noteSyncVisualPending
 	}
 	return noteSyncVisualHealthy
+}
+
+func (m Model) hasHealthySyncRecord(relPath string) bool {
+	rec, ok := m.syncRecords[filepath.ToSlash(strings.TrimSpace(relPath))]
+	if !ok {
+		return false
+	}
+	if rec.Conflict != nil || strings.TrimSpace(rec.LastSyncError) != "" || rec.LastSyncAt.IsZero() {
+		return false
+	}
+	return true
 }
 
 func (m Model) blinkingSyncMarker() (string, lipgloss.Color) {
@@ -668,6 +700,12 @@ func (m Model) noteSyncMarker(note *notes.Note) (string, lipgloss.Color) {
 		return "● ", syncedNoteColor
 	case noteSyncVisualSyncing:
 		return m.blinkingSyncMarker()
+	case noteSyncVisualSharedHealthy:
+		return "◆ ", sharedNoteColor
+	case noteSyncVisualSharedSyncing:
+		return m.blinkingSyncMarker()
+	case noteSyncVisualSharedPending:
+		return "◆ ", unsyncedNoteColor
 	default:
 		return "● ", unsyncedNoteColor
 	}
@@ -759,6 +797,48 @@ func (m Model) currentRemoteOnlyNote() *notesync.RemoteNoteMeta {
 	return item.RemoteNote
 }
 
+func remoteOnlySyncVisualKey(noteID string) string {
+	noteID = strings.TrimSpace(noteID)
+	if noteID == "" {
+		return ""
+	}
+	return "remote:" + noteID
+}
+
+func shortRemoteNoteID(noteID string) string {
+	noteID = strings.TrimSpace(noteID)
+	if len(noteID) <= 6 {
+		return noteID
+	}
+	return noteID[:6]
+}
+
+func (m Model) hasRemoteOnlyPathDuplicate(relPath string) bool {
+	relPath = filepath.ToSlash(strings.TrimSpace(relPath))
+	if relPath == "" {
+		return false
+	}
+	count := 0
+	for _, item := range m.remoteOnlyNotes {
+		if filepath.ToSlash(strings.TrimSpace(item.RelPath)) != relPath {
+			continue
+		}
+		count++
+		if count > 1 {
+			return true
+		}
+	}
+	return false
+}
+
+func (m Model) remoteOnlyDisplayTitle(meta notesync.RemoteNoteMeta) string {
+	title := remoteOnlyNoteTitle(meta)
+	if !m.hasRemoteOnlyPathDuplicate(meta.RelPath) {
+		return title
+	}
+	return title + " [" + shortRemoteNoteID(meta.ID) + "]"
+}
+
 func (m *Model) blockRemoteOnlyAction() bool {
 	remote := m.currentRemoteOnlyNote()
 	if remote == nil {
@@ -820,7 +900,7 @@ func (m Model) localPinnedCategories() []string {
 func (m *Model) applySyncedPins(noteRelPaths, cats []string) {
 	syncedSet := make(map[string]bool, len(m.notes))
 	for _, note := range m.notes {
-		if note.SyncClass == notes.SyncClassSynced {
+		if note.SyncClass == notes.SyncClassSynced || note.SyncClass == notes.SyncClassShared {
 			syncedSet[note.RelPath] = true
 		}
 	}
@@ -946,6 +1026,27 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.rebuildTree()
 		}
 		return m, nil
+
+	case syncProfileSavedMsg:
+		if msg.err != nil {
+			if msg.rebound {
+				m.status = "sync root rebind failed: " + msg.err.Error()
+			} else {
+				m.status = "sync profile save failed: " + msg.err.Error()
+			}
+			return m, nil
+		}
+		m.cfg = msg.cfg
+		ApplyConfigKeys(m.cfg.Keys)
+		status := "default sync profile set to " + msg.profile
+		if strings.TrimSpace(msg.showInfo) != "" {
+			status = fmt.Sprintf("default sync profile set to %s; current root stays on %s", msg.profile, msg.showInfo)
+		}
+		if msg.rebound {
+			status = "default sync profile set to " + msg.profile + "; current root rebound"
+		}
+		m.status = status
+		return m, m.scheduleSync()
 
 	case syncImportFinishedMsg:
 		if m.syncRunning || len(m.syncInFlight) > 0 {
@@ -1105,6 +1206,20 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.deferredStatus = "deleted remote copy; note kept locally"
 		return m, refreshAllCmd(m.rootDir)
 
+	case conflictResolvedMsg:
+		if msg.err != nil {
+			m.status = "conflict resolution failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.closeSyncDebugModal("")
+		m.previewPath = ""
+		if msg.keepRemote {
+			m.deferredStatus = "conflict resolved: kept remote version"
+		} else {
+			m.deferredStatus = "conflict resolved: kept local version"
+		}
+		return m, refreshAllCmd(m.rootDir)
+
 	case noteSyncClassToggledMsg:
 		if msg.err != nil {
 			m.status = "toggle sync failed: " + msg.err.Error()
@@ -1121,6 +1236,23 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.scheduleSync(),
 				)
 			}
+		}
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+
+	case noteMadeSharedMsg:
+		if msg.err != nil {
+			m.status = "make shared failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.previewPath = ""
+		m.status = "note is now shared"
+		relPath, err := filepath.Rel(m.rootDir, msg.path)
+		if err == nil {
+			return m, batchCmds(
+				refreshAllCmd(m.rootDir),
+				m.startSyncVisual(filepath.ToSlash(relPath)),
+				m.scheduleSync(),
+			)
 		}
 		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
@@ -1237,11 +1369,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		_ = m.saveTreeState()
 
 		for _, c := range m.categories {
-			if c.RelPath == "" {
+			relPath := normalizeCategoryRelPath(c.RelPath)
+			if relPath == "" {
 				continue
 			}
-			if _, ok := m.expanded[c.RelPath]; !ok {
-				m.expanded[c.RelPath] = true
+			if _, ok := m.expanded[relPath]; !ok {
+				m.expanded[relPath] = true
 			}
 		}
 
@@ -1621,6 +1754,66 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.showSyncDebugModal {
+			switch {
+			case msg.String() == "esc":
+				m.closeSyncDebugModal("sync details closed")
+				return m, nil
+			case m.hasConflictCopyForCurrentSelection() && (key.Matches(msg, keys.CollapseCategory) || msg.String() == "left"):
+				m.conflictResolutionChoice = conflictResolutionKeepLocal
+				return m, nil
+			case m.hasConflictCopyForCurrentSelection() && (key.Matches(msg, keys.ExpandCategory) || msg.String() == "right"):
+				m.conflictResolutionChoice = conflictResolutionKeepRemote
+				return m, nil
+			case m.hasConflictCopyForCurrentSelection() && msg.String() == "enter":
+				return m, m.confirmCurrentConflictResolution()
+			case msg.String() == "y":
+				m.copyCurrentSyncDebugRawError()
+				return m, nil
+			}
+			return m, nil
+		}
+
+		if m.showSyncProfilePicker {
+			switch {
+			case msg.String() == "esc":
+				m.closeSyncProfilePicker("sync profile change cancelled")
+				return m, nil
+			case msg.String() == "enter":
+				return m, m.confirmSelectedSyncProfile()
+			case key.Matches(msg, keys.MoveUp):
+				m.moveSyncProfileCursor(-1)
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				m.moveSyncProfileCursor(1)
+				return m, nil
+			}
+			return m, nil
+		}
+
+		if m.showSyncProfileMigration {
+			switch {
+			case msg.String() == "esc":
+				m.closeSyncProfileMigration("sync profile change cancelled")
+				return m, nil
+			case msg.String() == "enter":
+				return m, m.confirmSyncProfileMigration()
+			case msg.String() == "left", msg.String() == "up":
+				m.moveSyncProfileMigrationChoice(-1)
+				return m, nil
+			case msg.String() == "right", msg.String() == "down", msg.String() == "tab":
+				m.moveSyncProfileMigrationChoice(1)
+				return m, nil
+			case key.Matches(msg, keys.MoveUp):
+				m.moveSyncProfileMigrationChoice(-1)
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				m.moveSyncProfileMigrationChoice(1)
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.showMoveBrowser {
 			switch {
 			case msg.String() == "esc":
@@ -1790,7 +1983,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.deletePending = nil
 				m.status = "delete cancelled"
 				return m, nil
-			case key.Matches(msg, keys.DeleteConfirm):
+			case key.Matches(msg, keys.DeleteConfirm) || msg.String() == "d":
 				return m, m.confirmDeleteCurrent()
 			default:
 				m.deletePending = nil
@@ -2370,6 +2563,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, m.scheduleSync()
 		}
 
+		if key.Matches(msg, keys.SelectSyncProfile) {
+			m.openSyncProfilePicker()
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.ToggleSync) {
 			item := m.currentTreeItem()
 			if item != nil && item.Kind == treeRemoteNote {
@@ -2380,7 +2578,33 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.status = "sync toggle only works on notes"
 				return m, nil
 			}
+			if item.Note.SyncClass == notes.SyncClassShared {
+				m.status = "shared notes cannot be toggled"
+				return m, nil
+			}
 			return m, toggleNoteSyncCmd(item.Note.Path)
+		}
+
+		if key.Matches(msg, keys.MakeShared) {
+			item := m.currentTreeItem()
+			if item == nil || item.Kind != treeNote || item.Note == nil {
+				m.status = "make shared only works on notes"
+				return m, nil
+			}
+			if item.Note.SyncClass == notes.SyncClassShared {
+				m.status = "note is already shared"
+				return m, nil
+			}
+			return m, makeNoteSharedCmd(item.Note.Path)
+		}
+
+		if key.Matches(msg, keys.OpenConflictCopy) {
+			return m, m.openCurrentConflictCopy()
+		}
+
+		if key.Matches(msg, keys.ShowSyncDebug) {
+			m.openCurrentSyncDebugModal()
+			return m, nil
 		}
 
 		if key.Matches(msg, keys.DeleteRemoteKeepLocal) {
@@ -2413,7 +2637,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.status = "importing remote note..."
 			return m, batchCmds(
 				importCurrentSyncedNoteCmd(m.rootDir, m.cfg.Sync, item.RemoteNote.ID),
-				m.startSyncVisual(item.RelPath),
+				m.startSyncVisual(remoteOnlySyncVisualKey(item.RemoteNote.ID)),
 			)
 		}
 
@@ -2575,7 +2799,7 @@ func (m Model) lockedPreviewText() string {
 }
 
 func (m Model) modalDimensions(minWidth, maxWidth int) (int, int) {
-	modalWidth := min(maxWidth, max(minWidth, m.width-10))
+	modalWidth := min(maxWidth, max(minWidth, m.width-4))
 	innerWidth := max(20, modalWidth-(modalPaddingX*2)-2)
 	return modalWidth, innerWidth
 }

@@ -133,7 +133,7 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 		remoteCopy := n
 		*out = append(*out, treeItem{
 			Kind:       treeRemoteNote,
-			Name:       remoteOnlyNoteTitle(n),
+			Name:       m.remoteOnlyDisplayTitle(n),
 			RelPath:    n.RelPath,
 			Depth:      depth,
 			RemoteNote: &remoteCopy,

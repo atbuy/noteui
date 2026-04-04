@@ -52,6 +52,7 @@ type ThemeConfig struct {
 	SyncedNoteColor   string `toml:"synced_note_color"`
 	UnsyncedNoteColor string `toml:"unsynced_note_color"`
 	SyncingNoteColor  string `toml:"syncing_note_color"`
+	SharedNoteColor   string `toml:"shared_note_color"`
 	MarkedItemColor   string `toml:"marked_item_color"`
 	ErrorColor        string `toml:"error_color"`
 	SuccessColor      string `toml:"success_color"`
@@ -124,6 +125,10 @@ type KeysConfig struct {
 	ToggleSelect             []string `toml:"toggle_select"`
 	Pin                      []string `toml:"pin"`
 	ToggleSync               []string `toml:"toggle_sync"`
+	MakeShared               []string `toml:"make_shared"`
+	SelectSyncProfile        []string `toml:"select_sync_profile"`
+	OpenConflictCopy         []string `toml:"open_conflict_copy"`
+	ShowSyncDebug           []string `toml:"show_sync_debug"`
 	DeleteRemoteKeepLocal    []string `toml:"delete_remote_keep_local"`
 	SyncImportCurrent        []string `toml:"sync_import_current"`
 	SyncImport               []string `toml:"sync_import"`
@@ -194,6 +199,7 @@ func Default() Config {
 		},
 		Keys: KeysConfig{
 			ToggleSync:            []string{"S"},
+			ShowSyncDebug:         []string{"ctrl+e"},
 			DeleteRemoteKeepLocal: []string{"U"},
 			SyncImportCurrent:     []string{"i"},
 			SyncImport:            []string{"I"},

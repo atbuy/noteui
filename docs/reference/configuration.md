@@ -82,6 +82,9 @@ remote_bin = "/usr/local/bin/noteui-sync"
 
 [keys]
 toggle_sync = ["S"]
+select_sync_profile = ["F"]
+open_conflict_copy = ["O"]
+show_sync_debug = ["ctrl+e"]
 delete_remote_keep_local = ["U"]
 sync_import_current = ["i"]
 sync_import = ["I"]
@@ -402,7 +405,7 @@ remote_root = "/srv/noteui"
 remote_bin = "/usr/local/bin/noteui-sync"
 ```
 
-For end-to-end sync setup, import flows, and recovery behavior, see the [Sync guide](../guide/sync.md).
+For end-to-end sync setup, import flows, conflict resolution, and recovery behavior, see the [Sync guide](../guide/sync.md).
 
 ## `keys`
 
@@ -416,6 +419,7 @@ Example:
 [keys]
 open = ["enter", "o"]
 toggle_sync = ["S"]
+open_conflict_copy = ["O"]
 sync_import = ["I"]
 ```
 
@@ -498,6 +502,11 @@ sync_import = ["I"]
 
 - `toggle_sync`
   Default: `["S"]`
+- `select_sync_profile`
+  Default: `["F"]`
+- `open_conflict_copy`
+  Default: `["O"]`
+  Opens the generated conflict copy for the selected conflicted synced note.
 - `delete_remote_keep_local`
   Default: `["U"]`
 - `sync_import_current`
@@ -529,3 +538,18 @@ sync_import = ["I"]
   Default: `["E"]`
 
 The in-app help modal is still the live source of truth if you change keybindings heavily.
+
+
+## `[keys]`
+
+The `[keys]` section overrides default bindings.
+
+Sync-related key defaults:
+
+- `toggle_sync = ["S"]`
+- `select_sync_profile = ["F"]`
+- `open_conflict_copy = ["O"]`
+- `show_sync_debug = ["ctrl+e"]`
+- `delete_remote_keep_local = ["U"]`
+- `sync_import_current = ["i"]`
+- `sync_import = ["I"]`

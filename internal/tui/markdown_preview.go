@@ -527,12 +527,13 @@ func prefixLines(text, prefix string) string {
 		return text
 	}
 
+	prefixStyled := lipgloss.NewStyle().Background(bgSoftColor).Render(prefix)
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
 		if line == "" {
-			lines[i] = prefix
+			lines[i] = prefixStyled
 		} else {
-			lines[i] = prefix + line
+			lines[i] = prefixStyled + line
 		}
 	}
 	return strings.Join(lines, "\n")
