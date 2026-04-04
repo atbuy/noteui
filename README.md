@@ -38,7 +38,21 @@ Recommended entry points:
 
 ## Install
 
-The easiest way to install `noteui` is from the pre-built release archives:
+Quick install examples:
+
+Linux / macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/atbuy/noteui/main/install.sh | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/atbuy/noteui/main/install.ps1 | iex
+```
+
+The easiest manual install path is still the pre-built release archives:
 
 <https://github.com/atbuy/noteui/releases>
 
