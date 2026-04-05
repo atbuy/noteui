@@ -2,6 +2,20 @@
 
 This guide explains how noteui behaves in day-to-day use.
 
+## Workspace profiles
+
+If you configure multiple workspaces in `config.toml`, noteui can switch between them from the command palette or directly with `W`.
+
+Each workspace has its own:
+
+- notes root
+- pinned notes and categories
+- collapsed category state
+- recent command history
+- sort preference
+
+If `NOTES_ROOT` is set in the environment, that override wins for the current session and workspace switching is disabled.
+
 ## Notes tree and preview
 
 The main interface is split into two panes:

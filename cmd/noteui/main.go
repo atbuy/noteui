@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -20,15 +21,12 @@ func main() {
 		}
 	}
 
-	root := os.Getenv("NOTES_ROOT")
-	if root == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to resolve home directory: %v\n", err)
-			os.Exit(1)
-		}
-		root = filepath.Join(home, "notes")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to resolve home directory: %v\n", err)
+		os.Exit(1)
 	}
+	fallbackRoot := filepath.Join(home, "notes")
 
 	cfg, cfgErr := config.Load()
 	startupError := ""
@@ -37,10 +35,23 @@ func main() {
 		fmt.Fprintf(os.Stderr, "config warning: %v\n", cfgErr)
 	}
 
+	startup := config.ResolveStartupWorkspace(cfg, os.Getenv("NOTES_ROOT"), fallbackRoot)
+
 	tui.ApplyTheme(cfg)
 	tui.ApplyConfigKeys(cfg.Keys)
 
-	m := tui.New(root, startupError, cfg, buildinfo.Version)
+	m := tui.NewWithSession(
+		startup.Root,
+		startupError,
+		cfg,
+		buildinfo.Version,
+		tui.WorkspaceSession{
+			Name:            strings.TrimSpace(startup.Name),
+			Label:           strings.TrimSpace(startup.Label),
+			Override:        startup.Override,
+			StartWithPicker: startup.NeedsSelection,
+		},
+	)
 	p := tea.NewProgram(
 		m,
 		tea.WithAltScreen(),

@@ -17,6 +17,15 @@ If the file contains unknown keys or invalid values, noteui rejects that load an
 
 ```toml
 dashboard = true
+default_workspace = "work"
+
+[workspaces.work]
+root = "/home/alice/notes"
+label = "Work"
+
+[workspaces.demo]
+root = "/home/alice/demo-notes"
+label = "Demo"
 
 [theme]
 name = "nord"
@@ -37,6 +46,15 @@ remote_bin = "/usr/local/bin/noteui-sync"
 
 ```toml
 dashboard = true
+default_workspace = "work"
+
+[workspaces.work]
+root = "/home/alice/notes"
+label = "Work"
+
+[workspaces.demo]
+root = "/home/alice/demo-notes"
+label = "Demo"
 
 [theme]
 name = "default"
@@ -82,6 +100,7 @@ remote_bin = "/usr/local/bin/noteui-sync"
 
 [keys]
 toggle_sync = ["S"]
+select_workspace = ["W"]
 select_sync_profile = ["F"]
 open_conflict_copy = ["O"]
 show_sync_debug = ["ctrl+e"]
@@ -93,6 +112,8 @@ sync_import = ["I"]
 ## Top-level keys
 
 - `dashboard`
+- `default_workspace`
+- `workspaces`
 - `theme`
 - `typography`
 - `icons`
@@ -112,6 +133,37 @@ dashboard = true
 ```
 
 Controls whether the dashboard is enabled.
+
+## `default_workspace`
+
+Type: string
+
+Optional. When set, noteui starts in that configured workspace. The name must match a key under `workspaces`.
+
+## `workspaces`
+
+Type: table of named workspace entries
+
+Each workspace defines a notes root and an optional display label.
+
+Example:
+
+```toml
+[workspaces.work]
+root = "/home/alice/notes"
+label = "Work"
+
+[workspaces.demo]
+root = "/home/alice/demo-notes"
+label = "Demo"
+```
+
+Supported keys per workspace:
+
+- `root`: required notes root for that workspace
+- `label`: optional UI label used in the footer, title bar, and picker
+
+Workspace switching is available from the command palette when multiple workspaces are configured. Local UI state such as pins, collapsed folders, recent commands, and sort preference is stored separately per workspace.
 
 ## `theme`
 
@@ -498,6 +550,8 @@ sync_import = ["I"]
   Default: `["P"]`
 - `show_todos`
   Default: `["ctrl+t"]`
+- `select_workspace`
+  Default: `["W"]`
 - `sort_toggle`
   Default: `["s"]`
 
@@ -561,6 +615,7 @@ The `[keys]` section overrides default bindings.
 Sync-related key defaults:
 
 - `toggle_sync = ["S"]`
+- `select_workspace = ["W"]`
 - `select_sync_profile = ["F"]`
 - `open_conflict_copy = ["O"]`
 - `show_sync_debug = ["ctrl+e"]`

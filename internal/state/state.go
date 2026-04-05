@@ -8,12 +8,25 @@ import (
 	"strings"
 )
 
+type WorkspaceState struct {
+	PinnedNotes         []string `json:"pinned_notes,omitempty"`
+	PinnedCategories    []string `json:"pinned_categories,omitempty"`
+	CollapsedCategories []string `json:"collapsed_categories,omitempty"`
+	RecentCommands      []string `json:"recent_commands,omitempty"`
+	SortByModTime       bool     `json:"sort_by_mod_time,omitempty"`
+}
+
 type State struct {
-	PinnedNotes         []string `json:"pinned_notes"`
-	PinnedCategories    []string `json:"pinned_categories"`
-	CollapsedCategories []string `json:"collapsed_categories"`
-	RecentCommands      []string `json:"recent_commands"`
-	SortByModTime       bool     `json:"sort_by_mod_time"`
+	Workspaces map[string]WorkspaceState
+}
+
+type persistedState struct {
+	Workspaces          map[string]WorkspaceState `json:"workspaces,omitempty"`
+	PinnedNotes         []string                  `json:"pinned_notes,omitempty"`
+	PinnedCategories    []string                  `json:"pinned_categories,omitempty"`
+	CollapsedCategories []string                  `json:"collapsed_categories,omitempty"`
+	RecentCommands      []string                  `json:"recent_commands,omitempty"`
+	SortByModTime       bool                      `json:"sort_by_mod_time,omitempty"`
 }
 
 func Load() (State, error) {
@@ -38,8 +51,23 @@ func Load() (State, error) {
 		return s, nil
 	}
 
-	if err := json.Unmarshal(data, &s); err != nil {
+	var persisted persistedState
+	if err := json.Unmarshal(data, &persisted); err != nil {
 		return State{}, err
+	}
+
+	s.Workspaces = persisted.Workspaces
+	if len(s.Workspaces) == 0 {
+		legacy := WorkspaceState{
+			PinnedNotes:         persisted.PinnedNotes,
+			PinnedCategories:    persisted.PinnedCategories,
+			CollapsedCategories: persisted.CollapsedCategories,
+			RecentCommands:      persisted.RecentCommands,
+			SortByModTime:       persisted.SortByModTime,
+		}
+		if !isZeroWorkspaceState(legacy) {
+			s.Workspaces = map[string]WorkspaceState{defaultWorkspaceKey: legacy}
+		}
 	}
 
 	return s, nil
@@ -55,12 +83,68 @@ func Save(s State) error {
 		return err
 	}
 
-	data, err := json.MarshalIndent(s, "", "  ")
+	persisted := persistedState{Workspaces: normalizeWorkspaceMap(s.Workspaces)}
+	data, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return err
 	}
 
 	return os.WriteFile(path, data, 0o644)
+}
+
+func (s State) Workspace(name string) WorkspaceState {
+	if len(s.Workspaces) == 0 {
+		return WorkspaceState{}
+	}
+	return s.Workspaces[normalizeWorkspaceKey(name)]
+}
+
+func (s *State) SetWorkspace(name string, ws WorkspaceState) {
+	if s.Workspaces == nil {
+		s.Workspaces = make(map[string]WorkspaceState)
+	}
+	key := normalizeWorkspaceKey(name)
+	if isZeroWorkspaceState(ws) {
+		delete(s.Workspaces, key)
+		return
+	}
+	s.Workspaces[key] = ws
+}
+
+func normalizeWorkspaceMap(items map[string]WorkspaceState) map[string]WorkspaceState {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make(map[string]WorkspaceState, len(items))
+	for name, ws := range items {
+		key := normalizeWorkspaceKey(name)
+		if isZeroWorkspaceState(ws) {
+			continue
+		}
+		out[key] = ws
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+const defaultWorkspaceKey = "default"
+
+func normalizeWorkspaceKey(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return defaultWorkspaceKey
+	}
+	return name
+}
+
+func isZeroWorkspaceState(ws WorkspaceState) bool {
+	return len(ws.PinnedNotes) == 0 &&
+		len(ws.PinnedCategories) == 0 &&
+		len(ws.CollapsedCategories) == 0 &&
+		len(ws.RecentCommands) == 0 &&
+		!ws.SortByModTime
 }
 
 func statePath() (string, error) {

@@ -240,3 +240,73 @@ func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
 	require.Equal(t, "notes-prod", reloaded.Sync.Profiles["homebox"].SSHHost)
 	require.Equal(t, "backup-host", reloaded.Sync.Profiles["backup"].SSHHost)
 }
+
+func TestValidateRejectsUnknownDefaultWorkspace(t *testing.T) {
+	cfg := Default()
+	cfg.DefaultWorkspace = "missing"
+	cfg.Workspaces = map[string]WorkspaceConfig{
+		"work": {Root: "/notes/work"},
+	}
+
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `unknown default_workspace "missing"`)
+}
+
+func TestValidateRejectsWorkspaceWithoutRoot(t *testing.T) {
+	cfg := Default()
+	cfg.Workspaces = map[string]WorkspaceConfig{
+		"work": {},
+	}
+
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `workspace "work" is missing root`)
+}
+
+func TestResolveStartupWorkspaceUsesOverride(t *testing.T) {
+	cfg := Default()
+	cfg.Workspaces = map[string]WorkspaceConfig{
+		"work": {Root: "/notes/work", Label: "Work"},
+	}
+
+	got := ResolveStartupWorkspace(cfg, "/tmp/demo-notes", "/fallback")
+	require.True(t, got.Override)
+	require.Equal(t, "/tmp/demo-notes", got.Root)
+	require.Empty(t, got.Name)
+}
+
+func TestResolveStartupWorkspaceUsesDefaultWorkspace(t *testing.T) {
+	cfg := Default()
+	cfg.DefaultWorkspace = "work"
+	cfg.Workspaces = map[string]WorkspaceConfig{
+		"work": {Root: "/notes/work", Label: "Work"},
+		"demo": {Root: "/notes/demo", Label: "Demo"},
+	}
+
+	got := ResolveStartupWorkspace(cfg, "", "/fallback")
+	require.False(t, got.Override)
+	require.False(t, got.NeedsSelection)
+	require.Equal(t, "work", got.Name)
+	require.Equal(t, "Work", got.Label)
+	require.Equal(t, "/notes/work", got.Root)
+}
+
+func TestResolveStartupWorkspaceRequiresSelectionForMultipleWithoutDefault(t *testing.T) {
+	cfg := Default()
+	cfg.Workspaces = map[string]WorkspaceConfig{
+		"work": {Root: "/notes/work"},
+		"demo": {Root: "/notes/demo"},
+	}
+
+	got := ResolveStartupWorkspace(cfg, "", "/fallback")
+	require.True(t, got.NeedsSelection)
+	require.Empty(t, got.Root)
+}
+
+func TestResolveStartupWorkspaceUsesFallbackWithoutProfiles(t *testing.T) {
+	got := ResolveStartupWorkspace(Default(), "", "/fallback")
+	require.Equal(t, "/fallback", got.Root)
+	require.False(t, got.Override)
+	require.False(t, got.NeedsSelection)
+}

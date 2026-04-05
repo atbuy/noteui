@@ -4,7 +4,7 @@ This page documents the environment variables noteui reads.
 
 ## `NOTES_ROOT`
 
-Overrides the default notes directory.
+Overrides the default notes directory. When set, this bypasses configured workspace profiles for that session and disables in-app workspace switching.
 
 Default:
 

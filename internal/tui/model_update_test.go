@@ -12,6 +12,7 @@ import (
 
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/notes"
+	"atbuy/noteui/internal/state"
 	notesync "atbuy/noteui/internal/sync"
 )
 
@@ -254,7 +255,7 @@ func TestSyncDebouncedStartsRealSyncWhileImmediateVisualIsActive(t *testing.T) {
 	}
 	m.syncDebounceToken = 3
 	m.syncInFlight = map[string]bool{"work/note.md": true}
-	next, cmd := m.Update(syncDebouncedMsg{token: 3})
+	next, cmd := m.Update(syncDebouncedMsg{token: 3, sessionToken: 1})
 	m = next.(Model)
 	require.True(t, m.syncRunning)
 	require.NotNil(t, cmd)
@@ -441,10 +442,11 @@ func TestHelp_StatusContainsHelp(t *testing.T) {
 func TestDataLoadedMsgSetsNotes(t *testing.T) {
 	m := newTestModel(t)
 	m = updateModel(m, dataLoadedMsg{
-		notes:      nil,
-		tempNotes:  nil,
-		categories: nil,
-		err:        nil,
+		sessionToken: 1,
+		notes:        nil,
+		tempNotes:    nil,
+		categories:   nil,
+		err:          nil,
 	})
 	if !strings.Contains(m.status, "no notes found") {
 		require.Failf(t, "assertion failed", "expected 'no notes found' status, got %q", m.status)
@@ -453,7 +455,7 @@ func TestDataLoadedMsgSetsNotes(t *testing.T) {
 
 func TestDataLoadedMsgWithError(t *testing.T) {
 	m := newTestModel(t)
-	m = updateModel(m, dataLoadedMsg{err: errorf("test error")})
+	m = updateModel(m, dataLoadedMsg{sessionToken: 1, err: errorf("test error")})
 	if !strings.Contains(m.status, "error") {
 		require.Failf(t, "assertion failed", "expected error status, got %q", m.status)
 	}
@@ -778,6 +780,32 @@ func TestEnterOnRemoteOnlyNoteShowsImportStatus(t *testing.T) {
 	require.Contains(t, m.status, "press i to import it or I to import all")
 }
 
+func TestSelectWorkspaceOpensPicker(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Workspaces = map[string]config.WorkspaceConfig{
+		"work": {Root: t.TempDir(), Label: "Work"},
+		"demo": {Root: t.TempDir(), Label: "Demo"},
+	}
+	m := NewWithSession(cfg.Workspaces["work"].Root, "", cfg, "test", WorkspaceSession{Name: "work", Label: "Work"})
+	m = updateModel(m, keyMsg("W"))
+	require.True(t, m.showWorkspacePicker)
+	require.Equal(t, "select workspace", m.status)
+}
+
+func TestSelectWorkspaceBlockedDuringNotesRootOverride(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Workspaces = map[string]config.WorkspaceConfig{
+		"work": {Root: t.TempDir(), Label: "Work"},
+		"demo": {Root: t.TempDir(), Label: "Demo"},
+	}
+	m := NewWithSession(t.TempDir(), "", cfg, "test", WorkspaceSession{Override: true})
+	m = updateModel(m, keyMsg("W"))
+	require.False(t, m.showWorkspacePicker)
+	require.Contains(t, m.status, "disabled when NOTES_ROOT is set")
+}
+
 func TestSelectSyncProfileOpensPicker(t *testing.T) {
 	cfg := config.Default()
 	cfg.Dashboard = false
@@ -815,9 +843,9 @@ func TestConfirmSelectedSyncProfileShowsMigrationForBoundRoot(t *testing.T) {
 func TestDataLoadedPreservesCollapsedCategoryState(t *testing.T) {
 	m := newTestModel(t)
 	m.expanded = map[string]bool{"": true, "work": false}
-	m = updateModel(m, dataLoadedMsg{categories: []notes.Category{{Name: "All notes", RelPath: ""}, {Name: "work", RelPath: "work"}}})
+	m = updateModel(m, dataLoadedMsg{sessionToken: 1, categories: []notes.Category{{Name: "All notes", RelPath: ""}, {Name: "work", RelPath: "work"}}})
 	require.False(t, m.expanded["work"])
-	require.Contains(t, m.state.CollapsedCategories, "work")
+	require.Contains(t, m.workspaceState.CollapsedCategories, "work")
 }
 
 func TestOpenConflictCopyKeyOpensConflictResolutionModal(t *testing.T) {
@@ -1102,4 +1130,59 @@ func TestClearMarksKeyClearsTemporaryMarks(t *testing.T) {
 
 	m = updateModel(m, keyMsg("V"))
 	require.Empty(t, m.markedTreeItems)
+}
+
+func TestNewWithSessionStartsWithWorkspacePickerWhenRequired(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Workspaces = map[string]config.WorkspaceConfig{
+		"work": {Root: t.TempDir(), Label: "Work"},
+		"demo": {Root: t.TempDir(), Label: "Demo"},
+	}
+
+	m := NewWithSession("", "", cfg, "test", WorkspaceSession{StartWithPicker: true})
+	require.True(t, m.showWorkspacePicker)
+	require.Equal(t, "select workspace", m.status)
+	require.Nil(t, m.Init())
+}
+
+func TestConfirmSelectedWorkspaceSwitchesRootAndIgnoresStaleLoad(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Workspaces = map[string]config.WorkspaceConfig{
+		"work": {Root: rootA, Label: "Work"},
+		"demo": {Root: rootB, Label: "Demo"},
+	}
+
+	stored := state.State{}
+	stored.SetWorkspace("work", state.WorkspaceState{RecentCommands: []string{cmdShowHelp}})
+	stored.SetWorkspace("demo", state.WorkspaceState{RecentCommands: []string{cmdShowPins}, CollapsedCategories: []string{"archive"}})
+	require.NoError(t, state.Save(stored))
+
+	m := NewWithSession(rootA, "", cfg, "test", WorkspaceSession{Name: "work", Label: "Work"})
+	require.Equal(t, []string{cmdShowHelp}, m.workspaceState.RecentCommands)
+	require.Equal(t, 1, m.sessionToken)
+
+	m.openWorkspacePicker()
+	m.moveWorkspaceCursor(-1)
+	cmd := m.confirmSelectedWorkspace()
+	require.NotNil(t, cmd)
+	require.False(t, m.showWorkspacePicker)
+	require.Equal(t, rootB, m.rootDir)
+	require.Equal(t, "demo", m.workspaceName)
+	require.Equal(t, []string{cmdShowPins}, m.workspaceState.RecentCommands)
+	require.Contains(t, m.workspaceState.CollapsedCategories, "archive")
+	require.Equal(t, 2, m.sessionToken)
+
+	next, _ := m.Update(dataLoadedMsg{sessionToken: 1, notes: []notes.Note{{RelPath: "old.md", Name: "old.md", TitleText: "Old"}}})
+	m = next.(Model)
+	require.Empty(t, m.notes)
+
+	next, _ = m.Update(dataLoadedMsg{sessionToken: 2, notes: []notes.Note{{RelPath: "new.md", Name: "new.md", TitleText: "New"}}})
+	m = next.(Model)
+	require.Len(t, m.notes, 1)
+	require.Equal(t, "new.md", m.notes[0].RelPath)
 }

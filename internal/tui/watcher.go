@@ -13,29 +13,32 @@ import (
 )
 
 type watchStartedMsg struct {
-	watcher *fsnotify.Watcher
-	events  chan teaMsg
-	err     error
+	watcher      *fsnotify.Watcher
+	events       chan teaMsg
+	err          error
+	sessionToken int
 }
 
 type (
-	watchRefreshMsg struct{}
+	watchRefreshMsg struct{ sessionToken int }
 	watchErrorMsg   struct {
-		err error
+		err          error
+		sessionToken int
 	}
 )
 
 type teaMsg interface{}
 
-func startWatchCmd(root string) func() teaMsg {
+func startWatchCmd(root string, sessionToken int) func() teaMsg {
 	return func() teaMsg {
-		watcher, events, err := newRecursiveWatcher(root)
+		watcher, events, err := newRecursiveWatcher(root, sessionToken)
 		if err != nil {
-			return watchStartedMsg{err: err}
+			return watchStartedMsg{err: err, sessionToken: sessionToken}
 		}
 		return watchStartedMsg{
-			watcher: watcher,
-			events:  events,
+			watcher:      watcher,
+			events:       events,
+			sessionToken: sessionToken,
 		}
 	}
 }
@@ -50,7 +53,7 @@ func waitForWatchCmd(events <-chan teaMsg) func() teaMsg {
 	}
 }
 
-func newRecursiveWatcher(root string) (*fsnotify.Watcher, chan teaMsg, error) {
+func newRecursiveWatcher(root string, sessionToken int) (*fsnotify.Watcher, chan teaMsg, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, nil, err
@@ -100,7 +103,6 @@ func newRecursiveWatcher(root string) (*fsnotify.Watcher, chan teaMsg, error) {
 					continue
 				}
 
-				// If a new directory appears, watch it too.
 				if event.Op&fsnotify.Create != 0 {
 					if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 						_ = addWatchTree(watcher, event.Name)
@@ -113,11 +115,11 @@ func newRecursiveWatcher(root string) (*fsnotify.Watcher, chan teaMsg, error) {
 				if !ok {
 					return
 				}
-				out <- watchErrorMsg{err: err}
+				out <- watchErrorMsg{err: err, sessionToken: sessionToken}
 
 			case <-timerCh:
 				if pending {
-					out <- watchRefreshMsg{}
+					out <- watchRefreshMsg{sessionToken: sessionToken}
 					pending = false
 				}
 				timerCh = nil

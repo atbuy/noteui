@@ -13,14 +13,29 @@ import (
 )
 
 type Config struct {
-	Dashboard  bool             `toml:"dashboard"`
-	Theme      ThemeConfig      `toml:"theme"`
-	Typography TypographyConfig `toml:"typography"`
-	Icons      IconsConfig      `toml:"icons"`
-	Modal      ModalConfig      `toml:"modal"`
-	Preview    PreviewConfig    `toml:"preview"`
-	Keys       KeysConfig       `toml:"keys"`
-	Sync       SyncConfig       `toml:"sync"`
+	Dashboard        bool                       `toml:"dashboard"`
+	DefaultWorkspace string                     `toml:"default_workspace"`
+	Workspaces       map[string]WorkspaceConfig `toml:"workspaces"`
+	Theme            ThemeConfig                `toml:"theme"`
+	Typography       TypographyConfig           `toml:"typography"`
+	Icons            IconsConfig                `toml:"icons"`
+	Modal            ModalConfig                `toml:"modal"`
+	Preview          PreviewConfig              `toml:"preview"`
+	Keys             KeysConfig                 `toml:"keys"`
+	Sync             SyncConfig                 `toml:"sync"`
+}
+
+type WorkspaceConfig struct {
+	Root  string `toml:"root"`
+	Label string `toml:"label"`
+}
+
+type StartupWorkspace struct {
+	Name           string
+	Label          string
+	Root           string
+	Override       bool
+	NeedsSelection bool
 }
 
 type SyncConfig struct {
@@ -133,6 +148,7 @@ type KeysConfig struct {
 	MakeShared               []string `toml:"make_shared"`
 	ToggleTemporary          []string `toml:"toggle_temporary"`
 	CommandPalette           []string `toml:"command_palette"`
+	SelectWorkspace          []string `toml:"select_workspace"`
 	SelectSyncProfile        []string `toml:"select_sync_profile"`
 	OpenConflictCopy         []string `toml:"open_conflict_copy"`
 	ShowSyncDebug            []string `toml:"show_sync_debug"`
@@ -306,7 +322,77 @@ func Validate(cfg Config) error {
 		}
 	}
 
+	for name, workspace := range cfg.Workspaces {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return errors.New("workspace name cannot be empty")
+		}
+		if strings.TrimSpace(workspace.Root) == "" {
+			return fmt.Errorf("workspace %q is missing root", name)
+		}
+	}
+
+	if cfg.DefaultWorkspace != "" {
+		if _, ok := cfg.Workspaces[cfg.DefaultWorkspace]; !ok {
+			return fmt.Errorf("unknown default_workspace %q", cfg.DefaultWorkspace)
+		}
+	}
+
 	return nil
+}
+
+func SortedWorkspaceNames(cfg Config) []string {
+	if len(cfg.Workspaces) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(cfg.Workspaces))
+	for name := range cfg.Workspaces {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func ResolveStartupWorkspace(cfg Config, notesRootOverride, fallbackRoot string) StartupWorkspace {
+	notesRootOverride = strings.TrimSpace(notesRootOverride)
+	if notesRootOverride != "" {
+		return StartupWorkspace{
+			Root:     filepath.Clean(notesRootOverride),
+			Override: true,
+		}
+	}
+
+	names := SortedWorkspaceNames(cfg)
+	if len(names) == 0 {
+		return StartupWorkspace{Root: filepath.Clean(strings.TrimSpace(fallbackRoot))}
+	}
+
+	if cfg.DefaultWorkspace != "" {
+		workspace := cfg.Workspaces[cfg.DefaultWorkspace]
+		return StartupWorkspace{
+			Name:  cfg.DefaultWorkspace,
+			Label: strings.TrimSpace(workspace.Label),
+			Root:  filepath.Clean(strings.TrimSpace(workspace.Root)),
+		}
+	}
+
+	if len(names) == 1 {
+		name := names[0]
+		workspace := cfg.Workspaces[name]
+		return StartupWorkspace{
+			Name:  name,
+			Label: strings.TrimSpace(workspace.Label),
+			Root:  filepath.Clean(strings.TrimSpace(workspace.Root)),
+		}
+	}
+
+	return StartupWorkspace{NeedsSelection: true}
 }
 
 func ValidThemeNames() []string {

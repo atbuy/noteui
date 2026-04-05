@@ -51,6 +51,9 @@ func (m Model) renderBaseView() string {
 	if strings.TrimSpace(m.version) != "" {
 		titleText = fmt.Sprintf(" noteui %s ", m.version)
 	}
+	if workspace := strings.TrimSpace(m.activeWorkspaceDisplay()); workspace != "" {
+		titleText = strings.TrimRight(titleText, " ") + " • " + workspace + " "
+	}
 
 	title := titleBarStyle.
 		Width(usableWidth).
@@ -89,6 +92,14 @@ func (m Model) renderBaseView() string {
 }
 
 func (m Model) View() string {
+	if m.showWorkspacePicker {
+		background := m.renderBaseView()
+		if m.showDashboard {
+			background = m.renderDashboardView()
+		}
+		return placeOverlay(background, m.renderWorkspacePickerModal(), m.width, m.height)
+	}
+
 	if m.showDashboard {
 		return m.renderDashboardView()
 	}
@@ -269,7 +280,7 @@ func (m Model) renderDashboardView() string {
 		titleText = fmt.Sprintf("noteui %s", m.version)
 	}
 
-	rootText := filepath.Join("~", "notes")
+	rootText := "No workspace selected"
 	if strings.TrimSpace(m.rootDir) != "" {
 		rootText = m.rootDir
 	}
@@ -315,7 +326,11 @@ func (m Model) renderDashboardView() string {
 		Background(bgSoftColor).
 		Render("Workspace")
 
-	summaryLines := []string{
+	summaryLines := []string{}
+	if workspace := strings.TrimSpace(m.activeWorkspaceDisplay()); workspace != "" {
+		summaryLines = append(summaryLines, dashboardSummaryLine("Active:", workspace, innerWidth))
+	}
+	summaryLines = append(summaryLines,
 		dashboardSummaryLine("Notes:", fmt.Sprintf("%d", len(m.notes)), innerWidth),
 		dashboardSummaryLine("Temporary:", fmt.Sprintf("%d", len(m.tempNotes)), innerWidth),
 		dashboardSummaryLine(
@@ -335,7 +350,7 @@ func (m Model) renderDashboardView() string {
 		),
 		dashboardSummaryLine("Theme:", m.dashboardThemeName(), innerWidth),
 		dashboardSummaryLine("Privacy:", m.dashboardPrivacySummary(), innerWidth),
-	}
+	)
 	workspaceBlock := lipgloss.JoinVertical(lipgloss.Left, summaryLines...)
 
 	recentLabel := lipgloss.NewStyle().
@@ -991,13 +1006,16 @@ func (m Model) renderStatus() string {
 		return statusErrStyle.Render("CONFIG ERROR • " + m.startupError)
 	}
 
-	parts := []string{
-		m.renderModeSegment(),
+	parts := []string{m.renderModeSegment()}
+	if workspace := m.renderWorkspaceSegment(); workspace != "" {
+		parts = append(parts, workspace)
+	}
+	parts = append(parts,
 		m.renderFocusSegment(),
 		m.renderSelectionSegment(),
 		m.renderPrivacySegment(),
 		m.renderSortSegment(),
-	}
+	)
 
 	if filter := m.renderFilterSegment(); filter != "" {
 		parts = append(parts, filter)
@@ -1057,6 +1075,8 @@ func (m Model) renderModeSegment() string {
 		return "DASHBOARD"
 	case m.showHelp:
 		return "HELP"
+	case m.showWorkspacePicker:
+		return "WORKSPACE"
 	case m.showCreateCategory:
 		return "NEW CATEGORY"
 	case m.showMoveBrowser:

@@ -12,27 +12,28 @@ import (
 	notesync "atbuy/noteui/internal/sync"
 )
 
-func refreshAllCmd(root string) tea.Cmd {
+func refreshAllCmd(root string, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		n, err := notes.Discover(root)
 		if err != nil {
-			return dataLoadedMsg{err: err}
+			return dataLoadedMsg{err: err, sessionToken: sessionToken}
 		}
 
 		tmp, err := notes.DiscoverTemporary(root)
 		if err != nil {
-			return dataLoadedMsg{err: err}
+			return dataLoadedMsg{err: err, sessionToken: sessionToken}
 		}
 
 		cats, err := notes.DiscoverCategories(root)
 		if err != nil {
-			return dataLoadedMsg{err: err}
+			return dataLoadedMsg{err: err, sessionToken: sessionToken}
 		}
 
 		return dataLoadedMsg{
-			notes:      n,
-			tempNotes:  tmp,
-			categories: cats,
+			notes:        n,
+			tempNotes:    tmp,
+			categories:   cats,
+			sessionToken: sessionToken,
 		}
 	}
 }
@@ -231,9 +232,9 @@ func reencryptFromTempCmd(origPath, tempPath, passphrase string) tea.Cmd {
 	}
 }
 
-func startWatchTeaCmd(root string) tea.Cmd {
+func startWatchTeaCmd(root string, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
-		return startWatchCmd(root)()
+		return startWatchCmd(root, sessionToken)()
 	}
 }
 
@@ -243,17 +244,22 @@ func waitForWatchTeaCmd(events <-chan teaMsg) tea.Cmd {
 	}
 }
 
-type syncStartMsg struct{}
-type syncDebouncedMsg struct{ token int }
+type syncStartMsg struct{ sessionToken int }
+type syncDebouncedMsg struct {
+	token        int
+	sessionToken int
+}
 
 type syncFinishedMsg struct {
-	result notesync.SyncResult
-	err    error
+	result       notesync.SyncResult
+	err          error
+	sessionToken int
 }
 
 type syncImportFinishedMsg struct {
-	result notesync.SyncResult
-	err    error
+	result       notesync.SyncResult
+	err          error
+	sessionToken int
 }
 
 type noteSyncClassToggledMsg struct {
@@ -268,8 +274,9 @@ type noteMadeSharedMsg struct {
 }
 
 type remoteNoteDeletedMsg struct {
-	path string
-	err  error
+	path         string
+	err          error
+	sessionToken int
 }
 
 type conflictResolvedMsg struct {
@@ -277,22 +284,22 @@ type conflictResolvedMsg struct {
 	err        error
 }
 
-func startSyncCmd() tea.Cmd {
-	return func() tea.Msg { return syncStartMsg{} }
+func startSyncCmd(sessionToken int) tea.Cmd {
+	return func() tea.Msg { return syncStartMsg{sessionToken: sessionToken} }
 }
 
-func syncDebounceCmd(token int) tea.Cmd {
+func syncDebounceCmd(token, sessionToken int) tea.Cmd {
 	return tea.Tick(750*time.Millisecond, func(time.Time) tea.Msg {
-		return syncDebouncedMsg{token: token}
+		return syncDebouncedMsg{token: token, sessionToken: sessionToken}
 	})
 }
 
-func syncNowCmd(root string, cfg config.SyncConfig, pinnedNotes []string, pinnedCats []string) tea.Cmd {
+func syncNowCmd(root string, cfg config.SyncConfig, pinnedNotes []string, pinnedCats []string, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := notesync.SyncRoot(ctx, root, cfg, pinnedNotes, pinnedCats, nil)
-		return syncFinishedMsg{result: result, err: err}
+		return syncFinishedMsg{result: result, err: err, sessionToken: sessionToken}
 	}
 }
 
@@ -310,29 +317,29 @@ func makeNoteSharedCmd(path string) tea.Cmd {
 	}
 }
 
-func deleteRemoteNoteKeepLocalCmd(root, path string, cfg config.SyncConfig) tea.Cmd {
+func deleteRemoteNoteKeepLocalCmd(root, path string, cfg config.SyncConfig, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		err := notesync.DeleteRemoteNoteAndKeepLocal(ctx, root, path, cfg, nil)
-		return remoteNoteDeletedMsg{path: path, err: err}
+		return remoteNoteDeletedMsg{path: path, err: err, sessionToken: sessionToken}
 	}
 }
 
-func importCurrentSyncedNoteCmd(root string, cfg config.SyncConfig, noteID string) tea.Cmd {
+func importCurrentSyncedNoteCmd(root string, cfg config.SyncConfig, noteID string, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := notesync.ImportRemoteNote(ctx, root, cfg, noteID, nil)
-		return syncImportFinishedMsg{result: result, err: err}
+		return syncImportFinishedMsg{result: result, err: err, sessionToken: sessionToken}
 	}
 }
 
-func importSyncedNotesCmd(root string, cfg config.SyncConfig) tea.Cmd {
+func importSyncedNotesCmd(root string, cfg config.SyncConfig, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := notesync.ImportRemoteNotes(ctx, root, cfg, nil)
-		return syncImportFinishedMsg{result: result, err: err}
+		return syncImportFinishedMsg{result: result, err: err, sessionToken: sessionToken}
 	}
 }

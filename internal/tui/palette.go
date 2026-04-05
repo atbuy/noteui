@@ -49,6 +49,7 @@ const (
 	cmdShowPins              = "show_pins"
 	cmdShowTodos             = "show_todos"
 	cmdShowHelp              = "show_help"
+	cmdSwitchWorkspace       = "switch_workspace"
 	cmdToggleTemporary       = "toggle_temporary"
 	cmdToggleSync            = "toggle_sync"
 	cmdMakeShared            = "make_shared"
@@ -196,6 +197,8 @@ func paletteCommands(m Model) []paletteCommand {
 
 	cmds = appendPaletteCommand(cmds, m.listMode != listModePins,
 		paletteCommand{name: "Toggle Temporary Notes", desc: "Switch between notes and temporary notes", category: "view", action: cmdToggleTemporary})
+	cmds = appendPaletteCommand(cmds, m.canSwitchWorkspace(),
+		paletteCommand{name: "Switch Workspace", desc: "Switch to another configured workspace", category: "app", action: cmdSwitchWorkspace})
 	cmds = appendPaletteCommand(cmds, m.listMode != listModeTemporary && m.listMode != listModePins,
 		paletteCommand{name: "New Todo List", desc: "Create a new todo list in the current location", category: "notes", action: cmdNewTodoList})
 	cmds = appendPaletteCommand(cmds, m.listMode == listModeNotes,
@@ -586,7 +589,7 @@ func (m Model) paletteCommandIsSuggested(action string) bool {
 }
 
 func (m Model) paletteRecentCommandIndex(action string) int {
-	for idx, recent := range m.state.RecentCommands {
+	for idx, recent := range m.workspaceState.RecentCommands {
 		if recent == action {
 			return idx
 		}
@@ -817,7 +820,7 @@ func (m *Model) recordPaletteCommandUse(action string) {
 	}
 	next := make([]string, 0, paletteMaxRecentCommands)
 	next = append(next, action)
-	for _, existing := range m.state.RecentCommands {
+	for _, existing := range m.workspaceState.RecentCommands {
 		if existing == action || strings.TrimSpace(existing) == "" {
 			continue
 		}
@@ -826,7 +829,7 @@ func (m *Model) recordPaletteCommandUse(action string) {
 			break
 		}
 	}
-	m.state.RecentCommands = normalizePaletteRecentCommands(next)
+	m.workspaceState.RecentCommands = normalizePaletteRecentCommands(next)
 	_ = m.saveLocalState()
 }
 
@@ -855,7 +858,7 @@ func (m *Model) toggleSortOrder() {
 
 func (m *Model) startRefresh() tea.Cmd {
 	m.status = "refreshing..."
-	return batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+	return batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 }
 
 func (m *Model) openCreateCategory() {
@@ -967,7 +970,7 @@ func (m *Model) deleteRemoteCopyCurrent() tea.Cmd {
 	}
 	m.status = "deleting remote copy..."
 	return batchCmds(
-		deleteRemoteNoteKeepLocalCmd(m.rootDir, item.Note.Path, m.cfg.Sync),
+		deleteRemoteNoteKeepLocalCmd(m.rootDir, item.Note.Path, m.cfg.Sync, m.sessionToken),
 		m.startSyncVisual(item.Note.RelPath),
 	)
 }
@@ -980,14 +983,14 @@ func (m *Model) importCurrentRemoteNote() tea.Cmd {
 	}
 	m.status = "importing remote note..."
 	return batchCmds(
-		importCurrentSyncedNoteCmd(m.rootDir, m.cfg.Sync, item.RemoteNote.ID),
+		importCurrentSyncedNoteCmd(m.rootDir, m.cfg.Sync, item.RemoteNote.ID, m.sessionToken),
 		m.startSyncVisual(remoteOnlySyncVisualKey(item.RemoteNote.ID)),
 	)
 }
 
 func (m *Model) importAllRemoteNotes() tea.Cmd {
 	m.status = "importing synced notes..."
-	return importSyncedNotesCmd(m.rootDir, m.cfg.Sync)
+	return importSyncedNotesCmd(m.rootDir, m.cfg.Sync, m.sessionToken)
 }
 
 func (m *Model) startImmediateSync() tea.Cmd {
@@ -1083,6 +1086,9 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 		return nil
 	case cmdShowHelp:
 		m.openHelpModal()
+		return nil
+	case cmdSwitchWorkspace:
+		m.openWorkspacePicker()
 		return nil
 	case cmdToggleTemporary:
 		if m.listMode != listModePins {

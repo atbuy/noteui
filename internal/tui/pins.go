@@ -155,23 +155,23 @@ func (m *Model) togglePinCurrent() error {
 }
 
 func (m *Model) syncStateFromPins() {
-	m.state.PinnedNotes = m.state.PinnedNotes[:0]
+	m.workspaceState.PinnedNotes = m.workspaceState.PinnedNotes[:0]
 	for p := range m.pinnedNotes {
-		m.state.PinnedNotes = append(m.state.PinnedNotes, p)
+		m.workspaceState.PinnedNotes = append(m.workspaceState.PinnedNotes, p)
 	}
-	sort.Strings(m.state.PinnedNotes)
+	sort.Strings(m.workspaceState.PinnedNotes)
 
-	m.state.PinnedCategories = m.state.PinnedCategories[:0]
+	m.workspaceState.PinnedCategories = m.workspaceState.PinnedCategories[:0]
 	for p := range m.pinnedCats {
 		if normalized := normalizeCategoryRelPath(p); normalized != "" {
-			m.state.PinnedCategories = append(m.state.PinnedCategories, normalized)
+			m.workspaceState.PinnedCategories = append(m.workspaceState.PinnedCategories, normalized)
 		}
 	}
-	sort.Strings(m.state.PinnedCategories)
+	sort.Strings(m.workspaceState.PinnedCategories)
 }
 
 func (m *Model) syncStateFromExpanded() {
-	m.state.CollapsedCategories = m.state.CollapsedCategories[:0]
+	m.workspaceState.CollapsedCategories = m.workspaceState.CollapsedCategories[:0]
 
 	for relPath, expanded := range m.expanded {
 		relPath = normalizeCategoryRelPath(relPath)
@@ -179,18 +179,19 @@ func (m *Model) syncStateFromExpanded() {
 			continue
 		}
 		if !expanded {
-			m.state.CollapsedCategories = append(m.state.CollapsedCategories, relPath)
+			m.workspaceState.CollapsedCategories = append(m.workspaceState.CollapsedCategories, relPath)
 		}
 	}
 
-	sort.Strings(m.state.CollapsedCategories)
+	sort.Strings(m.workspaceState.CollapsedCategories)
 }
 
 func (m *Model) syncStateForSave() {
 	m.syncStateFromPins()
 	m.syncStateFromExpanded()
-	m.state.SortByModTime = m.sortByModTime
-	m.state.RecentCommands = normalizePaletteRecentCommands(m.state.RecentCommands)
+	m.workspaceState.SortByModTime = m.sortByModTime
+	m.workspaceState.RecentCommands = normalizePaletteRecentCommands(m.workspaceState.RecentCommands)
+	m.state.SetWorkspace(m.workspaceStateKey(), m.workspaceState)
 }
 
 func (m *Model) saveLocalState() error {
@@ -203,7 +204,7 @@ func (m *Model) saveTreeState() error {
 		return err
 	}
 	if notesync.HasSyncProfile(m.cfg.Sync) && len(m.notes) > 0 {
-		return notesync.SavePinsFromRelPaths(m.rootDir, m.notes, m.state.PinnedNotes, m.state.PinnedCategories)
+		return notesync.SavePinsFromRelPaths(m.rootDir, m.notes, m.workspaceState.PinnedNotes, m.workspaceState.PinnedCategories)
 	}
 	return nil
 }

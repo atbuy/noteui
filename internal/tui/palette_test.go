@@ -186,7 +186,7 @@ func TestPaletteFuzzyQueryMatchesCommand(t *testing.T) {
 
 func TestPaletteRecentCommandsBoostMatchingCommands(t *testing.T) {
 	m := newTestModel(t)
-	m.state.RecentCommands = []string{cmdShowPins}
+	m.workspaceState.RecentCommands = []string{cmdShowPins}
 	m.openCommandPalette()
 	m.commandPaletteInput.SetValue("show")
 	m.rebuildPaletteFiltered()
@@ -203,7 +203,7 @@ func TestCommitPaletteSelectionRecordsRecentCommand(t *testing.T) {
 	m.rebuildPaletteFiltered()
 	require.NotEmpty(t, m.commandPaletteFiltered)
 	_ = m.commitPaletteSelection()
-	require.Equal(t, []string{cmdShowHelp}, m.state.RecentCommands)
+	require.Equal(t, []string{cmdShowHelp}, m.workspaceState.RecentCommands)
 }
 
 func TestRenderCommandPaletteModalShowsGroupedSections(t *testing.T) {
@@ -247,4 +247,36 @@ func TestRenderCommandPaletteModalKeepsTypedTextOnPromptLine(t *testing.T) {
 		}
 	}
 	require.True(t, found)
+}
+
+func TestPaletteCommandsIncludeSwitchWorkspaceWhenConfigured(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Workspaces = map[string]config.WorkspaceConfig{
+		"work": {Root: t.TempDir(), Label: "Work"},
+		"demo": {Root: t.TempDir(), Label: "Demo"},
+	}
+	m := NewWithSession(cfg.Workspaces["work"].Root, "", cfg, "test", WorkspaceSession{Name: "work", Label: "Work"})
+
+	cmds := paletteCommands(m)
+	actions := make(map[string]bool, len(cmds))
+	for _, cmd := range cmds {
+		actions[cmd.action] = true
+	}
+	require.True(t, actions[cmdSwitchWorkspace])
+}
+
+func TestPaletteCommandsOmitSwitchWorkspaceWhenNotesRootOverridesProfiles(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Workspaces = map[string]config.WorkspaceConfig{
+		"work": {Root: t.TempDir(), Label: "Work"},
+		"demo": {Root: t.TempDir(), Label: "Demo"},
+	}
+	m := NewWithSession(t.TempDir(), "", cfg, "test", WorkspaceSession{Override: true})
+
+	cmds := paletteCommands(m)
+	for _, cmd := range cmds {
+		require.NotEqual(t, cmdSwitchWorkspace, cmd.action)
+	}
 }

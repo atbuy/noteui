@@ -228,8 +228,13 @@ func (t treeItem) key() string {
 }
 
 type Model struct {
-	rootDir string
-	version string
+	rootDir           string
+	workspaceName     string
+	workspaceLabel    string
+	workspaceOverride bool
+	workspaceOptions  []workspaceOption
+	workspaceCursor   int
+	version           string
 
 	notes            []notes.Note
 	categories       []notes.Category
@@ -283,9 +288,10 @@ type Model struct {
 	pendingPreviewCmd     tea.Cmd
 	pendingPreviewYOffset int
 
-	state       state.State
-	pinnedNotes map[string]bool
-	pinnedCats  map[string]bool
+	state          state.State
+	workspaceState state.WorkspaceState
+	pinnedNotes    map[string]bool
+	pinnedCats     map[string]bool
 
 	showCommandPalette     bool
 	commandPaletteInput    textinput.Model
@@ -332,6 +338,7 @@ type Model struct {
 	tagInput   textinput.Model
 	helpInput  textinput.Model
 
+	showWorkspacePicker        bool
 	showSyncProfilePicker      bool
 	showSyncDebugModal         bool
 	conflictResolutionChoice   int
@@ -369,6 +376,7 @@ type Model struct {
 
 	startupError string
 
+	sessionToken             int
 	sortByModTime            bool
 	syncDebounceToken        int
 	syncRunning              bool
@@ -382,10 +390,11 @@ type Model struct {
 }
 
 type dataLoadedMsg struct {
-	notes      []notes.Note
-	tempNotes  []notes.Note
-	categories []notes.Category
-	err        error
+	notes        []notes.Note
+	tempNotes    []notes.Note
+	categories   []notes.Category
+	err          error
+	sessionToken int
 }
 
 type noteCreatedMsg struct {
@@ -428,6 +437,10 @@ func syncSpinnerCmd() tea.Cmd {
 }
 
 func New(root, startupError string, cfg config.Config, version string) Model {
+	return NewWithSession(root, startupError, cfg, version, WorkspaceSession{})
+}
+
+func NewWithSession(root, startupError string, cfg config.Config, version string, session WorkspaceSession) Model {
 	categoryInput := textinput.New()
 	categoryInput.Placeholder = "work/project-a"
 	categoryInput.Prompt = "Category: "
@@ -499,45 +512,17 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	vp := viewport.New(0, 0)
 
 	st, _ := state.Load()
-	st.RecentCommands = normalizePaletteRecentCommands(st.RecentCommands)
+	options := sortedWorkspaceOptions(cfg)
 
-	pinnedNotes := make(map[string]bool, len(st.PinnedNotes))
-	for _, p := range st.PinnedNotes {
-		pinnedNotes[filepath.ToSlash(strings.TrimSpace(p))] = true
-	}
-
-	pinnedCats := make(map[string]bool, len(st.PinnedCategories))
-	for _, p := range st.PinnedCategories {
-		pinnedCats[normalizeCategoryRelPath(p)] = true
-	}
-	if notesync.HasSyncProfile(cfg.Sync) {
-		if syncedNotes, syncedCats, err := notesync.LoadPinnedRelPaths(root); err == nil {
-			for _, p := range syncedNotes {
-				pinnedNotes[p] = true
-			}
-			if syncedCats != nil {
-				pinnedCats = make(map[string]bool, len(syncedCats))
-				for _, p := range syncedCats {
-					pinnedCats[p] = true
-				}
-			}
-		}
-	}
-
-	expanded := map[string]bool{
-		"": true,
-	}
-	for _, p := range st.CollapsedCategories {
-		if normalized := normalizeCategoryRelPath(p); normalized != "" {
-			expanded[normalized] = false
-		}
-	}
-
-	return Model{
+	m := Model{
 		rootDir:                   root,
+		workspaceName:             strings.TrimSpace(session.Name),
+		workspaceLabel:            strings.TrimSpace(session.Label),
+		workspaceOverride:         session.Override,
+		workspaceOptions:          options,
+		workspaceCursor:           0,
 		version:                   version,
 		status:                    "loading notes...",
-		expanded:                  expanded,
 		commandPaletteInput:       commandPaletteInput,
 		categoryInput:             categoryInput,
 		searchInput:               searchInput,
@@ -556,8 +541,6 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		preview:                   vp,
 		focus:                     focusTree,
 		state:                     st,
-		pinnedNotes:               pinnedNotes,
-		pinnedCats:                pinnedCats,
 		markedTreeItems:           make(map[string]bool),
 		listMode:                  listModeNotes,
 		lastNonPinsMode:           listModeNotes,
@@ -566,20 +549,22 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		todoCursor:                0,
 		previewPrivacyEnabled:     cfg.Preview.Privacy,
 		previewLineNumbersEnabled: cfg.Preview.LineNumbers,
-		showDashboard:             cfg.Dashboard,
-		sortByModTime:             st.SortByModTime,
+		showDashboard:             cfg.Dashboard && !session.StartWithPicker,
+		showWorkspacePicker:       session.StartWithPicker,
 		syncRecords:               map[string]notesync.NoteRecord{},
 		syncInFlight:              map[string]bool{},
 		startupSyncChecked:        !notesync.HasSyncProfile(cfg.Sync),
+		sessionToken:              1,
 	}
+	m.loadCurrentWorkspaceState()
+	if session.StartWithPicker {
+		m.status = "select workspace"
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
-		refreshAllCmd(m.rootDir),
-		startWatchTeaCmd(m.rootDir),
-		startSyncCmd(),
-	)
+	return m.startWorkspaceSessionCmd()
 }
 
 func (m *Model) refreshSyncRecords() {
@@ -632,7 +617,7 @@ func (m *Model) startSyncRun() tea.Cmd {
 	m.syncSpinnerFrame = 0
 	m.syncInFlight = m.pendingSyncRelPaths()
 	return batchCmds(
-		syncNowCmd(m.rootDir, m.cfg.Sync, m.localPinnedNoteKeys(), m.localPinnedCategories()),
+		syncNowCmd(m.rootDir, m.cfg.Sync, m.localPinnedNoteKeys(), m.localPinnedCategories(), m.sessionToken),
 		syncSpinnerCmd(),
 	)
 }
@@ -907,7 +892,7 @@ func (m *Model) scheduleSync() tea.Cmd {
 		return nil
 	}
 	m.syncDebounceToken++
-	return syncDebounceCmd(m.syncDebounceToken)
+	return syncDebounceCmd(m.syncDebounceToken, m.sessionToken)
 }
 
 func (m Model) localPinnedNoteKeys() []string {
@@ -1015,10 +1000,13 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case syncStartMsg:
+		if msg.sessionToken != m.sessionToken {
+			return m, nil
+		}
 		return m, m.startSyncRun()
 
 	case syncDebouncedMsg:
-		if msg.token != m.syncDebounceToken || m.syncRunning {
+		if msg.sessionToken != m.sessionToken || msg.token != m.syncDebounceToken || m.syncRunning {
 			return m, nil
 		}
 		return m, m.startSyncRun()
@@ -1034,6 +1022,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, syncSpinnerCmd()
 
 	case syncFinishedMsg:
+		if msg.sessionToken != m.sessionToken {
+			return m, nil
+		}
 		m.startupSyncChecked = true
 		m.finishSyncRun()
 		if msg.err != nil {
@@ -1048,7 +1039,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		if msg.result.NotesChanged {
 			m.deferredStatus = "sync updated local notes"
-			return m, refreshAllCmd(m.rootDir)
+			return m, refreshAllCmd(m.rootDir, m.sessionToken)
 		}
 		if msg.result.PinsChanged {
 			m.status = "sync updated pins"
@@ -1088,6 +1079,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, m.scheduleSync()
 
 	case syncImportFinishedMsg:
+		if msg.sessionToken != m.sessionToken {
+			return m, nil
+		}
 		if m.syncRunning || len(m.syncInFlight) > 0 {
 			m.finishSyncRun()
 		}
@@ -1112,7 +1106,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.pendingSyncedCategories = msg.result.PinnedCategories
 			m.applyPendingSyncedPins = true
 			m.deferredStatus = status
-			return m, refreshAllCmd(m.rootDir)
+			return m, refreshAllCmd(m.rootDir, m.sessionToken)
 		}
 		m.status = status
 		if placeholdersChanged {
@@ -1130,7 +1124,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.pendingPreviewYOffset = m.preview.YOffset
 		m.previewPath = ""
 		m.status = "todo updated"
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case helpMouseResumeMsg:
 		if !m.helpMouseSuppressed {
@@ -1221,7 +1215,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		_ = m.saveTreeState()
 		m.preserveCursor = m.treeCursor
 		m.status = "moved note: " + msg.newRelPath
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case noteRenamedMsg:
 		if msg.err != nil {
@@ -1234,9 +1228,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.renameInput.SetValue("")
 		m.preserveCursor = m.treeCursor
 		m.status = "renamed note: " + filepath.Base(msg.newPath)
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case remoteNoteDeletedMsg:
+		if msg.sessionToken != m.sessionToken {
+			return m, nil
+		}
 		if m.syncRunning || len(m.syncInFlight) > 0 {
 			m.finishSyncRun()
 		}
@@ -1246,7 +1243,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.previewPath = ""
 		m.deferredStatus = "deleted remote copy; note kept locally"
-		return m, refreshAllCmd(m.rootDir)
+		return m, refreshAllCmd(m.rootDir, m.sessionToken)
 
 	case conflictResolvedMsg:
 		if msg.err != nil {
@@ -1260,7 +1257,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.deferredStatus = "conflict resolved: kept local version"
 		}
-		return m, refreshAllCmd(m.rootDir)
+		return m, refreshAllCmd(m.rootDir, m.sessionToken)
 
 	case noteSyncClassToggledMsg:
 		if msg.err != nil {
@@ -1277,13 +1274,13 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			relPath, err := filepath.Rel(m.rootDir, msg.path)
 			if err == nil {
 				return m, batchCmds(
-					refreshAllCmd(m.rootDir),
+					refreshAllCmd(m.rootDir, m.sessionToken),
 					m.startSyncVisual(filepath.ToSlash(relPath)),
 					m.scheduleSync(),
 				)
 			}
 		}
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case noteMadeSharedMsg:
 		if msg.err != nil {
@@ -1295,12 +1292,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		relPath, err := filepath.Rel(m.rootDir, msg.path)
 		if err == nil {
 			return m, batchCmds(
-				refreshAllCmd(m.rootDir),
+				refreshAllCmd(m.rootDir, m.sessionToken),
 				m.startSyncVisual(filepath.ToSlash(relPath)),
 				m.scheduleSync(),
 			)
 		}
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case noteTaggedMsg:
 
@@ -1318,7 +1315,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf("added %d tags", len(msg.tags))
 		}
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case notesTaggedMsg:
 		if msg.err != nil {
@@ -1337,7 +1334,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf("added %d tags to %d notes", len(msg.tags), len(msg.paths))
 		}
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case categoryRenamedMsg:
 		if msg.err != nil {
@@ -1352,7 +1349,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.rewriteCategoryStateSubtree(msg.oldRelPath, msg.newRelPath)
 		_ = m.saveTreeState()
 		m.status = "renamed category: " + msg.newRelPath
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case categoryMovedMsg:
 		if msg.err != nil {
@@ -1367,7 +1364,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.rewriteCategoryStateSubtree(msg.oldRelPath, msg.newRelPath)
 		_ = m.saveTreeState()
 		m.status = "moved category: " + msg.newRelPath
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case batchMovedMsg:
 		if msg.err != nil {
@@ -1391,7 +1388,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.status = fmt.Sprintf("moved %d items", len(msg.items))
 		}
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case notesRelocatedMsg:
 		if msg.err != nil {
@@ -1406,7 +1403,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.clearMarkedTreeItems()
 		_ = m.saveTreeState()
 		m.status = msg.status
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case noteDeletedMsg:
 		if msg.err != nil {
@@ -1417,7 +1414,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.removePinnedForAbsolutePath(msg.path)
 		m.preserveCursor = m.treeCursor
 		m.status = "deleted note: " + msg.path
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case notesDeletedMsg:
 		if msg.err != nil {
@@ -1429,7 +1426,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.clearMarkedTreeItems()
 		m.preserveCursor = m.treeCursor
 		m.status = countStatus(len(msg.paths), "deleted 1 note", "deleted %d notes")
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case categoryDeletedMsg:
 		if msg.err != nil {
@@ -1441,9 +1438,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.removeCategoryStateSubtree(msg.relPath)
 		_ = m.saveTreeState()
 		m.status = "deleted category: " + msg.relPath
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case dataLoadedMsg:
+		if msg.sessionToken != m.sessionToken {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.status = "error: " + msg.err.Error()
 			return m, nil
@@ -1513,7 +1513,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = "created: " + msg.path
-		return m, batchCmds(refreshAllCmd(m.rootDir), editor.Open(msg.path), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), editor.Open(msg.path), m.scheduleSync())
 
 	case categoryCreatedMsg:
 		if msg.err != nil {
@@ -1524,7 +1524,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.categoryInput.Blur()
 		m.categoryInput.SetValue("")
 		m.status = "created category: " + msg.relPath
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case previewLockedMsg:
 		if msg.path != m.previewPath {
@@ -1548,7 +1548,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.status = "note encrypted"
 		m.previewPath = ""
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case decryptNoteMsg:
 		if msg.err != nil {
@@ -1557,7 +1557,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.status = "note decrypted"
 		m.previewPath = ""
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case openEncryptedNoteReadyMsg:
 		if msg.err != nil {
@@ -1573,10 +1573,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 	case reencryptFinishedMsg:
 		if msg.err != nil {
 			m.status = "re-encryption failed: " + msg.err.Error()
-			return m, refreshAllCmd(m.rootDir)
+			return m, refreshAllCmd(m.rootDir, m.sessionToken)
 		}
 		m.status = "note saved and re-encrypted"
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case editor.FinishedMsg:
 		if msg.Err != nil {
@@ -1593,13 +1593,13 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		newPath, renamed, err := notes.RenameFromTitle(msg.Path)
 		if err != nil {
 			m.status = "rename failed: " + err.Error()
-			return m, refreshAllCmd(m.rootDir)
+			return m, refreshAllCmd(m.rootDir, m.sessionToken)
 		}
 
 		// Empty file with temp name was deleted.
 		if newPath == "" && !renamed {
 			m.status = "note discarded"
-			return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+			return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 		}
 
 		if renamed {
@@ -1608,9 +1608,15 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.status = "editor closed"
 		}
 
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case watchStartedMsg:
+		if msg.sessionToken != m.sessionToken {
+			if msg.watcher != nil {
+				_ = msg.watcher.Close()
+			}
+			return m, nil
+		}
 		if msg.err != nil {
 			m.status = "watch disabled: " + msg.err.Error()
 			return m, nil
@@ -1621,19 +1627,25 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, waitForWatchTeaCmd(m.watchEvents)
 
 	case watchRefreshMsg:
+		if msg.sessionToken != m.sessionToken {
+			return m, nil
+		}
 		m.status = "auto refresh"
 		m.pendingTodoCursor = m.previewTodoCursor
 		m.previewPath = ""
 		if m.watchEvents != nil {
 			return m, batchCmds(
-				refreshAllCmd(m.rootDir),
+				refreshAllCmd(m.rootDir, m.sessionToken),
 				waitForWatchTeaCmd(m.watchEvents),
 				m.scheduleSync(),
 			)
 		}
-		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case watchErrorMsg:
+		if msg.sessionToken != 0 && msg.sessionToken != m.sessionToken {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.status = "watch error: " + msg.err.Error()
 		}
@@ -1643,6 +1655,30 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.showWorkspacePicker {
+			switch {
+			case msg.String() == "enter":
+				return m, m.confirmSelectedWorkspace()
+			case msg.String() == "esc":
+				if strings.TrimSpace(m.rootDir) == "" {
+					m.status = "select a workspace or press q to quit"
+					return m, nil
+				}
+				m.closeWorkspacePicker("workspace switch cancelled")
+				return m, nil
+			case key.Matches(msg, keys.MoveUp):
+				m.moveWorkspaceCursor(-1)
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				m.moveWorkspaceCursor(1)
+				return m, nil
+			case strings.TrimSpace(m.rootDir) == "" && key.Matches(msg, keys.Quit):
+				m.stopWorkspaceWatch()
+				return m, tea.Quit
+			}
+			return m, nil
+		}
+
 		if m.showDashboard {
 			switch {
 			case msg.String() == "enter":
@@ -1689,9 +1725,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.Quit):
-				if m.watcher != nil {
-					_ = m.watcher.Close()
-				}
+				m.stopWorkspaceWatch()
 				return m, tea.Quit
 			}
 
@@ -2392,9 +2426,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if key.Matches(msg, keys.Quit) {
-			if m.watcher != nil {
-				_ = m.watcher.Close()
-			}
+			m.stopWorkspaceWatch()
 			return m, tea.Quit
 		}
 
@@ -2808,6 +2840,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			return m, m.scheduleSync()
+		}
+
+		if key.Matches(msg, keys.SelectWorkspace) {
+			m.openWorkspacePicker()
+			return m, nil
 		}
 
 		if key.Matches(msg, keys.SelectSyncProfile) {

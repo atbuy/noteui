@@ -36,6 +36,7 @@ Recommended entry points:
 - optional SSH-based sync for `sync: synced` notes with tree sync markers
 - customize theme, preview behavior, icons, and keybindings
 - keep your notes as regular files on disk
+- switch between named workspaces with isolated local UI state
 
 ## Install
 
@@ -68,7 +69,7 @@ Linux and macOS releases are published as `.tar.gz` archives. Windows releases a
 
 By default, `noteui`:
 
-- uses `$HOME/notes` as the notes root
+- uses `$HOME/notes` as the notes root unless a workspace profile or `NOTES_ROOT` override is active
 - stores temporary notes under `.tmp` inside the notes root
 - opens notes with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`
 - stores local UI state under `$HOME/.local/state/noteui/state.json`

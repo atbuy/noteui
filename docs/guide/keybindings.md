@@ -18,6 +18,7 @@ This page documents the default keybindings that most users care about first.
 - `ctrl+t`: toggle the global Todos mode
 - `q`: quit
 - `?`: show help
+- `W`: open the workspace picker
 - `F`: select the default sync profile
 
 ## Create and organize
