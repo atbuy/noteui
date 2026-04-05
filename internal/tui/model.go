@@ -273,10 +273,11 @@ type Model struct {
 	previewPaneW       int
 	previewPaneH       int
 	previewHeadings    []int
-	previewMatches     []previewMatch
-	previewMatchIndex  int
-	previewBaseContent string
-	pendingPreviewCmd  tea.Cmd
+	previewMatches       []previewMatch
+	previewMatchIndex    int
+	previewBaseContent   string
+	pendingPreviewCmd    tea.Cmd
+	pendingPreviewYOffset int
 
 	state       state.State
 	pinnedNotes map[string]bool
@@ -534,6 +535,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		passphraseInput:           passphraseInput,
 		preserveCursor:            -1,
 		pendingTodoCursor:         -1,
+		pendingPreviewYOffset:     -1,
 		startupError:              startupError,
 		cfg:                       cfg,
 		preview:                   vp,
@@ -981,7 +983,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		} else {
 			m.setPreviewViewportContent(m.previewContent)
 		}
-		if len(m.previewMatches) > 0 && query != "" {
+		if m.pendingPreviewYOffset >= 0 {
+			m.preview.SetYOffset(m.pendingPreviewYOffset)
+			m.pendingPreviewYOffset = -1
+		} else if len(m.previewMatches) > 0 && query != "" {
 			m.scrollToMatchLine(m.previewMatches[0].line)
 		} else {
 			m.preview.GotoTop()
@@ -1101,6 +1106,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.pendingTodoCursor = m.previewTodoCursor
+		m.pendingPreviewYOffset = m.preview.YOffset
 		m.previewPath = ""
 		m.status = "todo updated"
 		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())

@@ -29,6 +29,7 @@ func TestRenderStatusUsesErrorStyleForSyncFailures(t *testing.T) {
 	m.status = "sync failed: network down"
 	line := strings.Join([]string{
 		m.renderModeSegment(),
+		m.renderFocusSegment(),
 		m.renderSelectionSegment(),
 		m.renderPrivacySegment(),
 		m.renderSortSegment(),
@@ -334,4 +335,79 @@ func TestRenderConflictResolutionModalShowsBothSides(t *testing.T) {
 	require.Contains(t, plain, "Keep remote")
 	require.Contains(t, plain, "local body")
 	require.Contains(t, plain, "remote body")
+}
+
+func TestRenderSearchBarShowsResultMeta(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 220
+	m.height = 40
+	m.searchMode = true
+	m.searchInput.Focus()
+	m.searchInput.SetValue("notes")
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "", Name: "/"},
+		{Kind: treeNote, RelPath: "work/notes.md", Name: "Notes"},
+	}
+	rendered := m.renderSearchBar()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Search active")
+	require.Contains(t, plain, "1 result")
+	require.Contains(t, plain, "esc clears")
+}
+
+func TestRenderFilterSegmentShowsResultAndPreviewCounts(t *testing.T) {
+	m := newTestModel(t)
+	m.searchInput.SetValue("alpha")
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "", Name: "/"},
+		{Kind: treeNote, RelPath: "alpha.md", Name: "Alpha"},
+		{Kind: treeNote, RelPath: "beta.md", Name: "Beta"},
+	}
+	m.previewPath = "/tmp/alpha.md"
+	m.previewMatches = []previewMatch{{line: 1, occurrIdx: 0}, {line: 3, occurrIdx: 0}}
+	rendered := m.renderFilterSegment()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "filter: alpha")
+	require.Contains(t, plain, "2 results")
+	require.Contains(t, plain, "2 preview matches")
+}
+
+func TestRenderFocusSegmentPreview(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	require.Equal(t, "focus: preview", m.renderFocusSegment())
+}
+
+func TestRightPanelTitleFocusedShowsMatchCount(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.searchInput.SetValue("alpha")
+	m.previewPath = "/tmp/alpha.md"
+	m.previewMatches = []previewMatch{{line: 1, occurrIdx: 0}, {line: 2, occurrIdx: 0}}
+	title := m.rightPanelTitle()
+	require.Contains(t, title, "focused")
+	require.Contains(t, title, "2 matches")
+}
+
+func TestRenderTreeEmptyStateIsActionable(t *testing.T) {
+	m := newTestModel(t)
+	m.treeItems = []treeItem{{Kind: treeCategory, RelPath: "", Name: "/"}}
+	rendered := m.renderTreeView()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Press n")
+	require.Contains(t, plain, "T")
+}
+
+func TestRenderFilterSegmentTagSearchSkipsPreviewCounts(t *testing.T) {
+	m := newTestModel(t)
+	m.searchInput.SetValue("#demo")
+	m.treeItems = []treeItem{
+		{Kind: treeCategory, RelPath: "", Name: "/"},
+		{Kind: treeNote, RelPath: "alpha.md", Name: "Alpha"},
+	}
+	m.previewPath = "/tmp/alpha.md"
+	m.previewMatches = []previewMatch{{line: 1, occurrIdx: 0}}
+	plain := stripANSI(m.renderFilterSegment())
+	require.Contains(t, plain, "1 result")
+	require.NotContains(t, plain, "preview match")
 }

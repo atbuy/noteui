@@ -118,6 +118,21 @@ func TestUnderlineTagsAndPreviewRenderingHelpers(t *testing.T) {
 	}
 }
 
+func TestSyncTodoCursorToActiveMatchUsesMatchingTodoLine(t *testing.T) {
+	m := newTestModel(t)
+	m.previewTodoNavMode = true
+	m.previewTodos = []previewTodoItem{
+		{rendLine: 2, text: "first"},
+		{rendLine: 5, text: "second"},
+	}
+	m.previewMatches = []previewMatch{{line: 5, occurrIdx: 0}}
+	m.previewMatchIndex = 0
+
+	m.syncTodoCursorToActiveMatch()
+
+	require.Equal(t, 1, m.previewTodoCursor)
+}
+
 func TestPreviewMatchBuilders(t *testing.T) {
 	content := "alpha beta\nalphaalpha\n~/notes/demo"
 	matches := buildPreviewMatches(content, "alpha")

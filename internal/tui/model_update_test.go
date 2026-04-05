@@ -311,6 +311,90 @@ func TestSortToggleFlipsSortByModTime(t *testing.T) {
 	}
 }
 
+func TestNextMatchInPreviewTodoNavTracksMatchingTodo(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.preview.Width = 80
+	m.preview.Height = 6
+	m.previewTodoNavMode = true
+	m.previewContent = "alpha\n[ ] first\nbeta\n[ ] second\n"
+	m.previewBaseContent = m.previewContent
+	m.setPreviewViewportContent(m.previewContent)
+	m.previewTodos = []previewTodoItem{
+		{rendLine: 1, text: "first"},
+		{rendLine: 3, text: "second"},
+	}
+	m.previewMatches = []previewMatch{
+		{line: 1, occurrIdx: 0},
+		{line: 3, occurrIdx: 0},
+	}
+	m.previewMatchIndex = -1
+
+	m = updateModel(m, keyMsg("n"))
+	require.Equal(t, 0, m.previewTodoCursor)
+
+	m = updateModel(m, keyMsg("n"))
+	require.Equal(t, 1, m.previewTodoCursor)
+}
+
+func TestTodoBracketNavigationKeepsVisibleLineInPlace(t *testing.T) {
+	m := newTestModel(t)
+	m.preview.Width = 80
+	m.preview.Height = 8
+	m.previewTodoNavMode = true
+	m.previewContent = strings.Join([]string{
+		"line 0",
+		"[ ] first",
+		"line 2",
+		"[ ] second",
+		"line 4",
+		"[ ] third",
+		"line 6",
+	}, "\n")
+	m.previewBaseContent = m.previewContent
+	m.setPreviewViewportContent(m.previewContent)
+	m.preview.SetYOffset(0)
+	m.previewTodos = []previewTodoItem{
+		{rendLine: 1, text: "first"},
+		{rendLine: 3, text: "second"},
+		{rendLine: 5, text: "third"},
+	}
+	m.previewTodoCursor = 0
+
+	m.jumpToNextTodo()
+
+	require.Equal(t, 0, m.preview.YOffset)
+	require.Equal(t, 1, m.previewTodoCursor)
+}
+
+func TestTodoModifiedPreviewKeepsScrollOffset(t *testing.T) {
+	m := newTestModel(t)
+	m.preview.Width = 80
+	m.preview.Height = 6
+	m.preview.YOffset = 5
+	m.previewTodoNavMode = true
+	m.previewTodoCursor = 1
+	m.previewPath = filepath.Join(m.rootDir, "work", "todo.md")
+
+	next, _ := m.Update(todoModifiedMsg{path: m.previewPath})
+	m = next.(Model)
+	require.Equal(t, 5, m.pendingPreviewYOffset)
+	require.Equal(t, 1, m.pendingTodoCursor)
+
+	next, _ = m.Update(previewRenderedMsg{
+		forPath:         m.previewPath,
+		baseContent:     "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\n[ ] one\n[ ] two",
+		rawContent:      "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\n- [ ] one\n- [ ] two",
+		lineNumberStart: 0,
+		todoLineOffset:  0,
+	})
+	m = next.(Model)
+
+	require.Equal(t, 5, m.preview.YOffset)
+	require.Equal(t, -1, m.pendingPreviewYOffset)
+	require.Equal(t, 1, m.previewTodoCursor)
+}
+
 func TestDeletePendingCancelOnEsc(t *testing.T) {
 	m := newTestModel(t)
 	m.deletePending = &deletePending{

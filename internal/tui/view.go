@@ -27,6 +27,7 @@ func (m Model) renderBaseView() string {
 	leftBody := lipgloss.JoinVertical(
 		lipgloss.Left,
 		panelTitleStyle.Width(leftInnerWidth).Render(m.leftPanelTitle()),
+		panelBg.Width(leftInnerWidth).Render(m.renderLeftPaneHint(leftInnerWidth)),
 		panelBg.Width(leftInnerWidth).Render(m.renderSearchBar()),
 		panelBg.Width(leftInnerWidth).Render(""),
 		panelBg.Width(leftInnerWidth).Render(m.renderLeftPaneBody()),
@@ -34,7 +35,9 @@ func (m Model) renderBaseView() string {
 
 	rightBody := lipgloss.JoinVertical(
 		lipgloss.Left,
-		panelTitleStyle.Width(rightInnerWidth).Render("Preview"),
+		panelTitleStyle.Width(rightInnerWidth).Render(m.rightPanelTitle()),
+		panelBg.Width(rightInnerWidth).Render(m.renderRightPaneHint(rightInnerWidth)),
+		panelBg.Width(rightInnerWidth).Render(""),
 		panelBg.Width(rightInnerWidth).Render(m.previewView()),
 	)
 
@@ -524,8 +527,8 @@ func (m Model) renderDashboardView() string {
 }
 
 func (m Model) renderTreeView() string {
-	if len(m.treeItems) == 0 {
-		return emptyStyle.Render("(empty)")
+	if m.visibleTreeResultCount() == 0 {
+		return m.renderPaneEmptyState(m.treeEmptyStateMessage())
 	}
 
 	lines := make([]string, 0, len(m.treeItems))
@@ -667,6 +670,14 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 		max(0, titleWidth-lipgloss.Width(truncatedTitle)),
 	)
 
+	searchQuery := m.activeSearchQuery()
+	matchBg := highlightBgColor
+	matchFg := selectedFgColor
+	if selected {
+		matchBg = accentColor
+		matchFg = bgColor
+	}
+
 	prefixStyle := lipgloss.NewStyle().
 		Foreground(rowFg).
 		Background(rowBg).
@@ -680,13 +691,7 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 			Render(syncMark)
 	}
 	prefixPart += prefixStyle.Render(rightPrefix)
-	titlePart := lipgloss.NewStyle().
-		Width(titleWidth).
-		MaxWidth(titleWidth).
-		Foreground(rowFg).
-		Background(rowBg).
-		Bold(rowBold).
-		Render(titlePadded)
+	titlePart := highlightSearchText(titlePadded, searchQuery, rowFg, rowBg, matchBg, matchFg)
 
 	mainLine := lipgloss.NewStyle().
 		Width(rowWidth).
@@ -699,25 +704,32 @@ func (m Model) renderTreeLine(item treeItem, selected bool) string {
 	if item.MatchHint != "" {
 		hintIndent := strings.Repeat(" ", prefixWidth+2)
 		hintAvailable := max(8, rowWidth-2-lipgloss.Width(hintIndent))
+		hintBg := bgSoftColor
+		hintFg := mutedColor
+		if selected {
+			hintBg = rowBg
+			hintFg = rowFg
+		}
 
 		if after, ok := strings.CutPrefix(item.MatchHint, "tag:"); ok {
 			tagName := after
 			hintPrefix := lipgloss.NewStyle().
-				Background(bgSoftColor).
+				Background(hintBg).
 				Render(hintIndent)
 			hintTag := lipgloss.NewStyle().
 				Foreground(accentSoftColor).
 				Background(chipBgColor).
 				Padding(0, 1).
 				Render("tag: " + tagName)
-			hintLine = fillWidthBackground(hintPrefix+hintTag, rowWidth, bgSoftColor)
+			hintLine = fillWidthBackground(hintPrefix+hintTag, rowWidth, hintBg)
 		} else {
 			excerpt := truncateToWidth(item.MatchHint, hintAvailable-4)
-			highlighted := highlightMatch(excerpt, strings.TrimSpace(m.searchInput.Value()))
+			highlighted := highlightSearchText(excerpt, searchQuery, hintFg, hintBg, matchBg, matchFg)
 			hintPrefix := lipgloss.NewStyle().
-				Background(bgSoftColor).
+				Foreground(hintFg).
+				Background(hintBg).
 				Render(hintIndent + "… ")
-			hintLine = fillWidthBackground(hintPrefix+highlighted, rowWidth, bgSoftColor)
+			hintLine = fillWidthBackground(hintPrefix+highlighted, rowWidth, hintBg)
 		}
 	}
 
@@ -837,7 +849,7 @@ func truncateToWidth(s string, maxWidth int) string {
 func (m Model) renderTemporaryListView() string {
 	tempNotes := m.filteredTempNotes()
 	if len(tempNotes) == 0 {
-		return emptyStyle.Render("(no temporary notes)")
+		return m.renderPaneEmptyState(m.temporaryEmptyStateMessage())
 	}
 
 	lines := make([]string, 0, len(tempNotes))
@@ -883,7 +895,7 @@ func (m Model) renderTemporaryListView() string {
 func (m Model) renderPinsListView() string {
 	items := m.filteredPinnedItems()
 	if len(items) == 0 {
-		return emptyStyle.Render("(no pinned items)")
+		return m.renderPaneEmptyState(m.pinsEmptyStateMessage())
 	}
 
 	lines := make([]string, 0, len(items))
@@ -935,10 +947,21 @@ func (m Model) renderPinsListView() string {
 
 func (m Model) renderSearchBar() string {
 	width := m.treeInnerWidth()
-	if m.searchMode || strings.TrimSpace(m.searchInput.Value()) != "" {
-		return fillWidthBackground(strings.TrimRight(m.searchInput.View(), " "), width, bgSoftColor)
+	if m.searchMode || m.hasActiveSearch() {
+		input := fillWidthBackground(strings.TrimRight(m.searchInput.View(), " "), width, bgSoftColor)
+		metaText := truncateToWidth("Search active • "+m.renderSearchMeta(), width)
+		meta := lipgloss.NewStyle().
+			Foreground(accentSoftColor).
+			Background(bgSoftColor).
+			Render(metaText)
+		return lipgloss.JoinVertical(
+			lipgloss.Left,
+			input,
+			fillWidthBackground(meta, width, bgSoftColor),
+		)
 	}
-	return fillWidthBackground(mutedStyle.Render("Press / to search"), width, bgSoftColor)
+	hint := truncateToWidth("Press / to search titles, paths, tags, and preview text", width)
+	return fillWidthBackground(mutedStyle.Render(hint), width, bgSoftColor)
 }
 
 func (m Model) renderStatus() string {
@@ -952,6 +975,7 @@ func (m Model) renderStatus() string {
 
 	parts := []string{
 		m.renderModeSegment(),
+		m.renderFocusSegment(),
 		m.renderSelectionSegment(),
 		m.renderPrivacySegment(),
 		m.renderSortSegment(),
@@ -1128,11 +1152,19 @@ func (m Model) renderConflictSegment() string {
 }
 
 func (m Model) renderFilterSegment() string {
-	filter := strings.TrimSpace(m.searchInput.Value())
+	filter := m.activeSearchQuery()
 	if filter == "" {
 		return ""
 	}
-	return "filter: " + filter
+
+	parts := []string{
+		"filter: " + filter,
+		formatCountLabel(m.currentSearchResultCount(), "result"),
+	}
+	if m.previewSupportsSearchMatches() {
+		parts = append(parts, formatCountLabel(len(m.previewMatches), "preview match"))
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (m Model) renderPreviewSegment() string {
@@ -1756,19 +1788,71 @@ func fillWidthBackground(content string, width int, bg lipgloss.Color) string {
 }
 
 func (m Model) leftPanelTitle() string {
+	var title string
 	switch m.listMode {
 	case listModeTemporary:
-		return fmt.Sprintf("Temporary (%d)", len(m.filteredTempNotes()))
+		title = fmt.Sprintf("Temporary (%d)", len(m.filteredTempNotes()))
 	case listModePins:
-		return fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
+		title = fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
 	default:
-		count := max(0, len(m.treeItems)-1)
-		title := fmt.Sprintf("Tree (%d)", count)
+		title = fmt.Sprintf("Tree (%d)", m.visibleTreeResultCount())
 		if marked := m.markedTreeCount(); marked > 0 {
 			title += fmt.Sprintf(" • marked %d", marked)
 		}
-		return title
 	}
+	if m.focus == focusTree {
+		title += " • focused"
+	}
+	return title
+}
+
+func (m Model) rightPanelTitle() string {
+	title := "Preview"
+	if m.previewSupportsSearchMatches() {
+		title += fmt.Sprintf(" (%d matches)", len(m.previewMatches))
+	}
+	if m.focus == focusPreview {
+		title += " • focused"
+	}
+	return title
+}
+
+func (m Model) renderLeftPaneHint(width int) string {
+	hint := "tab to focus the list"
+	if m.focus == focusTree {
+		switch m.listMode {
+		case listModeTemporary:
+			hint = "focused • / search • N new temp • t back to notes"
+		case listModePins:
+			hint = "focused • / search • p pin current note or category"
+		default:
+			hint = "focused • / search • j/k move • tab to preview"
+		}
+	}
+	style := mutedStyle.Copy().Background(bgSoftColor)
+	if m.focus == focusTree {
+		style = style.Foreground(accentSoftColor)
+	}
+	return fillWidthBackground(style.Render(truncateToWidth(hint, width)), width, bgSoftColor)
+}
+
+func (m Model) renderRightPaneHint(width int) string {
+	hint := "tab to focus preview"
+	if m.focus == focusPreview {
+		parts := []string{"focused", "ctrl+d/u scroll", "B privacy", "L lines"}
+		if m.previewSupportsSearchMatches() {
+			parts = append(parts, "n/N matches")
+		}
+		if len(m.previewTodos) > 0 {
+			parts = append(parts, "]t/[t todos")
+		}
+		hint = strings.Join(parts, " • ")
+	}
+	style := mutedStyle.Copy().Background(bgSoftColor)
+	if m.focus == focusPreview {
+		style = style.Foreground(accentSoftColor)
+	}
+	return fillWidthBackground(style.Render(truncateToWidth(hint, width)), width, bgSoftColor)
 }
 
 func (m Model) renderLeftPaneBody() string {
@@ -1940,31 +2024,172 @@ func placeOverlay(base, modal string, width, height int) string {
 	return strings.Join(baseLines, "\n")
 }
 
-func highlightMatch(text, query string) string {
-	base := lipgloss.NewStyle().
+func (m Model) renderFocusSegment() string {
+	if m.focus == focusPreview {
+		return "focus: preview"
+	}
+	return "focus: list"
+}
+
+func (m Model) activeSearchQuery() string {
+	return strings.TrimSpace(m.searchInput.Value())
+}
+
+func (m Model) hasActiveSearch() bool {
+	return m.activeSearchQuery() != ""
+}
+
+func (m Model) visibleTreeResultCount() int {
+	count := 0
+	for _, item := range m.treeItems {
+		if item.Kind == treeCategory && item.RelPath == "" {
+			continue
+		}
+		count++
+	}
+	return count
+}
+
+func (m Model) currentSearchResultCount() int {
+	switch m.listMode {
+	case listModeTemporary:
+		return len(m.filteredTempNotes())
+	case listModePins:
+		return len(m.filteredPinnedItems())
+	default:
+		return m.visibleTreeResultCount()
+	}
+}
+
+func formatCountLabel(count int, label string) string {
+	suffix := "s"
+	if count == 1 {
+		suffix = ""
+	} else if strings.HasSuffix(label, "match") {
+		suffix = "es"
+	}
+	return fmt.Sprintf("%d %s%s", count, label, suffix)
+}
+
+func (m Model) renderSearchMeta() string {
+	parts := []string{formatCountLabel(m.currentSearchResultCount(), "result")}
+	if m.previewSupportsSearchMatches() {
+		parts = append(parts, formatCountLabel(len(m.previewMatches), "preview match"))
+	}
+	parts = append(parts, "esc clears")
+	return strings.Join(parts, " • ")
+}
+
+func (m Model) previewSupportsSearchMatches() bool {
+	query := m.activeSearchQuery()
+	if query == "" || strings.HasPrefix(strings.ToLower(query), "#") || strings.TrimSpace(m.previewPath) == "" {
+		return false
+	}
+	return !strings.HasPrefix(m.previewPath, "category:") &&
+		!strings.HasPrefix(m.previewPath, "pinned-category:") &&
+		!strings.HasPrefix(m.previewPath, "remote:")
+}
+
+func (m Model) renderPaneEmptyState(message string) string {
+	return lipgloss.NewStyle().
+		Width(m.treeInnerWidth()).
 		Foreground(mutedColor).
-		Background(bgSoftColor)
+		Background(bgSoftColor).
+		Italic(true).
+		Render(message)
+}
 
-	if query == "" {
+func (m Model) treeEmptyStateMessage() string {
+	if query := m.activeSearchQuery(); query != "" {
+		return fmt.Sprintf("No notes match %q. Press esc to clear search.", query)
+	}
+	return "No notes yet. Press n for a note, T for a todo, C for a category, or N for temp."
+}
+
+func (m Model) temporaryEmptyStateMessage() string {
+	if query := m.activeSearchQuery(); query != "" {
+		return fmt.Sprintf("No temporary notes match %q. Press esc to clear search.", query)
+	}
+	return "No temporary notes. Press N to create one or t to return to notes."
+}
+
+func (m Model) pinsEmptyStateMessage() string {
+	if query := m.activeSearchQuery(); query != "" {
+		return fmt.Sprintf("No pinned items match %q. Press esc to clear search.", query)
+	}
+	return "No pinned items. Press p on a note or category to pin it here."
+}
+
+func highlightMatch(text, query string) string {
+	return highlightSearchText(text, query, mutedColor, bgSoftColor, highlightBgColor, selectedFgColor)
+}
+
+func highlightSearchText(
+	text, query string,
+	baseFg, baseBg, matchBg, matchFg lipgloss.Color,
+) string {
+	base := lipgloss.NewStyle().
+		Foreground(baseFg).
+		Background(baseBg)
+
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" || strings.HasPrefix(q, "#") {
 		return base.Render(text)
 	}
 
+	terms := strings.Fields(q)
+	if len(terms) == 0 {
+		return base.Render(text)
+	}
+
+	type interval struct{ start, end int }
+	var intervals []interval
 	lower := strings.ToLower(text)
-	lowerQ := strings.ToLower(query)
-
-	idx := strings.Index(lower, lowerQ)
-	if idx == -1 {
+	for _, term := range terms {
+		if term == "" {
+			continue
+		}
+		start := 0
+		for {
+			idx := strings.Index(lower[start:], term)
+			if idx == -1 {
+				break
+			}
+			abs := start + idx
+			intervals = append(intervals, interval{abs, abs + len(term)})
+			start = abs + len(term)
+		}
+	}
+	if len(intervals) == 0 {
 		return base.Render(text)
 	}
 
-	before := text[:idx]
-	match := text[idx : idx+len(query)]
-	after := text[idx+len(query):]
+	merged := []interval{intervals[0]}
+	for _, iv := range intervals[1:] {
+		last := &merged[len(merged)-1]
+		if iv.start <= last.end {
+			if iv.end > last.end {
+				last.end = iv.end
+			}
+			continue
+		}
+		merged = append(merged, iv)
+	}
 
-	highlighted := lipgloss.NewStyle().
-		Background(highlightBgColor).
-		Foreground(selectedFgColor).
-		Render(match)
-
-	return base.Render(before) + highlighted + base.Render(after)
+	var b strings.Builder
+	pos := 0
+	for _, iv := range merged {
+		if pos < iv.start {
+			b.WriteString(base.Render(text[pos:iv.start]))
+		}
+		b.WriteString(lipgloss.NewStyle().
+			Background(matchBg).
+			Foreground(matchFg).
+			Render(text[iv.start:iv.end]))
+		pos = iv.end
+	}
+	if pos < len(text) {
+		b.WriteString(base.Render(text[pos:]))
+	}
+	return b.String()
 }

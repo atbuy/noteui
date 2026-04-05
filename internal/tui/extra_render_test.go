@@ -140,8 +140,8 @@ func TestRenderTreeViewEmpty(t *testing.T) {
 	m.treeItems = nil
 	rendered := m.renderTreeView()
 	plain := stripANSI(rendered)
-	if !strings.Contains(plain, "empty") {
-		require.Failf(t, "assertion failed", "expected 'empty' in tree view with no items, got %q", plain)
+	if !strings.Contains(plain, "Press n") {
+		require.Failf(t, "assertion failed", "expected actionable empty state in tree view, got %q", plain)
 	}
 }
 
@@ -743,4 +743,44 @@ func TestNoteSyncMarkerSharedUsesFilledDiamond(t *testing.T) {
 	}
 	mark, _ := m.noteSyncMarker(&n)
 	require.Equal(t, "◆ ", mark)
+}
+
+func TestRenderTemporaryListEmptyStateIsActionable(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.tempNotes = nil
+	rendered := m.renderTemporaryListView()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Press N")
+	require.Contains(t, plain, "t to return")
+}
+
+func TestRenderPinsListEmptyStateIsActionable(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModePins
+	m.pinnedNotes = map[string]bool{}
+	m.pinnedCats = map[string]bool{}
+	rendered := m.renderPinsListView()
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "Press p")
+}
+
+func TestRefreshPreviewShowsActionableTemporaryEmptyState(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.tempNotes = nil
+	m.refreshPreview()
+	plain := stripANSI(m.previewContent)
+	require.Contains(t, plain, "Press N")
+	require.Contains(t, plain, "return to notes")
+}
+
+func TestRefreshPreviewShowsSearchNoResultsMessage(t *testing.T) {
+	m := newTestModel(t)
+	m.searchInput.SetValue("missing")
+	m.treeItems = []treeItem{{Kind: treeCategory, RelPath: "", Name: "/"}}
+	m.refreshPreview()
+	plain := stripANSI(m.previewContent)
+	require.Contains(t, plain, "No notes match")
+	require.Contains(t, plain, "Press esc")
 }

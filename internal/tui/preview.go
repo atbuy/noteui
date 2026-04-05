@@ -13,18 +13,68 @@ import (
 	"atbuy/noteui/internal/notes"
 )
 
+func (m *Model) setPreviewPlaceholder(pathKey, content string) {
+	m.previewPath = pathKey
+	m.previewBaseContent = ""
+	m.previewContent = content
+	m.previewPrivacyForcedByNote = false
+	m.previewLineNumberStart = 0
+	m.previewTodos = nil
+	m.previewTodoCursor = -1
+	m.pendingTodoCursor = -1
+	m.pendingT = false
+	m.previewTodoNavMode = false
+	m.setPreviewViewportContent(content)
+	m.rebuildPreviewHeadingsFromRendered()
+	m.previewMatches = nil
+	m.previewMatchIndex = 0
+	m.preview.GotoTop()
+}
+
+func (m *Model) setStaticPreview(pathKey, rendered string) {
+	m.previewPath = pathKey
+	m.previewBaseContent = rendered
+	m.previewContent = rendered
+	m.previewPrivacyForcedByNote = false
+	m.previewLineNumberStart = 0
+	m.previewTodos = nil
+	m.previewTodoCursor = -1
+	m.pendingTodoCursor = -1
+	m.pendingT = false
+	m.previewTodoNavMode = false
+	m.setPreviewViewportContent(rendered)
+	m.rebuildPreviewHeadingsFromRendered()
+	m.previewMatches = nil
+	m.previewMatchIndex = 0
+	m.preview.GotoTop()
+}
+
+func (m Model) notesPreviewEmptyMessage() string {
+	if query := strings.TrimSpace(m.searchInput.Value()); query != "" {
+		return fmt.Sprintf("No notes match %q. Press esc to clear search.", query)
+	}
+	return "No notes yet. Press n for a note, T for a todo, C for a category, or N for temp."
+}
+
+func (m Model) tempPreviewEmptyMessage() string {
+	if query := strings.TrimSpace(m.searchInput.Value()); query != "" {
+		return fmt.Sprintf("No temporary notes match %q. Press esc to clear search.", query)
+	}
+	return "No temporary note selected. Press N to create one or t to return to notes."
+}
+
+func (m Model) pinsPreviewEmptyMessage() string {
+	if query := strings.TrimSpace(m.searchInput.Value()); query != "" {
+		return fmt.Sprintf("No pinned items match %q. Press esc to clear search.", query)
+	}
+	return "No pinned item selected. Press p on a note or category to pin it here."
+}
+
 func (m *Model) refreshPreview() {
 	if m.listMode == listModePins {
 		item := m.currentPinItem()
 		if item == nil {
-			m.previewPath = ""
-			m.previewContent = "No pinned item selected"
-			m.previewPrivacyForcedByNote = false
-			m.previewLineNumberStart = 0
-			m.setPreviewViewportContent(m.previewContent)
-			m.rebuildPreviewHeadingsFromRendered()
-			m.previewMatches = nil
-			m.preview.GotoTop()
+			m.setPreviewPlaceholder("", m.pinsPreviewEmptyMessage())
 			return
 		}
 
@@ -44,14 +94,7 @@ func (m *Model) refreshPreview() {
 			}, "\n")
 
 			rendered := m.renderPreviewMarkdown(pathText, content)
-			m.previewPath = "pinned-category:" + item.RelPath
-			m.previewContent = rendered
-			m.previewPrivacyForcedByNote = false
-			m.previewLineNumberStart = 0
-			m.setPreviewViewportContent(rendered)
-			m.rebuildPreviewHeadingsFromRendered()
-			m.previewMatches = nil
-			m.preview.GotoTop()
+			m.setStaticPreview("pinned-category:"+item.RelPath, rendered)
 			return
 
 		case pinItemNote, pinItemTemporaryNote:
@@ -72,13 +115,7 @@ func (m *Model) refreshPreview() {
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
-			m.previewPath = ""
-			m.previewContent = "No temporary note selected"
-			m.previewLineNumberStart = 0
-			m.setPreviewViewportContent(m.previewContent)
-			m.rebuildPreviewHeadingsFromRendered()
-			m.previewMatches = nil
-			m.preview.GotoTop()
+			m.setPreviewPlaceholder("", m.tempPreviewEmptyMessage())
 			return
 		}
 
@@ -91,16 +128,14 @@ func (m *Model) refreshPreview() {
 		return
 	}
 
+	if m.visibleTreeResultCount() == 0 {
+		m.setPreviewPlaceholder("", m.notesPreviewEmptyMessage())
+		return
+	}
+
 	item := m.currentTreeItem()
 	if item == nil {
-		m.previewPath = ""
-		m.previewContent = "Nothing selected"
-		m.previewPrivacyForcedByNote = false
-		m.previewLineNumberStart = 0
-		m.setPreviewViewportContent(m.previewContent)
-		m.rebuildPreviewHeadingsFromRendered()
-		m.previewMatches = nil
-		m.preview.GotoTop()
+		m.setPreviewPlaceholder("", "Nothing selected. Move with j/k or press n to create a note.")
 		return
 	}
 
@@ -125,22 +160,11 @@ func (m *Model) refreshPreview() {
 		}, "\n")
 
 		rendered := m.renderPreviewMarkdown(pathText, content)
-		m.previewPath = "category:" + item.RelPath
-		m.previewContent = rendered
-		m.previewPrivacyForcedByNote = false
-		m.previewLineNumberStart = 0
-		m.setPreviewViewportContent(rendered)
-		m.rebuildPreviewHeadingsFromRendered()
-		m.previewMatches = nil
-		m.preview.GotoTop()
+		m.setStaticPreview("category:"+item.RelPath, rendered)
 		return
 	}
 
 	if item.Kind == treeRemoteNote && item.RemoteNote != nil {
-		previewKey := "remote:" + item.RemoteNote.ID
-		if m.previewPath == previewKey {
-			return
-		}
 		pathText := filepath.Join("~/notes", filepath.FromSlash(item.RemoteNote.RelPath))
 		lines := []string{
 			"# " + m.remoteOnlyDisplayTitle(*item.RemoteNote),
@@ -159,25 +183,12 @@ func (m *Model) refreshPreview() {
 		)
 		content := strings.Join(lines, "\n")
 		rendered := m.renderPreviewMarkdown(pathText, content)
-		m.previewPath = previewKey
-		m.previewContent = rendered
-		m.previewPrivacyForcedByNote = false
-		m.previewLineNumberStart = 0
-		m.setPreviewViewportContent(rendered)
-		m.rebuildPreviewHeadingsFromRendered()
-		m.previewMatches = nil
-		m.preview.GotoTop()
+		m.setStaticPreview("remote:"+item.RemoteNote.ID, rendered)
 		return
 	}
 
 	if item.Note == nil {
-		m.previewPath = ""
-		m.previewContent = "No note selected"
-		m.previewLineNumberStart = 0
-		m.setPreviewViewportContent(m.previewContent)
-		m.rebuildPreviewHeadingsFromRendered()
-		m.previewMatches = nil
-		m.preview.GotoTop()
+		m.setPreviewPlaceholder("", "No note selected. Move with j/k or press n to create a note.")
 		return
 	}
 
@@ -490,9 +501,7 @@ func (m *Model) jumpToNextTodo() {
 		m.previewTodoCursor = (m.previewTodoCursor + 1) % len(m.previewTodos)
 	}
 	todo := m.previewTodos[m.previewTodoCursor]
-	if todo.rendLine >= 0 {
-		m.preview.SetYOffset(todo.rendLine)
-	}
+	m.ensurePreviewLineVisible(todo.rendLine)
 	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
 	m.reapplyTodoHighlight()
 }
@@ -508,9 +517,7 @@ func (m *Model) jumpToPrevTodo() {
 		m.previewTodoCursor = (m.previewTodoCursor - 1 + len(m.previewTodos)) % len(m.previewTodos)
 	}
 	todo := m.previewTodos[m.previewTodoCursor]
-	if todo.rendLine >= 0 {
-		m.preview.SetYOffset(todo.rendLine)
-	}
+	m.ensurePreviewLineVisible(todo.rendLine)
 	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
 	m.reapplyTodoHighlight()
 }
@@ -522,9 +529,7 @@ func (m *Model) jumpToFirstTodo() {
 	}
 	m.previewTodoCursor = 0
 	todo := m.previewTodos[m.previewTodoCursor]
-	if todo.rendLine >= 0 {
-		m.preview.SetYOffset(todo.rendLine)
-	}
+	m.ensurePreviewLineVisible(todo.rendLine)
 	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
 	m.reapplyTodoHighlight()
 }
@@ -536,9 +541,7 @@ func (m *Model) jumpToLastTodo() {
 	}
 	m.previewTodoCursor = len(m.previewTodos) - 1
 	todo := m.previewTodos[m.previewTodoCursor]
-	if todo.rendLine >= 0 {
-		m.preview.SetYOffset(todo.rendLine)
-	}
+	m.ensurePreviewLineVisible(todo.rendLine)
 	m.status = fmt.Sprintf("todo %d/%d", m.previewTodoCursor+1, len(m.previewTodos))
 	m.reapplyTodoHighlight()
 }
@@ -959,6 +962,7 @@ func (m *Model) jumpToNextMatch() {
 
 	m.previewMatchIndex = (m.previewMatchIndex + 1) % len(m.previewMatches)
 	m.scrollToMatchLine(m.previewMatches[m.previewMatchIndex].line)
+	m.syncTodoCursorToActiveMatch()
 	m.reapplyPreviewHighlights()
 	m.status = fmt.Sprintf("match %d/%d", m.previewMatchIndex+1, len(m.previewMatches))
 }
@@ -971,16 +975,24 @@ func (m *Model) jumpToPrevMatch() {
 
 	m.previewMatchIndex = (m.previewMatchIndex - 1 + len(m.previewMatches)) % len(m.previewMatches)
 	m.scrollToMatchLine(m.previewMatches[m.previewMatchIndex].line)
+	m.syncTodoCursorToActiveMatch()
 	m.reapplyPreviewHighlights()
 	m.status = fmt.Sprintf("match %d/%d", m.previewMatchIndex+1, len(m.previewMatches))
 }
 
-func (m *Model) scrollToMatchLine(line int) {
+func (m *Model) ensurePreviewLineVisible(line int) {
+	if line < 0 {
+		return
+	}
 	if line < m.preview.YOffset {
 		m.preview.SetYOffset(line)
 	} else if line >= m.preview.YOffset+m.preview.Height {
 		m.preview.SetYOffset(line - m.preview.Height + 1)
 	}
+}
+
+func (m *Model) scrollToMatchLine(line int) {
+	m.ensurePreviewLineVisible(line)
 }
 
 func (m *Model) centerCurrentMatch() {
@@ -1003,6 +1015,20 @@ func (m *Model) reapplyPreviewHighlights() {
 	)
 	m.previewContent = highlighted
 	m.reapplyTodoHighlight()
+}
+
+func (m *Model) syncTodoCursorToActiveMatch() {
+	if !m.previewTodoNavMode || len(m.previewMatches) == 0 || m.previewMatchIndex < 0 ||
+		m.previewMatchIndex >= len(m.previewMatches) {
+		return
+	}
+	matchLine := m.previewMatches[m.previewMatchIndex].line
+	for i, todo := range m.previewTodos {
+		if todo.rendLine == matchLine {
+			m.previewTodoCursor = i
+			return
+		}
+	}
 }
 
 func (m Model) centeredOffset(line int) int {
