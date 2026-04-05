@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -71,6 +72,35 @@ func (m Model) pinsPreviewEmptyMessage() string {
 }
 
 func (m *Model) refreshPreview() {
+	if m.listMode == listModeTodos {
+		item := m.currentTodoItem()
+		if item == nil {
+			m.setPreviewPlaceholder("", m.todosPreviewEmptyMessage())
+			return
+		}
+
+		if m.previewPath == item.Note.Path {
+			if m.syncSelectedTodoInPreview() {
+				m.reapplyTodoHighlight()
+				if m.previewTodoCursor >= 0 && m.previewTodoCursor < len(m.previewTodos) {
+					m.ensurePreviewLineVisible(m.previewTodos[m.previewTodoCursor].rendLine)
+				}
+			} else {
+				m.setPreviewViewportContent(applyTodoDueDateHints(m.previewContent))
+			}
+			return
+		}
+
+		rel := item.Note.RelPath
+		if item.IsTemp {
+			rel = filepath.Join(".tmp", rel)
+		}
+		m.previewPath = item.Note.Path
+		m.previewMatches = nil
+		m.pendingPreviewCmd = m.notePreviewCmd(item.Note.Path, rel, item.Note.Tags)
+		return
+	}
+
 	if m.listMode == listModePins {
 		item := m.currentPinItem()
 		if item == nil {
@@ -559,60 +589,103 @@ func applyTodoLineHighlight(content string, rendLine int) string {
 	return strings.Join(lines, "\n")
 }
 
-func renderSelectedTodoLine(plain string) string {
-	base := lipgloss.NewStyle().
-		Background(selectedBgColor).
-		Foreground(selectedFgColor).
-		Bold(true)
+func todoDueDateFromText(text string) (string, bool) {
+	_, metadata := notes.ParseTodoMetadata(text)
+	if strings.TrimSpace(metadata.DueDate) == "" {
+		return "", false
+	}
+	return metadata.DueDate, metadata.DueDate < time.Now().Format("2006-01-02")
+}
+
+func renderTodoPreviewBody(text string, selected bool, bg lipgloss.Color, textFg lipgloss.Color) string {
+	display, metadata := notes.ParseTodoMetadata(text)
+	if strings.TrimSpace(metadata.DueDate) == "" {
+		return lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(text)
+	}
+
+	due := "[due:" + metadata.DueDate + "]"
+	display = strings.TrimSpace(display)
+	parts := make([]string, 0, 2)
+	if display != "" {
+		parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(display))
+	}
+	dueFg := mutedColor
+	if metadata.DueDate < time.Now().Format("2006-01-02") {
+		dueFg = errorColor
+	}
+	parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(dueFg).Bold(selected).Render(due))
+	return strings.Join(parts, lipgloss.NewStyle().Background(bg).Render(" "))
+}
+
+func renderTodoPreviewLine(plain string, selected bool) string {
+	bg := bgSoftColor
+	textFg := textColor
+	checkedFg := successColor
+	uncheckedFg := errorColor
+	if selected {
+		bg = selectedBgColor
+		textFg = selectedFgColor
+	}
 
 	indentWidth := len(plain) - len(strings.TrimLeft(plain, " "))
 	indent := strings.Repeat(" ", indentWidth)
 	body := plain[indentWidth:]
+	indentPart := lipgloss.NewStyle().Background(bg).Render(indent)
+	spacePart := lipgloss.NewStyle().Background(bg).Render(" ")
 
 	switch {
 	case strings.HasPrefix(body, "[X] "), strings.HasPrefix(body, "[x] "):
 		rest := body[4:]
 		return lipgloss.JoinHorizontal(
 			lipgloss.Left,
-			base.Render(indent),
-			lipgloss.NewStyle().
-				Background(selectedBgColor).
-				Foreground(successColor).
-				Bold(true).
-				Render("[X]"),
-			base.Render(" "),
-			base.Render(rest),
+			indentPart,
+			lipgloss.NewStyle().Background(bg).Foreground(checkedFg).Bold(true).Render("[X]"),
+			spacePart,
+			renderTodoPreviewBody(rest, selected, bg, textFg),
 		)
 	case strings.HasPrefix(body, "[ ] "):
 		rest := body[4:]
 		return lipgloss.JoinHorizontal(
 			lipgloss.Left,
-			base.Render(indent),
-			lipgloss.NewStyle().
-				Background(selectedBgColor).
-				Foreground(errorColor).
-				Bold(true).
-				Render("[ ]"),
-			base.Render(" "),
-			base.Render(rest),
+			indentPart,
+			lipgloss.NewStyle().Background(bg).Foreground(uncheckedFg).Bold(true).Render("[ ]"),
+			spacePart,
+			renderTodoPreviewBody(rest, selected, bg, textFg),
 		)
 	default:
-		return base.Render(plain)
+		return lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(plain)
 	}
 }
 
+func renderSelectedTodoLine(plain string) string {
+	return renderTodoPreviewLine(plain, true)
+}
+
+func applyTodoDueDateHints(content string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		plain := stripANSI(line)
+		trimmed := strings.TrimSpace(plain)
+		if strings.HasPrefix(trimmed, "[ ] ") || strings.HasPrefix(trimmed, "[X] ") || strings.HasPrefix(trimmed, "[x] ") {
+			lines[i] = renderTodoPreviewLine(plain, false)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 func (m *Model) reapplyTodoHighlight() {
+	content := applyTodoDueDateHints(m.previewContent)
 	if !m.previewTodoNavMode {
-		m.setPreviewViewportContent(m.previewContent)
+		m.setPreviewViewportContent(content)
 		return
 	}
 	if len(m.previewTodos) == 0 || m.previewTodoCursor < 0 ||
 		m.previewTodoCursor >= len(m.previewTodos) {
-		m.setPreviewViewportContent(m.previewContent)
+		m.setPreviewViewportContent(content)
 		return
 	}
 	todo := m.previewTodos[m.previewTodoCursor]
-	m.setPreviewViewportContent(applyTodoLineHighlight(m.previewContent, todo.rendLine))
+	m.setPreviewViewportContent(applyTodoLineHighlight(content, todo.rendLine))
 }
 
 func (m Model) mouseInPreview(x, y int) bool {

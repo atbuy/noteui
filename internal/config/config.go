@@ -116,6 +116,7 @@ type KeysConfig struct {
 	Search                   []string `toml:"search"`
 	ShowHelp                 []string `toml:"show_help"`
 	ShowPins                 []string `toml:"show_pins"`
+	ShowTodos                []string `toml:"show_todos"`
 	CreateCategory           []string `toml:"create_category"`
 	ToggleCategory           []string `toml:"toggle_category"`
 	Delete                   []string `toml:"delete"`
@@ -130,7 +131,7 @@ type KeysConfig struct {
 	CommandPalette           []string `toml:"command_palette"`
 	SelectSyncProfile        []string `toml:"select_sync_profile"`
 	OpenConflictCopy         []string `toml:"open_conflict_copy"`
-	ShowSyncDebug           []string `toml:"show_sync_debug"`
+	ShowSyncDebug            []string `toml:"show_sync_debug"`
 	DeleteRemoteKeepLocal    []string `toml:"delete_remote_keep_local"`
 	SyncImportCurrent        []string `toml:"sync_import_current"`
 	SyncImport               []string `toml:"sync_import"`
@@ -154,6 +155,7 @@ type KeysConfig struct {
 	TodoAdd                  []string `toml:"todo_add"`
 	TodoDelete               []string `toml:"todo_delete"`
 	TodoEdit                 []string `toml:"todo_edit"`
+	TodoDueDate              []string `toml:"todo_due_date"`
 	PendingZ                 []string `toml:"pending_z"`
 	DeleteConfirm            []string `toml:"delete_confirm"`
 	ScrollPageDown           []string `toml:"scroll_page_down"`

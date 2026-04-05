@@ -328,6 +328,31 @@ func (m *Model) armEditCurrentPreviewTodo() tea.Cmd {
 	return nil
 }
 
+func (m Model) currentPreviewTodoSelection() (path string, rawLine int, text string, ok bool) {
+	if strings.TrimSpace(m.previewPath) == "" {
+		return "", 0, "", false
+	}
+	if m.previewTodoCursor < 0 || m.previewTodoCursor >= len(m.previewTodos) {
+		return "", 0, "", false
+	}
+	todo := m.previewTodos[m.previewTodoCursor]
+	return m.previewPath, todo.rawLine, todo.text, true
+}
+
+func (m *Model) armSetCurrentTodoDueDate() {
+	_, _, text, ok := m.currentPreviewTodoSelection()
+	if !ok {
+		m.status = "no todo selected"
+		return
+	}
+	_, metadata := notes.ParseTodoMetadata(text)
+	m.showTodoDueDate = true
+	m.dueDateInput.SetValue(metadata.DueDate)
+	m.dueDateInput.Focus()
+	m.dueDateInput.CursorEnd()
+	m.status = "set todo due date"
+}
+
 func (m *Model) toggleNotesTemporaryMode() {
 	if m.listMode == listModeTemporary {
 		m.switchToNotesMode()
@@ -485,6 +510,14 @@ func (m *Model) armAddTagCurrent() {
 }
 
 func (m Model) currentNotePath() string {
+	if m.listMode == listModeTodos {
+		item := m.currentTodoItem()
+		if item == nil {
+			return ""
+		}
+		return item.Note.Path
+	}
+
 	if m.listMode == listModeTemporary {
 		n := m.currentTempNote()
 		if n == nil {
@@ -512,6 +545,15 @@ func (m Model) currentNotePath() string {
 }
 
 func (m Model) currentLocalNote() *notes.Note {
+	if m.listMode == listModeTodos {
+		item := m.currentTodoItem()
+		if item == nil {
+			return nil
+		}
+		noteCopy := item.Note
+		return &noteCopy
+	}
+
 	if m.listMode == listModeTemporary {
 		return m.currentTempNote()
 	}

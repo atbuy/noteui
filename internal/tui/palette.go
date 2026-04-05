@@ -43,6 +43,7 @@ const (
 	cmdTogglePrivacy         = "toggle_privacy"
 	cmdToggleLineNumbers     = "toggle_line_numbers"
 	cmdShowPins              = "show_pins"
+	cmdShowTodos             = "show_todos"
 	cmdShowHelp              = "show_help"
 	cmdToggleTemporary       = "toggle_temporary"
 	cmdToggleSync            = "toggle_sync"
@@ -59,6 +60,7 @@ const (
 	cmdAddTodo               = "add_todo"
 	cmdDeleteTodo            = "delete_todo"
 	cmdEditTodo              = "edit_todo"
+	cmdSetTodoDueDate        = "set_todo_due_date"
 )
 
 // paletteKind identifies the type of an item in the command palette.
@@ -185,6 +187,7 @@ func paletteCommands(m Model) []paletteCommand {
 		{name: "Toggle Preview Line Numbers", desc: "Toggle preview line numbers", category: "preview", action: cmdToggleLineNumbers},
 		{name: "Show Help", desc: "Open the help modal", category: "app", action: cmdShowHelp},
 		{name: "Show Pins", desc: "Toggle the pins view", category: "view", action: cmdShowPins},
+		{name: "Show Todos", desc: "Toggle the global open todos view", category: "view", action: cmdShowTodos},
 	}
 
 	cmds = appendPaletteCommand(cmds, m.listMode != listModePins,
@@ -233,6 +236,8 @@ func paletteCommands(m Model) []paletteCommand {
 		paletteCommand{name: "Delete Current Todo", desc: "Delete the selected todo item", category: "todo", action: cmdDeleteTodo})
 	cmds = appendPaletteCommand(cmds, m.canToggleCurrentTodo(),
 		paletteCommand{name: "Edit Current Todo", desc: "Edit the selected todo item", category: "todo", action: cmdEditTodo})
+	cmds = appendPaletteCommand(cmds, m.canToggleCurrentTodo(),
+		paletteCommand{name: "Set Todo Due Date", desc: "Set or clear the selected todo due date", category: "todo", action: cmdSetTodoDueDate})
 
 	return cmds
 }
@@ -843,6 +848,9 @@ func (m *Model) startNewNote() tea.Cmd {
 		m.status = "press enter to jump to item first"
 		return nil
 	}
+	if m.listMode == listModeTodos {
+		return createNoteCmd(m.rootDir, m.currentTargetDir())
+	}
 	return createNoteCmd(m.rootDir, m.currentTargetDir())
 }
 
@@ -850,6 +858,9 @@ func (m *Model) startNewTodoList() tea.Cmd {
 	if m.listMode == listModeTemporary || m.listMode == listModePins {
 		m.status = "todo lists only available in notes tree"
 		return nil
+	}
+	if m.listMode == listModeTodos {
+		return createTodoNoteCmd(m.rootDir, m.currentTargetDir())
 	}
 	return createTodoNoteCmd(m.rootDir, m.currentTargetDir())
 }
@@ -1027,6 +1038,9 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 	case cmdShowPins:
 		m.togglePinsMode()
 		return nil
+	case cmdShowTodos:
+		m.toggleTodosMode()
+		return nil
 	case cmdShowHelp:
 		m.openHelpModal()
 		return nil
@@ -1067,6 +1081,9 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 		return m.deleteCurrentPreviewTodo()
 	case cmdEditTodo:
 		return m.armEditCurrentPreviewTodo()
+	case cmdSetTodoDueDate:
+		m.armSetCurrentTodoDueDate()
+		return nil
 	}
 	return nil
 }

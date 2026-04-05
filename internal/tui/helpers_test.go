@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
@@ -204,4 +205,12 @@ func TestThemeAndColorHelpers(t *testing.T) {
 	if normalized.TextColor == p.TextColor {
 		require.FailNow(t, "expected accessibility normalization to adjust low-contrast text color")
 	}
+}
+
+func TestTodoDueDateIsOverdue(t *testing.T) {
+	overdue := todoListItem{Todo: notes.TodoItem{Metadata: notes.TodoMetadata{DueDate: time.Now().Add(-24 * time.Hour).Format("2006-01-02")}}}
+	notDue := todoListItem{Todo: notes.TodoItem{Metadata: notes.TodoMetadata{DueDate: time.Now().Add(24 * time.Hour).Format("2006-01-02")}}}
+	require.True(t, todoDueDateIsOverdue(overdue))
+	require.False(t, todoDueDateIsOverdue(notDue))
+	require.False(t, todoDueDateIsOverdue(todoListItem{}))
 }

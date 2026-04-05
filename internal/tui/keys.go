@@ -19,6 +19,7 @@ type keyMap struct {
 	Search                   key.Binding
 	ShowHelp                 key.Binding
 	ShowPins                 key.Binding
+	ShowTodos                key.Binding
 	CreateCategory           key.Binding
 	ToggleCategory           key.Binding
 	Delete                   key.Binding
@@ -58,6 +59,7 @@ type keyMap struct {
 	TodoAdd          key.Binding
 	TodoDelete       key.Binding
 	TodoEdit         key.Binding
+	TodoDueDate      key.Binding
 	PendingZ         key.Binding
 	DeleteConfirm    key.Binding
 	ScrollPageDown   key.Binding
@@ -113,6 +115,10 @@ var keys = keyMap{
 	ShowPins: key.NewBinding(
 		key.WithKeys("P"),
 		key.WithHelp("P", "Pins"),
+	),
+	ShowTodos: key.NewBinding(
+		key.WithKeys("ctrl+t"),
+		key.WithHelp("ctrl+t", "Todos"),
 	),
 	CreateCategory: key.NewBinding(
 		key.WithKeys("C"),
@@ -259,6 +265,10 @@ var keys = keyMap{
 		key.WithKeys("e"),
 		key.WithHelp("e", "Todo edit key"),
 	),
+	TodoDueDate: key.NewBinding(
+		key.WithKeys("u"),
+		key.WithHelp("u", "Todo due date key"),
+	),
 	PendingZ: key.NewBinding(
 		key.WithKeys("z"),
 		key.WithHelp("z", "Center (zz)"),
@@ -303,6 +313,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.Search, cfg.Search)
 	apply(&keys.ShowHelp, cfg.ShowHelp)
 	apply(&keys.ShowPins, cfg.ShowPins)
+	apply(&keys.ShowTodos, cfg.ShowTodos)
 	apply(&keys.CreateCategory, cfg.CreateCategory)
 	apply(&keys.ToggleCategory, cfg.ToggleCategory)
 	apply(&keys.Delete, cfg.Delete)
@@ -341,6 +352,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.TodoAdd, cfg.TodoAdd)
 	apply(&keys.TodoDelete, cfg.TodoDelete)
 	apply(&keys.TodoEdit, cfg.TodoEdit)
+	apply(&keys.TodoDueDate, cfg.TodoDueDate)
 	apply(&keys.PendingZ, cfg.PendingZ)
 	apply(&keys.DeleteConfirm, cfg.DeleteConfirm)
 	apply(&keys.ScrollPageDown, cfg.ScrollPageDown)

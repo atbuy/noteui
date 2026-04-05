@@ -34,6 +34,7 @@ const (
 	listModeNotes listMode = iota
 	listModeTemporary
 	listModePins
+	listModeTodos
 )
 
 const (
@@ -237,9 +238,11 @@ type Model struct {
 	tempNotes        []notes.Note
 	tempCursor       int
 	pinsCursor       int
+	todoCursor       int
 	listMode         listMode
 	lastNonPinsMode  listMode
 
+	todoItems       []todoListItem
 	treeItems       []treeItem
 	treeCursor      int
 	markedTreeItems map[string]bool
@@ -349,7 +352,9 @@ type Model struct {
 	previewTodoNavMode bool
 	showTodoAdd        bool
 	showTodoEdit       bool
+	showTodoDueDate    bool
 	todoInput          textinput.Model
+	dueDateInput       textinput.Model
 
 	sessionPassphrase    string
 	showPassphraseModal  bool
@@ -469,6 +474,12 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	todoInput.CharLimit = 300
 	todoInput.Width = 48
 
+	dueDateInput := textinput.New()
+	dueDateInput.Placeholder = "YYYY-MM-DD"
+	dueDateInput.Prompt = ""
+	dueDateInput.CharLimit = 32
+	dueDateInput.Width = 24
+
 	commandPaletteInput := textinput.New()
 	commandPaletteInput.Placeholder = "Search notes and commands..."
 	commandPaletteInput.Prompt = "> "
@@ -533,6 +544,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		tagInput:                  tagInput,
 		helpInput:                 helpInput,
 		todoInput:                 todoInput,
+		dueDateInput:              dueDateInput,
 		passphraseInput:           passphraseInput,
 		preserveCursor:            -1,
 		pendingTodoCursor:         -1,
@@ -549,6 +561,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 		lastNonPinsMode:           listModeNotes,
 		tempCursor:                0,
 		pinsCursor:                0,
+		todoCursor:                0,
 		previewPrivacyEnabled:     cfg.Preview.Privacy,
 		previewLineNumbersEnabled: cfg.Preview.LineNumbers,
 		showDashboard:             cfg.Dashboard,
@@ -970,23 +983,28 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		highlighted := applyMatchHighlights(msg.baseContent, query, m.previewMatches, 0)
 		m.previewContent = highlighted
 		m.rebuildPreviewHeadingsFromRendered()
-		if m.pendingTodoCursor >= 0 {
+		m.rebuildPreviewTodos(msg.rawContent, msg.baseContent, msg.todoLineOffset)
+		if m.listMode == listModeTodos {
+			m.syncSelectedTodoInPreview()
+		} else if m.pendingTodoCursor >= 0 {
 			m.previewTodoCursor = m.pendingTodoCursor
 			m.pendingTodoCursor = -1
+			m.previewTodoNavMode = m.previewTodoCursor >= 0
 		} else if !m.previewTodoNavMode {
 			m.previewTodoCursor = -1
 		} else {
 			m.previewTodoCursor = 0
 		}
-		m.rebuildPreviewTodos(msg.rawContent, msg.baseContent, msg.todoLineOffset)
 		if m.previewTodoNavMode {
 			m.reapplyTodoHighlight()
 		} else {
-			m.setPreviewViewportContent(m.previewContent)
+			m.setPreviewViewportContent(applyTodoDueDateHints(m.previewContent))
 		}
 		if m.pendingPreviewYOffset >= 0 {
 			m.preview.SetYOffset(m.pendingPreviewYOffset)
 			m.pendingPreviewYOffset = -1
+		} else if m.listMode == listModeTodos && m.previewTodoNavMode && m.previewTodoCursor >= 0 && m.previewTodoCursor < len(m.previewTodos) {
+			m.ensurePreviewLineVisible(m.previewTodos[m.previewTodoCursor].rendLine)
 		} else if len(m.previewMatches) > 0 && query != "" {
 			m.scrollToMatchLine(m.previewMatches[0].line)
 		} else {
@@ -1178,6 +1196,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.renameInput.Width = max(24, min(60, m.width-16))
 		m.tagInput.Width = max(24, min(60, m.width-16))
 		m.todoInput.Width = max(24, min(60, m.width-16))
+		m.dueDateInput.Width = max(18, min(24, m.width-20))
 
 		previewInnerWidth := max(20, rightWidth-8)
 		previewInnerHeight := max(6, msg.Height-14)
@@ -1404,6 +1423,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		m.rebuildTree()
+		m.rebuildTodoItems()
 		if m.applyPendingSyncedPins {
 			m.applySyncedPins(m.pendingSyncedPinRelPaths, m.pendingSyncedCategories)
 			m.pendingSyncedPinRelPaths = nil
@@ -1423,6 +1443,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.pinsCursor = len(m.filteredPinnedItems()) - 1
 		}
 
+		m.clampTodoCursor()
 		m.previewPath = ""
 
 		m.syncSelectedNote()
@@ -1587,6 +1608,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.syncSelectedNote()
 				return m, nil
 
+			case key.Matches(msg, keys.ShowTodos):
+				m.showDashboard = false
+				m.toggleTodosMode()
+				return m, nil
+
 			case key.Matches(msg, keys.NewTemporaryNote):
 				m.showDashboard = false
 				return m, createTemporaryNoteCmd(m.rootDir)
@@ -1744,6 +1770,40 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, decryptNoteCmd(path, passphrase)
 			}
 			return m, nil
+		}
+
+		if m.showTodoDueDate {
+			switch msg.String() {
+			case "esc":
+				m.showTodoDueDate = false
+				m.dueDateInput.Blur()
+				m.dueDateInput.SetValue("")
+				m.status = "todo due date cancelled"
+				return m, nil
+			case "enter":
+				dueDate := strings.TrimSpace(m.dueDateInput.Value())
+				if dueDate != "" {
+					if _, err := time.Parse("2006-01-02", dueDate); err != nil {
+						m.status = "due date must use YYYY-MM-DD"
+						return m, nil
+					}
+				}
+				path, rawLine, _, ok := m.currentPreviewTodoSelection()
+				m.showTodoDueDate = false
+				m.dueDateInput.Blur()
+				m.dueDateInput.SetValue("")
+				if !ok {
+					m.status = "no todo selected"
+					return m, nil
+				}
+				return m, updateTodoDueDateCmd(path, rawLine, dueDate)
+			}
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.dueDateInput, cmd = m.dueDateInput.Update(msg)
+			return m, cmd
 		}
 
 		if m.showTodoEdit {
@@ -2166,6 +2226,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.moveTempCursor(-1)
 				case listModePins:
 					m.movePinsCursor(-1)
+				case listModeTodos:
+					m.moveTodoCursor(-1)
 				default:
 					m.moveTreeCursor(-1)
 				}
@@ -2176,6 +2238,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.moveTempCursor(1)
 				case listModePins:
 					m.movePinsCursor(1)
+				case listModeTodos:
+					m.moveTodoCursor(1)
 				default:
 					m.moveTreeCursor(1)
 				}
@@ -2189,12 +2253,18 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.searchInput, cmd = m.searchInput.Update(msg)
 			m.previewPath = ""
 			m.rebuildTree()
+			m.clampTodoCursor()
 			m.syncSelectedNote()
 			return m, cmd
 		}
 
 		if key.Matches(msg, keys.ShowPins) {
 			m.togglePinsMode()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.ShowTodos) {
+			m.toggleTodosMode()
 			return m, nil
 		}
 
@@ -2220,6 +2290,31 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.switchToNotesMode()
 			}
 			m.status = "left pins"
+			return m, nil
+		}
+
+		if msg.String() == "esc" && m.listMode == listModeTodos {
+			if m.focus == focusPreview {
+				m.focus = focusTree
+				m.status = "list focused"
+				m.pendingG = false
+				m.pendingBracketDir = ""
+				return m, nil
+			}
+
+			if m.searchMode {
+				m.searchMode = false
+				m.searchInput.Blur()
+				m.status = "search applied"
+				return m, nil
+			}
+
+			if m.lastNonPinsMode == listModeTemporary {
+				m.switchToTemporaryMode()
+			} else {
+				m.switchToNotesMode()
+			}
+			m.status = "left todos"
 			return m, nil
 		}
 
@@ -2279,6 +2374,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.searchInput.Blur()
 			m.searchMode = false
 			m.rebuildTree()
+			m.clampTodoCursor()
 			m.syncSelectedNote()
 			m.status = "search cleared"
 			return m, nil
@@ -2304,7 +2400,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			if m.pendingT && !key.Matches(msg, keys.TodoKey) && !key.Matches(msg, keys.TodoAdd) &&
 				!key.Matches(msg, keys.TodoDelete) &&
-				!key.Matches(msg, keys.TodoEdit) {
+				!key.Matches(msg, keys.TodoEdit) && !key.Matches(msg, keys.TodoDueDate) {
 				m.pendingT = false
 			}
 			switch {
@@ -2313,7 +2409,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.previewTodoCursor = -1
 				m.pendingBracketDir = ""
 				m.pendingT = false
-				m.setPreviewViewportContent(m.previewContent)
+				m.setPreviewViewportContent(applyTodoDueDateHints(m.previewContent))
 				m.status = "todo nav off"
 				return m, nil
 
@@ -2473,6 +2569,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingT = false
 				return m, m.armEditCurrentPreviewTodo()
 
+			case key.Matches(msg, keys.TodoDueDate) && m.pendingT:
+				m.pendingT = false
+				m.armSetCurrentTodoDueDate()
+				return m, nil
+
 			case key.Matches(msg, keys.NextMatch):
 				m.jumpToNextMatch()
 				return m, nil
@@ -2496,6 +2597,37 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
+		if m.focus == focusTree && m.listMode == listModeTodos {
+			if m.pendingT && !key.Matches(msg, keys.TodoKey) && !key.Matches(msg, keys.TodoAdd) &&
+				!key.Matches(msg, keys.TodoDelete) && !key.Matches(msg, keys.TodoEdit) &&
+				!key.Matches(msg, keys.TodoDueDate) {
+				m.pendingT = false
+			}
+			switch {
+			case key.Matches(msg, keys.TodoKey):
+				if m.pendingT {
+					m.pendingT = false
+					return m, m.toggleCurrentPreviewTodo()
+				}
+				m.pendingT = true
+				return m, nil
+			case key.Matches(msg, keys.TodoAdd) && m.pendingT:
+				m.pendingT = false
+				m.armAddTodoItem()
+				return m, nil
+			case key.Matches(msg, keys.TodoDelete) && m.pendingT:
+				m.pendingT = false
+				return m, m.deleteCurrentPreviewTodo()
+			case key.Matches(msg, keys.TodoEdit) && m.pendingT:
+				m.pendingT = false
+				return m, m.armEditCurrentPreviewTodo()
+			case key.Matches(msg, keys.TodoDueDate) && m.pendingT:
+				m.pendingT = false
+				m.armSetCurrentTodoDueDate()
+				return m, nil
+			}
+		}
+
 		// Tree navigation: gg and G.
 		if m.focus == focusTree {
 			switch {
@@ -2511,6 +2643,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					items := m.filteredPinnedItems()
 					if len(items) > 0 {
 						m.pinsCursor = len(items) - 1
+						m.syncSelectedNote()
+					}
+				case listModeTodos:
+					items := m.filteredTodoItems()
+					if len(items) > 0 {
+						m.todoCursor = len(items) - 1
 						m.syncSelectedNote()
 					}
 				default:
@@ -2533,6 +2671,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					case listModePins:
 						m.pinsCursor = 0
 						m.syncSelectedNote()
+					case listModeTodos:
+						m.todoCursor = 0
+						m.syncSelectedNote()
 					default:
 						m.treeCursor = 0
 						m.syncSelectedNote()
@@ -2549,6 +2690,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.moveTempCursor(-half)
 				case listModePins:
 					m.movePinsCursor(-half)
+				case listModeTodos:
+					m.moveTodoCursor(-half)
 				default:
 					m.moveTreeCursor(-half)
 				}
@@ -2561,6 +2704,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.moveTempCursor(half)
 				case listModePins:
 					m.movePinsCursor(half)
+				case listModeTodos:
+					m.moveTodoCursor(half)
 				default:
 					m.moveTreeCursor(half)
 				}
@@ -2686,6 +2831,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.moveTempCursor(-1)
 			case listModePins:
 				m.movePinsCursor(-1)
+			case listModeTodos:
+				m.moveTodoCursor(-1)
 			default:
 				m.moveTreeCursor(-1)
 			}
@@ -2697,6 +2844,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.moveTempCursor(1)
 			case listModePins:
 				m.movePinsCursor(1)
+			case listModeTodos:
+				m.moveTodoCursor(1)
 			default:
 				m.moveTreeCursor(1)
 			}

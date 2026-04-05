@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
@@ -395,6 +396,45 @@ func (r markdownPreviewRenderer) renderPlainCode(code, lang string, indent int) 
 	return prefixLines(block, strings.Repeat(" ", indent))
 }
 
+func renderDueHintText(text string, base lipgloss.Style) string {
+	if text == "" {
+		return ""
+	}
+
+	const prefix = "[due:"
+	var out strings.Builder
+	today := time.Now().Format("2006-01-02")
+
+	for len(text) > 0 {
+		start := strings.Index(text, prefix)
+		if start < 0 {
+			out.WriteString(base.Render(text))
+			break
+		}
+		if start > 0 {
+			out.WriteString(base.Render(text[:start]))
+		}
+		rest := text[start:]
+		end := strings.IndexByte(rest, ']')
+		if end < 0 {
+			out.WriteString(base.Render(rest))
+			break
+		}
+		token := rest[:end+1]
+		due := strings.TrimSuffix(strings.TrimPrefix(token, prefix), "]")
+		style := base.Copy().Foreground(mutedColor)
+		if len(due) == len("2006-01-02") {
+			if _, err := time.Parse("2006-01-02", due); err == nil && due < today {
+				style = base.Copy().Foreground(errorColor)
+			}
+		}
+		out.WriteString(style.Render(token))
+		text = rest[end+1:]
+	}
+
+	return out.String()
+}
+
 func (r markdownPreviewRenderer) renderInlineChildren(parent ast.Node) string {
 	var b strings.Builder
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
@@ -410,18 +450,17 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		base := lipgloss.NewStyle().Foreground(textColor).Background(bgSoftColor)
 		switch {
 		case n.HardLineBreak():
-			return base.Render(s) + "\n"
+			return renderDueHintText(s, base) + "\n"
 		case n.SoftLineBreak():
-			return base.Render(s + " ")
+			return renderDueHintText(s+" ", base)
 		default:
-			return base.Render(s)
+			return renderDueHintText(s, base)
 		}
 
 	case *ast.String:
-		return lipgloss.NewStyle().
+		return renderDueHintText(string(n.Value), lipgloss.NewStyle().
 			Foreground(textColor).
-			Background(bgSoftColor).
-			Render(string(n.Value))
+			Background(bgSoftColor))
 
 	case *ast.Emphasis:
 		content := r.renderInlineChildren(n)

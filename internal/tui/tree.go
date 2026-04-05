@@ -333,6 +333,18 @@ func (m *Model) moveTreeCursor(delta int) {
 
 func (m *Model) syncSelectedNote() {
 	switch m.listMode {
+	case listModeTodos:
+		item := m.currentTodoItem()
+		if item == nil {
+			m.selected = nil
+			m.refreshPreview()
+			return
+		}
+		noteCopy := item.Note
+		m.selected = &noteCopy
+		m.refreshPreview()
+		return
+
 	case listModeTemporary:
 		n := m.currentTempNote()
 		if n == nil {
@@ -398,6 +410,32 @@ func (m Model) currentTreeItem() *treeItem {
 }
 
 func (m *Model) activateCurrentItem() tea.Cmd {
+	if m.listMode == listModeTodos {
+		item := m.currentTodoItem()
+		if item == nil {
+			return nil
+		}
+		previewTodos := notes.ExtractTodoItems(item.Note.Preview, false)
+		m.pendingTodoCursor = -1
+		for i, todo := range previewTodos {
+			if todo.Line == item.Todo.Line {
+				m.pendingTodoCursor = i
+				break
+			}
+		}
+		m.previewTodoNavMode = m.pendingTodoCursor >= 0
+		if item.IsTemp {
+			m.switchToTemporaryMode()
+			m.selectTemporaryNote(item.RelPath)
+			m.status = "jumped to todo note"
+			return nil
+		}
+		m.switchToNotesMode()
+		m.selectTreeNote(item.RelPath)
+		m.status = "jumped to todo note"
+		return nil
+	}
+
 	if m.listMode == listModePins {
 		item := m.currentPinItem()
 		if item == nil {
@@ -592,6 +630,18 @@ func (m Model) categoryHasChildren(relPath string) bool {
 }
 
 func (m Model) currentTargetDir() string {
+	if m.listMode == listModeTodos {
+		item := m.currentTodoItem()
+		if item == nil {
+			return ""
+		}
+		dir := filepath.Dir(item.RelPath)
+		if dir == "." {
+			return ""
+		}
+		return dir
+	}
+
 	item := m.currentTreeItem()
 	if item == nil {
 		return ""

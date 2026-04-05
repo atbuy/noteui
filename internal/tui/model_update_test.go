@@ -33,6 +33,8 @@ func keyMsg(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyEnd}
 	case "ctrl+e":
 		return tea.KeyMsg{Type: tea.KeyCtrlE}
+	case "ctrl+t":
+		return tea.KeyMsg{Type: tea.KeyCtrlT}
 	default:
 		if len(s) == 1 {
 			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
@@ -984,4 +986,92 @@ func TestToggleSyncKeyOnSharedNoteShowsStatus(t *testing.T) {
 	m.treeCursor = 0
 	m = updateModel(m, keyMsg("S"))
 	require.Contains(t, m.status, "shared notes cannot be toggled")
+}
+
+func TestShowTodosKeyTogglesTodosMode(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{
+		Path:      filepath.Join(m.rootDir, "work", "todo.md"),
+		RelPath:   "work/todo.md",
+		Name:      "todo.md",
+		TitleText: "Todo",
+		Preview:   "- [ ] Ship release\n- [ ] Review docs\n",
+	}
+	m.notes = []notes.Note{n}
+	m.rebuildTodoItems()
+	m.syncSelectedNote()
+
+	m = updateModel(m, keyMsg("ctrl+t"))
+	require.Equal(t, listModeTodos, m.listMode)
+	require.NotNil(t, m.currentTodoItem())
+	require.Equal(t, "Ship release", m.currentTodoItem().Todo.DisplayText)
+
+	m = updateModel(m, keyMsg("ctrl+t"))
+	require.Equal(t, listModeNotes, m.listMode)
+}
+
+func TestPreviewRenderedSyncsSelectedTodoInTodosMode(t *testing.T) {
+	m := newTestModel(t)
+	n := notes.Note{
+		Path:      filepath.Join(m.rootDir, "work", "todo.md"),
+		RelPath:   "work/todo.md",
+		Name:      "todo.md",
+		TitleText: "Todo",
+		Preview:   "- [ ] First task\n- [ ] Second task\n",
+	}
+	m.notes = []notes.Note{n}
+	m.rebuildTodoItems()
+	m.listMode = listModeTodos
+	m.todoCursor = 1
+	m.previewPath = n.Path
+
+	m = updateModel(m, previewRenderedMsg{
+		forPath:     n.Path,
+		baseContent: "- [ ] First task\n- [ ] Second task\n",
+		rawContent:  "- [ ] First task\n- [ ] Second task\n",
+	})
+
+	require.True(t, m.previewTodoNavMode)
+	require.Equal(t, 1, m.previewTodoCursor)
+}
+
+func TestTodoDueDateEscCancels(t *testing.T) {
+	m := newTestModel(t)
+	m.showTodoDueDate = true
+	m.dueDateInput.Focus()
+	m = updateModel(m, keyMsg("esc"))
+	if m.showTodoDueDate {
+		require.FailNow(t, "expected showTodoDueDate to be false after esc")
+	}
+}
+
+func TestTodoDueDateActionOpensModalWithPrefill(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.previewPath = filepath.Join(m.rootDir, "work", "todo.md")
+	m.previewTodos = []previewTodoItem{{rawLine: 3, text: "Ship release [p1] [due:2026-04-12]"}}
+	m.previewTodoCursor = 0
+	m.pendingT = true
+
+	m = updateModel(m, keyMsg("u"))
+	require.True(t, m.showTodoDueDate)
+	require.Equal(t, "2026-04-12", m.dueDateInput.Value())
+}
+
+func TestPreviewRenderedAppliesTodoDueDateHintsWithoutTodoNav(t *testing.T) {
+	m := newTestModel(t)
+	m.previewPath = filepath.Join(m.rootDir, "work", "todo.md")
+	m.preview.Width = 80
+	m.preview.Height = 8
+
+	plain := "[ ] Ship release [due:2020-01-01]\n"
+	m = updateModel(m, previewRenderedMsg{
+		forPath:     m.previewPath,
+		baseContent: plain,
+		rawContent:  "- [ ] Ship release [due:2020-01-01]\n",
+	})
+
+	rendered := m.preview.View()
+	plainRendered := stripANSI(rendered)
+	require.Contains(t, plainRendered, "Ship release [due:2020-01-01]")
 }

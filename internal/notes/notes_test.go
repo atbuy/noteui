@@ -316,6 +316,22 @@ func TestCreateTodoNoteAndTodoMutations(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected appended todo item, got %q", text)
 	}
 
+	if err := UpdateTodoDueDate(path, 2, "2026-04-12"); err != nil {
+		require.Failf(t, "assertion failed", "UpdateTodoDueDate returned error: %v", err)
+	}
+	text = mustRead(t, path)
+	if !strings.Contains(text, "- [x] updated task [due:2026-04-12]") {
+		require.Failf(t, "assertion failed", "expected due date to be added, got %q", text)
+	}
+
+	if err := UpdateTodoDueDate(path, 2, ""); err != nil {
+		require.Failf(t, "assertion failed", "UpdateTodoDueDate clear returned error: %v", err)
+	}
+	text = mustRead(t, path)
+	if strings.Contains(text, "[due:") {
+		require.Failf(t, "assertion failed", "expected due date to be cleared, got %q", text)
+	}
+
 	if err := DeleteTodoLine(path, 3); err != nil {
 		require.Failf(t, "assertion failed", "DeleteTodoLine returned error: %v", err)
 	}
@@ -340,6 +356,9 @@ func TestTodoMutationsRejectInvalidLines(t *testing.T) {
 	}
 	if err := EditTodoLine(path, 5, "nope"); err == nil {
 		require.FailNow(t, "expected out-of-range edit to be rejected")
+	}
+	if err := UpdateTodoDueDate(path, 0, "2026-99-99"); err == nil {
+		require.FailNow(t, "expected invalid due date to be rejected")
 	}
 }
 

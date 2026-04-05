@@ -66,7 +66,7 @@ func TestFilteredHelpSectionsNoMatch(t *testing.T) {
 func TestFilteredHelpSectionsSectionOrder(t *testing.T) {
 	m := newTestModel(t)
 	sections := m.filteredHelpSections()
-	order := []string{"Filter", "Tree", "Notes", "Preview", "Global"}
+	order := []string{"Filter", "Tree", "Notes", "Todos", "Preview", "Global"}
 	orderIdx := 0
 	for _, s := range sections {
 		for orderIdx < len(order) && order[orderIdx] != s.title {

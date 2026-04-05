@@ -51,6 +51,14 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Notes", key: keys.NewTemporaryNote.Help().Key, desc: "New temporary note"},
 		{section: "Notes", key: keys.ToggleTemporary.Help().Key, desc: "Toggle Notes / Temporary (tree focus)"},
 		{section: "Notes", key: keys.ShowPins.Help().Key, desc: "Toggle Pins view"},
+		{section: "Notes", key: keys.ShowTodos.Help().Key, desc: "Toggle global open todos view"},
+		{section: "Todos", key: keys.MoveDown.Help().Key + " / " + keys.MoveUp.Help().Key, desc: "Move through open tasks"},
+		{section: "Todos", key: keys.Open.Help().Key, desc: "Jump to the source note"},
+		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoKey.Help().Key, desc: "Toggle selected open task"},
+		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoAdd.Help().Key, desc: "Add a task to the selected note"},
+		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoDelete.Help().Key, desc: "Delete the selected open task"},
+		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoEdit.Help().Key, desc: "Edit the selected open task"},
+		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoDueDate.Help().Key, desc: "Set or clear the selected task due date"},
 		{section: "Preview", key: keys.NextMatch.Help().Key + " / " + keys.PrevMatch.Help().Key, desc: "Next / previous match in preview"},
 		{section: "Preview", key: keys.PendingZ.Help().Key + keys.PendingZ.Help().Key, desc: "Center current match in preview"},
 		{section: "Preview", key: keys.TogglePreviewPrivacy.Help().Key, desc: "Toggle preview privacy"},
@@ -62,6 +70,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoAdd.Help().Key, desc: "Add new todo item"},
 		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoDelete.Help().Key, desc: "Delete current todo item"},
 		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoEdit.Help().Key, desc: "Edit current todo item"},
+		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoDueDate.Help().Key, desc: "Set or clear current todo due date"},
 		{section: "Preview", key: keys.ToggleEncryption.Help().Key, desc: "Toggle note encryption"},
 		{section: "Filter", key: keys.Search.Help().Key, desc: "Search"},
 		{section: "Filter", key: "#tag", desc: "Filter by tag in search"},
@@ -78,7 +87,7 @@ func (m Model) helpEntries() []helpEntry {
 func (m Model) filteredHelpSections() []helpSection {
 	entries := m.helpEntries()
 	query := strings.ToLower(strings.TrimSpace(m.helpInput.Value()))
-	sectionOrder := []string{"Filter", "Tree", "Notes", "Preview", "Global"}
+	sectionOrder := []string{"Filter", "Tree", "Notes", "Todos", "Preview", "Global"}
 	bySection := make(map[string][]helpEntry)
 	for _, entry := range entries {
 		if query != "" {

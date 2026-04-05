@@ -784,3 +784,15 @@ func TestRefreshPreviewShowsSearchNoResultsMessage(t *testing.T) {
 	require.Contains(t, plain, "No notes match")
 	require.Contains(t, plain, "Press esc")
 }
+
+func TestRenderTodoDueDateModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showTodoDueDate = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderTodoDueDateModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Set todo due date") {
+		require.Failf(t, "assertion failed", "expected 'Set todo due date' in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}

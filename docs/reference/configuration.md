@@ -435,6 +435,8 @@ sync_import = ["I"]
   Default: `["tab"]`
 - `search`
   Default: `["/"]`
+- `command_palette`
+  Default: `["ctrl+p", ":"]`
 - `move_up`
   Default: `["k", "up"]`
 - `move_down`
@@ -486,6 +488,8 @@ sync_import = ["I"]
   Default: `["p"]`
 - `show_pins`
   Default: `["P"]`
+- `show_todos`
+  Default: `["ctrl+t"]`
 - `sort_toggle`
   Default: `["s"]`
 
@@ -530,6 +534,8 @@ sync_import = ["I"]
   Default: `["d"]`
 - `todo_edit`
   Default: `["e"]`
+- `todo_due_date`
+  Default: `["u"]`
 - `pending_z`
   Default: `["z"]`
 - `delete_confirm`

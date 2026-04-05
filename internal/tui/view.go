@@ -221,6 +221,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showTodoDueDate {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderTodoDueDateModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showPassphraseModal {
 		return lipgloss.Place(
 			m.width,
@@ -1057,6 +1068,8 @@ func (m Model) renderModeSegment() string {
 		return "ADD TODO"
 	case m.showTodoEdit:
 		return "EDIT TODO"
+	case m.showTodoDueDate:
+		return "TODO DUE DATE"
 	case m.showPassphraseModal:
 		return "PASSPHRASE"
 	case m.showEncryptConfirm:
@@ -1067,6 +1080,8 @@ func (m Model) renderModeSegment() string {
 			return "SEARCH TEMP"
 		case listModePins:
 			return "SEARCH PINS"
+		case listModeTodos:
+			return "SEARCH TODOS"
 		default:
 			return "SEARCH"
 		}
@@ -1076,6 +1091,8 @@ func (m Model) renderModeSegment() string {
 		return "TEMP"
 	case m.listMode == listModePins:
 		return "PINS"
+	case m.listMode == listModeTodos:
+		return "TODOS"
 	default:
 		return "TREE"
 	}
@@ -1107,6 +1124,21 @@ func (m Model) renderSelectionSegment() string {
 			return "temporary: ★ " + n.Title()
 		}
 		return "temporary: " + n.Title()
+	}
+
+	if m.listMode == listModeTodos {
+		item := m.currentTodoItem()
+		if item == nil {
+			return "todo: none"
+		}
+		text := strings.TrimSpace(item.Todo.DisplayText)
+		if text == "" {
+			text = strings.TrimSpace(item.Todo.Text)
+		}
+		if text == "" {
+			text = item.Source
+		}
+		return "todo: " + truncateToWidth(text, 48)
 	}
 
 	item := m.currentTreeItem()
@@ -1535,6 +1567,16 @@ func (m Model) renderTodoEditModal() string {
 	)
 }
 
+func (m Model) renderTodoDueDateModal() string {
+	return m.renderStandardModal(
+		"Set todo due date",
+		"Use YYYY-MM-DD. Leave empty to clear the current due date.",
+		"Due date",
+		m.dueDateInput,
+		"Enter to save • Esc to cancel",
+	)
+}
+
 func (m Model) renderPassphraseModal() string {
 	title := "Enter passphrase"
 	hint := "This passphrase protects all encrypted notes in this session."
@@ -1794,6 +1836,8 @@ func (m Model) leftPanelTitle() string {
 		title = fmt.Sprintf("Temporary (%d)", len(m.filteredTempNotes()))
 	case listModePins:
 		title = fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
+	case listModeTodos:
+		title = fmt.Sprintf("Todos (%d)", len(m.filteredTodoItems()))
 	default:
 		title = fmt.Sprintf("Tree (%d)", m.visibleTreeResultCount())
 		if marked := m.markedTreeCount(); marked > 0 {
@@ -1825,6 +1869,8 @@ func (m Model) renderLeftPaneHint(width int) string {
 			hint = "focused • / search • N new temp • t back to notes"
 		case listModePins:
 			hint = "focused • / search • p pin current note or category"
+		case listModeTodos:
+			hint = "focused • / search • j/k tasks • tt toggle • enter jump to note"
 		default:
 			hint = "focused • / search • j/k move • tab to preview"
 		}
@@ -1861,6 +1907,8 @@ func (m Model) renderLeftPaneBody() string {
 		return m.renderTemporaryListView()
 	case listModePins:
 		return m.renderPinsListView()
+	case listModeTodos:
+		return m.renderTodoListView()
 	default:
 		return m.renderTreeView()
 	}
@@ -2056,6 +2104,8 @@ func (m Model) currentSearchResultCount() int {
 		return len(m.filteredTempNotes())
 	case listModePins:
 		return len(m.filteredPinnedItems())
+	case listModeTodos:
+		return len(m.filteredTodoItems())
 	default:
 		return m.visibleTreeResultCount()
 	}

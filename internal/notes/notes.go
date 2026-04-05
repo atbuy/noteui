@@ -627,3 +627,45 @@ func EditTodoLine(path string, lineIdx int, newText string) error {
 	lines[lineIdx] = indent + prefix + newText
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
 }
+
+func UpdateTodoDueDate(path string, lineIdx int, dueDate string) error {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(content), "\n")
+	if lineIdx < 0 || lineIdx >= len(lines) {
+		return fmt.Errorf("line index %d out of range", lineIdx)
+	}
+	line := lines[lineIdx]
+	trimmed := strings.TrimLeft(line, " 	")
+	indent := line[:len(line)-len(trimmed)]
+
+	if !strings.HasPrefix(trimmed, "- [ ] ") && !strings.HasPrefix(trimmed, "- [x] ") && !strings.HasPrefix(trimmed, "- [X] ") {
+		return fmt.Errorf("line %d is not a todo item", lineIdx)
+	}
+
+	dueDate = strings.TrimSpace(dueDate)
+	if dueDate != "" {
+		if _, err := time.Parse("2006-01-02", dueDate); err != nil {
+			return fmt.Errorf("invalid due date %q: expected YYYY-MM-DD", dueDate)
+		}
+	}
+
+	body := trimmed[6:]
+	fields := strings.Fields(body)
+	kept := make([]string, 0, len(fields)+1)
+	for _, field := range fields {
+		normalized := strings.ToLower(strings.TrimSpace(field))
+		if strings.HasPrefix(normalized, "[due:") && strings.HasSuffix(normalized, "]") {
+			continue
+		}
+		kept = append(kept, field)
+	}
+	if dueDate != "" {
+		kept = append(kept, "[due:"+dueDate+"]")
+	}
+
+	lines[lineIdx] = indent + trimmed[:6] + strings.TrimSpace(strings.Join(kept, " "))
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+}

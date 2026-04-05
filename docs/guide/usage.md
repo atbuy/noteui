@@ -83,13 +83,25 @@ Switch between your normal notes and temporary notes using `t` when focused on t
 
 ## Todos
 
-Todo note helpers support:
+Todo workflows now cover both per-note task editing and a global open-tasks view.
 
-- creating a todo note template
-- toggling todo items
-- adding items
-- editing items
-- deleting items
+Use:
+
+- `T` to create a todo note template
+- `ctrl+t` to toggle the global open todos view
+- `tt` to toggle the selected todo
+- `ta` to add a todo item
+- `te` to edit a todo item
+- `td` to delete a todo item
+- `tu` to set or clear a todo due date
+- `enter` in Todos mode to jump to the source note
+
+Todo metadata can be stored inline in normal markdown task lines:
+
+- priority: `[p1]`, `[p2]`, `[p3]`
+- due date: `[due:YYYY-MM-DD]`
+
+The Todos view shows only open tasks and sorts them by due date first, then priority, then note order.
 
 ## Preview behavior
 

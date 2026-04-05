@@ -11,9 +11,11 @@ This page documents the default keybindings that most users care about first.
 - `j` / `k` or arrow keys: move selection
 - `h` / `l` or left/right: collapse or expand categories
 - `enter` or `o`: open note in editor
+- `ctrl+p` or `:`: open the command palette
 - `/`: search
 - `tab`: switch focused pane
 - `t`: toggle between Notes and Temporary mode (tree focus)
+- `ctrl+t`: toggle the global Todos mode
 - `q`: quit
 - `?`: show help
 - `F`: select the default sync profile
@@ -35,10 +37,29 @@ This page documents the default keybindings that most users care about first.
 - `P`: show pinned items
 - `s`: toggle sort order
 
+## Todos mode
+
+- `ctrl+t`: toggle the global open-tasks view
+- `j` / `k`: move through open tasks
+- `enter`: jump to the source note
+- `tt`: toggle the selected task
+- `ta`: add a task to the selected note
+- `te`: edit the selected task
+- `td`: delete the selected task
+- `tu`: set or clear the selected task due date
+
 ## Preview controls
 
 - `B`: toggle preview privacy
 - `L`: toggle preview line numbers
+- `n` / `N`: next or previous search match in preview
+- `]h` / `[h`: next or previous heading in preview
+- `]t` / `[t`: next or previous todo in preview
+- `tt`: toggle the current todo checkbox
+- `ta`: add a todo item
+- `te`: edit the current todo item
+- `td`: delete the current todo item
+- `tu`: set or clear the current todo due date
 - `ctrl+u` / `ctrl+d`: half-page scroll
 - `ctrl+b` / `ctrl+f`: page up/down
 
