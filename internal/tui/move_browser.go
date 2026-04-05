@@ -43,6 +43,7 @@ func (m *Model) openMoveBrowser() {
 	}
 
 	m.showMoveBrowser = true
+	m.moveBrowserMode = moveBrowserModeMove
 	m.moveDestCursor = 0
 	m.moveBrowserError = ""
 	m.setMoveDestinationCursor(m.preferredMoveDestinationPath(selection))
@@ -53,6 +54,7 @@ func (m *Model) openMoveBrowser() {
 
 func (m *Model) closeMoveBrowser(status string) {
 	m.showMoveBrowser = false
+	m.moveBrowserMode = moveBrowserModeMove
 	m.moveDestCursor = 0
 	m.moveBrowserError = ""
 	m.pendingG = false
@@ -63,34 +65,49 @@ func (m *Model) closeMoveBrowser(status string) {
 }
 
 func (m *Model) toggleMarkCurrent() {
-	if m.listMode != listModeNotes {
-		m.status = "multi-select is only available in notes tree"
-		return
-	}
-
-	item := m.currentTreeItem()
-	if item == nil {
-		m.status = "nothing selected"
-		return
-	}
-	if item.Kind == treeCategory && item.RelPath == "" {
-		m.status = "cannot mark root category"
-		return
-	}
-
 	if m.markedTreeItems == nil {
 		m.markedTreeItems = make(map[string]bool)
 	}
 
-	key := item.key()
-	if m.markedTreeItems[key] {
-		delete(m.markedTreeItems, key)
-		m.status = "unmarked: " + item.Name
+	switch m.listMode {
+	case listModeTemporary:
+		n := m.currentTempNote()
+		if n == nil {
+			m.status = "nothing selected"
+			return
+		}
+		key := tempMarkKey(n.RelPath)
+		if m.markedTreeItems[key] {
+			delete(m.markedTreeItems, key)
+			m.status = "unmarked: " + n.Title()
+			return
+		}
+		m.markedTreeItems[key] = true
+		m.status = "marked: " + n.Title()
+		return
+	case listModeNotes:
+		item := m.currentTreeItem()
+		if item == nil {
+			m.status = "nothing selected"
+			return
+		}
+		if item.Kind == treeCategory && item.RelPath == "" {
+			m.status = "cannot mark root category"
+			return
+		}
+		key := item.key()
+		if m.markedTreeItems[key] {
+			delete(m.markedTreeItems, key)
+			m.status = "unmarked: " + item.Name
+			return
+		}
+		m.markedTreeItems[key] = true
+		m.status = "marked: " + item.Name
+		return
+	default:
+		m.status = "multi-select is only available in notes and temporary views"
 		return
 	}
-
-	m.markedTreeItems[key] = true
-	m.status = "marked: " + item.Name
 }
 
 func (m *Model) clearMarkedTreeItems() {
@@ -102,9 +119,12 @@ func (m *Model) pruneMarkedTreeItems() {
 		return
 	}
 
-	existing := make(map[string]bool, len(m.notes)+len(m.categories))
+	existing := make(map[string]bool, len(m.notes)+len(m.tempNotes)+len(m.categories))
 	for _, n := range m.notes {
 		existing["n:"+n.RelPath] = true
+	}
+	for _, n := range m.tempNotes {
+		existing[tempMarkKey(n.RelPath)] = true
 	}
 	for _, c := range m.categories {
 		if c.RelPath == "" {
@@ -121,7 +141,7 @@ func (m *Model) pruneMarkedTreeItems() {
 }
 
 func (m Model) markedTreeCount() int {
-	return len(m.markedTreeItems)
+	return m.currentMarkedCount()
 }
 
 func (m Model) isMarkedTreeItem(item treeItem) bool {
@@ -359,6 +379,21 @@ func (m Model) preferredMoveDestinationPath(selection []treeItem) string {
 }
 
 func (m *Model) confirmMoveBrowser() tea.Cmd {
+	if m.moveBrowserMode == moveBrowserModePromoteTemporary {
+		items, err := m.buildPromoteTemporaryBatch(m.currentMoveDestinationPath())
+		if err != nil {
+			m.moveBrowserError = err.Error()
+			m.status = "promote failed: " + err.Error()
+			return nil
+		}
+		m.moveBrowserError = ""
+		if len(items) == 0 {
+			m.status = "nothing to promote"
+			return nil
+		}
+		return batchRelocateNotesCmd(items, countStatus(len(items), "promoted 1 temporary note", "promoted %d temporary notes"))
+	}
+
 	items, err := m.buildMoveBatch(m.currentMoveDestinationPath())
 	if err != nil {
 		m.moveBrowserError = err.Error()

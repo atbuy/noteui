@@ -484,8 +484,16 @@ sync_import = ["I"]
   Default: `["A"]`
 - `toggle_select`
   Default: `["v"]`
+- `clear_marks`
+  Default: `["V"]`
 - `pin`
   Default: `["p"]`
+- `promote_temporary`
+  Default: `["M"]`
+- `archive_temporary`
+  Default: `["ctrl+a"]`
+- `move_to_temporary`
+  Default: `["ctrl+r"]`
 - `show_pins`
   Default: `["P"]`
 - `show_todos`

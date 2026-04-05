@@ -31,6 +31,12 @@ Temporary notes live under:
 <notes-root>/.tmp
 ```
 
+Archived temporary notes created from the in-app archive action are moved into:
+
+```text
+<notes-root>/archive/tmp
+```
+
 ## Deleted notes and categories
 
 Deleted content is moved to the user trash.

@@ -512,3 +512,19 @@ func writeFile(t *testing.T, path, content string) {
 		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
 	}
 }
+
+func TestMoveNoteBetweenRootsMovesAcrossRoots(t *testing.T) {
+	root := t.TempDir()
+	srcRoot := TempRoot(root)
+	dstRoot := filepath.Join(root, "archive")
+	require.NoError(t, os.MkdirAll(srcRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcRoot, "draft.md"), []byte("# Draft\n"), 0o644))
+
+	err := MoveNoteBetweenRoots(srcRoot, "draft.md", dstRoot, "tmp/draft.md")
+	require.NoError(t, err)
+
+	_, err = os.Stat(filepath.Join(srcRoot, "draft.md"))
+	require.ErrorIs(t, err, os.ErrNotExist)
+	_, err = os.Stat(filepath.Join(dstRoot, "tmp", "draft.md"))
+	require.NoError(t, err)
+}

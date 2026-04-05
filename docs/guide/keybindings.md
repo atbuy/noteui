@@ -28,14 +28,22 @@ This page documents the default keybindings that most users care about first.
 - `C`: create category
 - `R`: rename
 - `m`: move
-- `d`: delete
-- `A`: add tag
+- `d`: delete the current item, or trash marked notes after confirmation
+- `A`: add tags to the current note or marked notes
+- `v`: mark the current note/category/temp note
+- `V`: clear current marks
 
 ## Pins and sorting
 
-- `p`: pin current item
+- `p`: pin current item or marked notes
 - `P`: show pinned items
 - `s`: toggle sort order
+
+## Temporary lifecycle
+
+- `M`: promote the selected temporary note or marked temp-note batch into main notes
+- `ctrl+a`: archive the selected temporary note or marked temp-note batch into `archive/tmp/`
+- `ctrl+r`: move the selected note or marked note batch into temporary notes
 
 ## Todos mode
 

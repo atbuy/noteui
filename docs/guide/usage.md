@@ -61,6 +61,12 @@ Move operations stay inside the notes root.
 
     noteui deletes into the user trash instead of immediately removing content permanently.
 
+Marked notes let the existing note actions work on a batch:
+
+- `p`: pin or unpin marked notes
+- `A`: add tags to marked notes
+- `d`: trash marked notes after the same confirmation step
+
 ## Pins
 
 - `p`: pin the current note or category
@@ -80,6 +86,15 @@ This is useful for:
 - material you do not want mixed with your main note hierarchy yet
 
 Switch between your normal notes and temporary notes using `t` when focused on the tree.
+
+Temporary-note lifecycle actions now include:
+
+- `M`: promote the current temporary note or marked temp-note batch into the main notes tree
+- `ctrl+a`: archive the current temporary note or marked batch into `archive/tmp/`
+- `v`: mark temporary notes for batch actions
+- `V`: clear current marks
+
+Normal notes can also be sent back into temporary storage with `ctrl+r`.
 
 ## Todos
 

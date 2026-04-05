@@ -873,11 +873,15 @@ func (m Model) renderTemporaryListView() string {
 		}
 
 		label := trimOrPad(pinMark+iconNote+" "+n.Title(), rowWidth-2)
+		marked := m.isMarkedTempNote(n.RelPath)
 
 		if i == m.tempCursor {
 			fg := selectedFgColor
 			if m.isPinnedTemporaryNote(n.RelPath) {
 				fg = pinnedNoteColor
+			}
+			if marked {
+				fg = markedItemColor
 			}
 			lines = append(lines, lipgloss.NewStyle().
 				Width(rowWidth).
@@ -890,7 +894,10 @@ func (m Model) renderTemporaryListView() string {
 		}
 
 		rowStyle := treeNoteStyle
-		if m.isPinnedTemporaryNote(n.RelPath) {
+		switch {
+		case marked:
+			rowStyle = rowStyle.Copy().Foreground(markedItemColor)
+		case m.isPinnedTemporaryNote(n.RelPath):
 			rowStyle = rowStyle.Copy().Foreground(pinnedNoteColor)
 		}
 
@@ -1365,9 +1372,9 @@ func (m Model) renderMoveBrowserModal() string {
 		Render(
 			lipgloss.JoinVertical(
 				lipgloss.Left,
-				m.renderModalTitle("Move", innerWidth),
+				m.renderModalTitle(m.moveBrowserTitle(), innerWidth),
 				m.renderModalBlank(innerWidth),
-				m.renderModalHint("Choose an existing destination category for the current item or marked batch.", innerWidth),
+				m.renderModalHint(m.moveBrowserHint(), innerWidth),
 				m.renderModalBlank(innerWidth),
 				lipgloss.JoinVertical(lipgloss.Left, lines...),
 				m.renderModalBlank(innerWidth),
@@ -1379,7 +1386,7 @@ func (m Model) renderMoveBrowserModal() string {
 					return lipgloss.JoinVertical(lipgloss.Left, m.renderModalBlank(innerWidth), errorLine)
 				}(),
 				m.renderModalBlank(innerWidth),
-				m.renderModalFooter("Enter to move • h/l collapse/expand • Esc to cancel", innerWidth),
+				m.renderModalFooter(m.moveBrowserFooter(), innerWidth),
 			),
 		)
 
@@ -1834,6 +1841,9 @@ func (m Model) leftPanelTitle() string {
 	switch m.listMode {
 	case listModeTemporary:
 		title = fmt.Sprintf("Temporary (%d)", len(m.filteredTempNotes()))
+		if marked := m.currentMarkedCount(); marked > 0 {
+			title += fmt.Sprintf(" • marked %d", marked)
+		}
 	case listModePins:
 		title = fmt.Sprintf("Pins (%d)", len(m.filteredPinnedItems()))
 	case listModeTodos:
@@ -1866,7 +1876,7 @@ func (m Model) renderLeftPaneHint(width int) string {
 	if m.focus == focusTree {
 		switch m.listMode {
 		case listModeTemporary:
-			hint = "focused • / search • N new temp • t back to notes"
+			hint = "focused • / search • M promote • ctrl+a archive • t back to notes"
 		case listModePins:
 			hint = "focused • / search • p pin current note or category"
 		case listModeTodos:

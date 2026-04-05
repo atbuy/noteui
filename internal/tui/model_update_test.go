@@ -1075,3 +1075,31 @@ func TestPreviewRenderedAppliesTodoDueDateHintsWithoutTodoNav(t *testing.T) {
 	plainRendered := stripANSI(rendered)
 	require.Contains(t, plainRendered, "Ship release [due:2020-01-01]")
 }
+
+func TestToggleSelectWorksInTemporaryMode(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.tempNotes = []notes.Note{{RelPath: "inbox.md", Path: filepath.Join(notes.TempRoot(m.rootDir), "inbox.md"), Name: "inbox.md", TitleText: "Inbox"}}
+
+	m = updateModel(m, keyMsg("v"))
+	require.True(t, m.markedTreeItems[tempMarkKey("inbox.md")])
+}
+
+func TestPromoteTemporaryKeyOpensMoveBrowser(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.tempNotes = []notes.Note{{RelPath: "inbox.md", Path: filepath.Join(notes.TempRoot(m.rootDir), "inbox.md"), Name: "inbox.md", TitleText: "Inbox"}}
+
+	m = updateModel(m, keyMsg("M"))
+	require.True(t, m.showMoveBrowser)
+	require.Equal(t, moveBrowserModePromoteTemporary, m.moveBrowserMode)
+}
+
+func TestClearMarksKeyClearsTemporaryMarks(t *testing.T) {
+	m := newTestModel(t)
+	m.listMode = listModeTemporary
+	m.markedTreeItems = map[string]bool{tempMarkKey("inbox.md"): true}
+
+	m = updateModel(m, keyMsg("V"))
+	require.Empty(t, m.markedTreeItems)
+}

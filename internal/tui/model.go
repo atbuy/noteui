@@ -129,9 +129,10 @@ type categoryRenamedMsg struct {
 }
 
 type deletePending struct {
-	kind    deleteTargetKind
-	relPath string
-	name    string
+	kind      deleteTargetKind
+	relPath   string
+	name      string
+	notePaths []string
 }
 
 type noteDeletedMsg struct {
@@ -315,6 +316,7 @@ type Model struct {
 	categoryInput      textinput.Model
 
 	showMoveBrowser  bool
+	moveBrowserMode  moveBrowserMode
 	moveDestCursor   int
 	moveBrowserError string
 
@@ -1318,6 +1320,25 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
+	case notesTaggedMsg:
+		if msg.err != nil {
+			m.status = "add tag failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showAddTag = false
+		m.tagInput.Blur()
+		m.tagInput.SetValue("")
+		m.previewPath = ""
+		m.preserveCursor = m.treeCursor
+		if len(msg.paths) == 1 && len(msg.tags) == 1 {
+			m.status = "added tag: " + msg.tags[0]
+		} else if len(msg.tags) == 1 {
+			m.status = fmt.Sprintf("added %q to %d notes", msg.tags[0], len(msg.paths))
+		} else {
+			m.status = fmt.Sprintf("added %d tags to %d notes", len(msg.tags), len(msg.paths))
+		}
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+
 	case categoryRenamedMsg:
 		if msg.err != nil {
 			m.status = "rename failed: " + msg.err.Error()
@@ -1372,14 +1393,42 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
+	case notesRelocatedMsg:
+		if msg.err != nil {
+			m.status = "move failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.closeMoveBrowser("")
+		m.preserveCursor = m.treeCursor
+		for _, item := range msg.items {
+			m.rewritePinnedNotePath(item.oldPinPath, item.newPinPath)
+		}
+		m.clearMarkedTreeItems()
+		_ = m.saveTreeState()
+		m.status = msg.status
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+
 	case noteDeletedMsg:
 		if msg.err != nil {
 			m.status = "delete failed: " + msg.err.Error()
 			return m, nil
 		}
 		m.deletePending = nil
+		m.removePinnedForAbsolutePath(msg.path)
 		m.preserveCursor = m.treeCursor
 		m.status = "deleted note: " + msg.path
+		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
+
+	case notesDeletedMsg:
+		if msg.err != nil {
+			m.status = "delete failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.deletePending = nil
+		m.removePinnedForPaths(msg.paths)
+		m.clearMarkedTreeItems()
+		m.preserveCursor = m.treeCursor
+		m.status = countStatus(len(msg.paths), "deleted 1 note", "deleted %d notes")
 		return m, batchCmds(refreshAllCmd(m.rootDir), m.scheduleSync())
 
 	case categoryDeletedMsg:
@@ -1902,7 +1951,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if m.showMoveBrowser {
 			switch {
 			case msg.String() == "esc":
-				m.closeMoveBrowser("move cancelled")
+				m.closeMoveBrowser(m.moveBrowserCancelStatus())
 				return m, nil
 			case msg.String() == "enter":
 				return m, m.confirmMoveBrowser()
@@ -2038,9 +2087,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.status = "add tag cancelled"
 					return m, nil
 				}
-				path := m.currentNotePath()
-				if path == "" {
-					m.status = "no note selected"
+				paths, err := m.selectedTaggableNotePaths()
+				if err != nil {
+					m.status = err.Error()
 					return m, nil
 				}
 				tags := parseTagInput(value)
@@ -2051,7 +2100,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.status = "add tag cancelled"
 					return m, nil
 				}
-				return m, addNoteTagsCmd(path, tags)
+				if len(paths) == 1 {
+					return m, addNoteTagsCmd(paths[0], tags)
+				}
+				return m, addNoteTagsBatchCmd(paths, tags)
 			}
 
 			if isMouseEscapeFragment(msg) {
@@ -2730,6 +2782,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if key.Matches(msg, keys.ClearMarks) {
+			m.clearAllMarks()
+			return m, nil
+		}
+
 		if key.Matches(msg, keys.Rename) {
 			m.armRenameCurrent()
 			return m, nil
@@ -2816,6 +2873,19 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if key.Matches(msg, keys.TogglePreviewLineNumbers) {
 			m.togglePreviewLineNumbers()
 			return m, nil
+		}
+
+		if key.Matches(msg, keys.PromoteTemporary) {
+			m.openPromoteTemporaryBrowser()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.ArchiveTemporary) {
+			return m, m.archiveTemporarySelection()
+		}
+
+		if key.Matches(msg, keys.MoveToTemporary) {
+			return m, m.moveSelectionToTemporary()
 		}
 
 		switch {

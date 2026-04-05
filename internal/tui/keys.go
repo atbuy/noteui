@@ -27,7 +27,11 @@ type keyMap struct {
 	Rename                   key.Binding
 	AddTag                   key.Binding
 	ToggleSelect             key.Binding
+	ClearMarks               key.Binding
 	Pin                      key.Binding
+	PromoteTemporary         key.Binding
+	ArchiveTemporary         key.Binding
+	MoveToTemporary          key.Binding
 	ToggleSync               key.Binding
 	MakeShared               key.Binding
 	ToggleTemporary          key.Binding
@@ -148,9 +152,25 @@ var keys = keyMap{
 		key.WithKeys("v"),
 		key.WithHelp("v", "Mark item"),
 	),
+	ClearMarks: key.NewBinding(
+		key.WithKeys("V"),
+		key.WithHelp("V", "Clear marks"),
+	),
 	Pin: key.NewBinding(
 		key.WithKeys("p"),
 		key.WithHelp("p", "Pin"),
+	),
+	PromoteTemporary: key.NewBinding(
+		key.WithKeys("M"),
+		key.WithHelp("M", "Promote temp"),
+	),
+	ArchiveTemporary: key.NewBinding(
+		key.WithKeys("ctrl+a"),
+		key.WithHelp("ctrl+a", "Archive temp"),
+	),
+	MoveToTemporary: key.NewBinding(
+		key.WithKeys("ctrl+r"),
+		key.WithHelp("ctrl+r", "Move to temp"),
 	),
 	ToggleSync: key.NewBinding(
 		key.WithKeys("S"),
@@ -321,7 +341,11 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.Rename, cfg.Rename)
 	apply(&keys.AddTag, cfg.AddTag)
 	apply(&keys.ToggleSelect, cfg.ToggleSelect)
+	apply(&keys.ClearMarks, cfg.ClearMarks)
 	apply(&keys.Pin, cfg.Pin)
+	apply(&keys.PromoteTemporary, cfg.PromoteTemporary)
+	apply(&keys.ArchiveTemporary, cfg.ArchiveTemporary)
+	apply(&keys.MoveToTemporary, cfg.MoveToTemporary)
 	apply(&keys.ToggleSync, cfg.ToggleSync)
 	apply(&keys.MakeShared, cfg.MakeShared)
 	apply(&keys.ToggleTemporary, cfg.ToggleTemporary)

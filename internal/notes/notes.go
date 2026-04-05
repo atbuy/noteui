@@ -297,18 +297,22 @@ func DeleteNote(path string) error {
 }
 
 func MoveNote(root, oldRelPath, newRelPath string) error {
+	return MoveNoteBetweenRoots(root, oldRelPath, root, newRelPath)
+}
+
+func MoveNoteBetweenRoots(srcRoot, oldRelPath, dstRoot, newRelPath string) error {
 	oldRelPath = cleanRelativePath(oldRelPath, true)
 	newRelPath = cleanRelativePath(newRelPath, true)
 
 	if oldRelPath == "" || newRelPath == "" {
 		return errors.New("note path cannot be empty")
 	}
-	if oldRelPath == newRelPath {
+
+	oldPath := filepath.Join(srcRoot, oldRelPath)
+	newPath := filepath.Join(dstRoot, newRelPath)
+	if oldPath == newPath {
 		return nil
 	}
-
-	oldPath := filepath.Join(root, oldRelPath)
-	newPath := filepath.Join(root, newRelPath)
 
 	if err := os.MkdirAll(filepath.Dir(newPath), 0o755); err != nil {
 		return err

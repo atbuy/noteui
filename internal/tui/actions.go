@@ -131,16 +131,32 @@ func (m *Model) armDeleteCurrent() {
 	}
 
 	if m.listMode == listModeTemporary {
-		n := m.currentTempNote()
-		if n == nil {
+		refs, err := m.selectedTempNotesForAction()
+		if err != nil {
+			m.status = err.Error()
 			return
 		}
-		m.deletePending = &deletePending{
-			kind:    deleteTargetNote,
-			relPath: n.Path,
-			name:    n.Name,
+		paths := make([]string, 0, len(refs))
+		for _, ref := range refs {
+			paths = append(paths, ref.path)
 		}
-		m.status = "press d again to trash temporary note: " + n.Name
+		m.deletePending = &deletePending{kind: deleteTargetNote, notePaths: paths}
+		m.status = countStatus(len(paths), "press d again to trash temporary note", "press d again to trash %d temporary notes")
+		return
+	}
+
+	if m.listMode == listModeNotes && m.hasMarksInCurrentMode() {
+		refs, err := m.selectedMainNotesForAction()
+		if err != nil {
+			m.status = err.Error()
+			return
+		}
+		paths := make([]string, 0, len(refs))
+		for _, ref := range refs {
+			paths = append(paths, ref.path)
+		}
+		m.deletePending = &deletePending{kind: deleteTargetNote, notePaths: paths}
+		m.status = countStatus(len(paths), "press d again to trash note", "press d again to trash %d notes")
 		return
 	}
 
@@ -184,6 +200,9 @@ func (m Model) confirmDeleteCurrent() tea.Cmd {
 
 	switch m.deletePending.kind {
 	case deleteTargetNote:
+		if len(m.deletePending.notePaths) > 0 {
+			return deleteNotesCmd(m.deletePending.notePaths)
+		}
 		return deleteNoteCmd(m.deletePending.relPath)
 	case deleteTargetCategory:
 		return deleteCategoryCmd(m.rootDir, m.deletePending.relPath)
@@ -497,9 +516,8 @@ func (m *Model) armAddTagCurrent() {
 	if m.blockRemoteOnlyAction() {
 		return
 	}
-	path := m.currentNotePath()
-	if path == "" {
-		m.status = "no note selected"
+	if _, err := m.selectedTaggableNotePaths(); err != nil {
+		m.status = err.Error()
 		return
 	}
 	m.showAddTag = true

@@ -34,10 +34,14 @@ const (
 	cmdNewCategory           = "new_category"
 	cmdMoveCurrent           = "move_current"
 	cmdMarkCurrent           = "mark_current"
+	cmdClearMarks            = "clear_marks"
 	cmdRenameCurrent         = "rename_current"
 	cmdAddTags               = "add_tags"
 	cmdTrashCurrent          = "trash_current"
 	cmdTogglePin             = "toggle_pin"
+	cmdPromoteTemporary      = "promote_temporary"
+	cmdArchiveTemporary      = "archive_temporary"
+	cmdMoveToTemporary       = "move_to_temporary"
 	cmdToggleSort            = "toggle_sort"
 	cmdRefresh               = "refresh"
 	cmdTogglePrivacy         = "toggle_privacy"
@@ -199,7 +203,9 @@ func paletteCommands(m Model) []paletteCommand {
 	cmds = appendPaletteCommand(cmds, m.canMoveCurrent(),
 		paletteCommand{name: "Move Current Item", desc: "Move the selected item", category: "selection", action: cmdMoveCurrent})
 	cmds = appendPaletteCommand(cmds, m.canMarkCurrent(),
-		paletteCommand{name: "Mark Current Item", desc: "Mark or unmark the selected tree item", category: "selection", action: cmdMarkCurrent})
+		paletteCommand{name: "Mark Current Item", desc: "Mark or unmark the selected item", category: "selection", action: cmdMarkCurrent})
+	cmds = appendPaletteCommand(cmds, m.canClearMarks(),
+		paletteCommand{name: "Clear Marks", desc: "Clear all marked items", category: "selection", action: cmdClearMarks})
 	cmds = appendPaletteCommand(cmds, m.canRenameCurrent(),
 		paletteCommand{name: "Rename Current Item", desc: "Rename the selected item", category: "selection", action: cmdRenameCurrent})
 	cmds = appendPaletteCommand(cmds, m.canAddTagsCurrent(),
@@ -207,7 +213,13 @@ func paletteCommands(m Model) []paletteCommand {
 	cmds = appendPaletteCommand(cmds, m.canTrashCurrent(),
 		paletteCommand{name: "Trash Current Item", desc: "Trash the selected note or category", category: "selection", action: cmdTrashCurrent})
 	cmds = appendPaletteCommand(cmds, m.canTogglePinCurrent(),
-		paletteCommand{name: "Toggle Pin", desc: "Pin or unpin the current item", category: "selection", action: cmdTogglePin})
+		paletteCommand{name: "Toggle Pin", desc: "Pin or unpin the current item or marked notes", category: "selection", action: cmdTogglePin})
+	cmds = appendPaletteCommand(cmds, m.canPromoteTemporary(),
+		paletteCommand{name: "Promote to Notes", desc: "Promote the selected temporary note or marked batch into main notes", category: "selection", action: cmdPromoteTemporary})
+	cmds = appendPaletteCommand(cmds, m.canArchiveTemporary(),
+		paletteCommand{name: "Archive Temporary Notes", desc: "Archive the selected temporary note or marked batch", category: "selection", action: cmdArchiveTemporary})
+	cmds = appendPaletteCommand(cmds, m.canMoveSelectionToTemporary(),
+		paletteCommand{name: "Move Notes to Temporary", desc: "Move the selected note or marked batch into temporary notes", category: "selection", action: cmdMoveToTemporary})
 	cmds = appendPaletteCommand(cmds, m.canToggleSyncCurrent(),
 		paletteCommand{name: "Toggle Note Sync", desc: "Toggle sync for the selected note", category: "sync", action: cmdToggleSync})
 	cmds = appendPaletteCommand(cmds, m.canMakeSharedCurrent(),
@@ -261,14 +273,18 @@ func (m Model) canMoveCurrent() bool {
 }
 
 func (m Model) canMarkCurrent() bool {
-	if m.listMode != listModeNotes {
+	switch m.listMode {
+	case listModeTemporary:
+		return m.currentTempNote() != nil
+	case listModeNotes:
+		item := m.currentTreeItem()
+		if item == nil {
+			return false
+		}
+		return !(item.Kind == treeCategory && item.RelPath == "")
+	default:
 		return false
 	}
-	item := m.currentTreeItem()
-	if item == nil {
-		return false
-	}
-	return !(item.Kind == treeCategory && item.RelPath == "")
 }
 
 func (m Model) canRenameCurrent() bool {
@@ -286,7 +302,11 @@ func (m Model) canRenameCurrent() bool {
 }
 
 func (m Model) canAddTagsCurrent() bool {
-	return m.currentRemoteOnlyNote() == nil && strings.TrimSpace(m.currentNotePath()) != ""
+	if m.currentRemoteOnlyNote() != nil {
+		return false
+	}
+	_, err := m.selectedTaggableNotePaths()
+	return err == nil
 }
 
 func (m Model) canTrashCurrent() bool {
@@ -294,7 +314,12 @@ func (m Model) canTrashCurrent() bool {
 		return m.currentPinItem() != nil
 	}
 	if m.listMode == listModeTemporary {
-		return m.currentTempNote() != nil
+		_, err := m.selectedTempNotesForAction()
+		return err == nil
+	}
+	if m.listMode == listModeNotes && m.hasMarksInCurrentMode() {
+		_, err := m.selectedMainNotesForAction()
+		return err == nil
 	}
 	item := m.currentTreeItem()
 	if item == nil {
@@ -311,7 +336,12 @@ func (m Model) canTogglePinCurrent() bool {
 		return m.currentPinItem() != nil
 	}
 	if m.listMode == listModeTemporary {
-		return m.currentTempNote() != nil
+		_, err := m.selectedTempNotesForAction()
+		return err == nil
+	}
+	if m.listMode == listModeNotes && m.hasMarksInCurrentMode() {
+		_, err := m.selectedMainNotesForAction()
+		return err == nil
 	}
 	item := m.currentTreeItem()
 	return item != nil && item.Kind != treeRemoteNote && !(item.Kind == treeCategory && item.RelPath == "")
@@ -1010,6 +1040,9 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 	case cmdMarkCurrent:
 		m.toggleMarkCurrent()
 		return nil
+	case cmdClearMarks:
+		m.clearAllMarks()
+		return nil
 	case cmdRenameCurrent:
 		m.armRenameCurrent()
 		return nil
@@ -1024,6 +1057,13 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 			return nil
 		}
 		return m.scheduleSync()
+	case cmdPromoteTemporary:
+		m.openPromoteTemporaryBrowser()
+		return nil
+	case cmdArchiveTemporary:
+		return m.archiveTemporarySelection()
+	case cmdMoveToTemporary:
+		return m.moveSelectionToTemporary()
 	case cmdToggleSort:
 		m.toggleSortOrder()
 		return nil

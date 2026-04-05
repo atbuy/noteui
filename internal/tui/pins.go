@@ -71,21 +71,43 @@ func (m *Model) togglePinCurrent() error {
 	}
 
 	if m.listMode == listModeTemporary {
-		n := m.currentTempNote()
-		if n == nil {
+		refs, err := m.selectedTempNotesForAction()
+		if err != nil {
+			m.status = err.Error()
 			return nil
 		}
-		pinKey := tempPinnedKey(n.RelPath)
-		if m.pinnedNotes[pinKey] {
-			delete(m.pinnedNotes, pinKey)
-			m.status = "unpinned temporary note: " + n.Title()
-		} else {
-			m.pinnedNotes[pinKey] = true
-			m.status = "pinned temporary note: " + n.Title()
+		for _, ref := range refs {
+			if m.pinnedNotes[ref.pinKey] {
+				delete(m.pinnedNotes, ref.pinKey)
+			} else {
+				m.pinnedNotes[ref.pinKey] = true
+			}
 		}
 		if err := m.saveTreeState(); err != nil {
 			return err
 		}
+		m.status = countStatus(len(refs), "toggled pin for 1 temporary note", "toggled pins for %d temporary notes")
+		return nil
+	}
+
+	if m.listMode == listModeNotes && m.hasMarksInCurrentMode() {
+		refs, err := m.selectedMainNotesForAction()
+		if err != nil {
+			m.status = err.Error()
+			return nil
+		}
+		for _, ref := range refs {
+			if m.pinnedNotes[ref.pinKey] {
+				delete(m.pinnedNotes, ref.pinKey)
+			} else {
+				m.pinnedNotes[ref.pinKey] = true
+			}
+		}
+		if err := m.saveTreeState(); err != nil {
+			return err
+		}
+		m.rebuildTree()
+		m.status = countStatus(len(refs), "toggled pin for 1 note", "toggled pins for %d notes")
 		return nil
 	}
 

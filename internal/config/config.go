@@ -124,7 +124,11 @@ type KeysConfig struct {
 	Rename                   []string `toml:"rename"`
 	AddTag                   []string `toml:"add_tag"`
 	ToggleSelect             []string `toml:"toggle_select"`
+	ClearMarks               []string `toml:"clear_marks"`
 	Pin                      []string `toml:"pin"`
+	PromoteTemporary         []string `toml:"promote_temporary"`
+	ArchiveTemporary         []string `toml:"archive_temporary"`
+	MoveToTemporary          []string `toml:"move_to_temporary"`
 	ToggleSync               []string `toml:"toggle_sync"`
 	MakeShared               []string `toml:"make_shared"`
 	ToggleTemporary          []string `toml:"toggle_temporary"`

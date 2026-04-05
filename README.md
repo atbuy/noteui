@@ -30,7 +30,8 @@ Recommended entry points:
 - search by title, path, content preview, and tags
 - create, rename, move, and delete notes or categories
 - keep temporary notes separate from your main notes
-- create and manage todo notes
+- create and manage todo notes, with a global open-tasks view
+- promote, archive, and batch-process temporary notes
 - pin important notes and categories
 - optional SSH-based sync for `sync: synced` notes with tree sync markers
 - customize theme, preview behavior, icons, and keybindings
