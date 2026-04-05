@@ -164,11 +164,20 @@ func (m *Model) syncStateFromExpanded() {
 	sort.Strings(m.state.CollapsedCategories)
 }
 
-func (m *Model) saveTreeState() error {
+func (m *Model) syncStateForSave() {
 	m.syncStateFromPins()
 	m.syncStateFromExpanded()
 	m.state.SortByModTime = m.sortByModTime
-	if err := state.Save(m.state); err != nil {
+	m.state.RecentCommands = normalizePaletteRecentCommands(m.state.RecentCommands)
+}
+
+func (m *Model) saveLocalState() error {
+	m.syncStateForSave()
+	return state.Save(m.state)
+}
+
+func (m *Model) saveTreeState() error {
+	if err := m.saveLocalState(); err != nil {
 		return err
 	}
 	if notesync.HasSyncProfile(m.cfg.Sync) && len(m.notes) > 0 {

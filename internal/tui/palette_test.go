@@ -173,3 +173,78 @@ func TestRenderCommandPaletteModalShowsNewTitleAndPrompt(t *testing.T) {
 	}
 	require.True(t, foundInputLine)
 }
+
+func TestPaletteFuzzyQueryMatchesCommand(t *testing.T) {
+	m := newTestModel(t)
+	m.openCommandPalette()
+	m.commandPaletteInput.SetValue("shlp")
+	m.rebuildPaletteFiltered()
+	require.NotEmpty(t, m.commandPaletteFiltered)
+	require.Equal(t, paletteKindCommand, m.commandPaletteFiltered[0].kind)
+	require.Equal(t, "Show Help", m.commandPaletteFiltered[0].title)
+}
+
+func TestPaletteRecentCommandsBoostMatchingCommands(t *testing.T) {
+	m := newTestModel(t)
+	m.state.RecentCommands = []string{cmdShowPins}
+	m.openCommandPalette()
+	m.commandPaletteInput.SetValue("show")
+	m.rebuildPaletteFiltered()
+	require.NotEmpty(t, m.commandPaletteFiltered)
+	require.Equal(t, "Show Pins", m.commandPaletteFiltered[0].title)
+}
+
+func TestCommitPaletteSelectionRecordsRecentCommand(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	m.openCommandPalette()
+	m.commandPaletteInput.SetValue("show help")
+	m.rebuildPaletteFiltered()
+	require.NotEmpty(t, m.commandPaletteFiltered)
+	_ = m.commitPaletteSelection()
+	require.Equal(t, []string{cmdShowHelp}, m.state.RecentCommands)
+}
+
+func TestRenderCommandPaletteModalShowsGroupedSections(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	m.notes = []notes.Note{{RelPath: "work/testing.md", Name: "testing.md", TitleText: "Testing"}}
+	m.tempNotes = []notes.Note{{RelPath: "scratch.md", Name: "scratch.md", TitleText: "Scratch"}}
+	n := m.notes[0]
+	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
+	m.openCommandPalette()
+
+	sections := make(map[paletteSection]bool)
+	for _, item := range m.commandPaletteFiltered {
+		sections[item.section] = true
+	}
+	require.True(t, sections[paletteSectionSuggested])
+	require.True(t, sections[paletteSectionCommand])
+	require.True(t, sections[paletteSectionNote])
+	require.True(t, sections[paletteSectionTempNote])
+
+	rendered := stripANSI(m.renderCommandPaletteModal())
+	require.Contains(t, rendered, "Suggested actions")
+	require.Contains(t, rendered, "Commands")
+}
+
+func TestRenderCommandPaletteModalKeepsTypedTextOnPromptLine(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	m.openCommandPalette()
+	m.commandPaletteInput.SetValue("q")
+	m.rebuildPaletteFiltered()
+
+	rendered := stripANSI(m.renderCommandPaletteModal())
+	found := false
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.Contains(line, "> q") {
+			found = true
+			break
+		}
+	}
+	require.True(t, found)
+}

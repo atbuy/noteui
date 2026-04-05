@@ -263,20 +263,20 @@ type Model struct {
 	watcher     interface{ Close() error }
 	watchEvents <-chan teaMsg
 
-	focus              paneFocus
-	pendingG           bool
-	pendingZ           bool
-	pendingBracketDir  string
-	previewHover       bool
-	previewPaneX       int
-	previewPaneY       int
-	previewPaneW       int
-	previewPaneH       int
-	previewHeadings    []int
-	previewMatches       []previewMatch
-	previewMatchIndex    int
-	previewBaseContent   string
-	pendingPreviewCmd    tea.Cmd
+	focus                 paneFocus
+	pendingG              bool
+	pendingZ              bool
+	pendingBracketDir     string
+	previewHover          bool
+	previewPaneX          int
+	previewPaneY          int
+	previewPaneW          int
+	previewPaneH          int
+	previewHeadings       []int
+	previewMatches        []previewMatch
+	previewMatchIndex     int
+	previewBaseContent    string
+	pendingPreviewCmd     tea.Cmd
 	pendingPreviewYOffset int
 
 	state       state.State
@@ -486,6 +486,7 @@ func New(root, startupError string, cfg config.Config, version string) Model {
 	vp := viewport.New(0, 0)
 
 	st, _ := state.Load()
+	st.RecentCommands = normalizePaletteRecentCommands(st.RecentCommands)
 
 	pinnedNotes := make(map[string]bool, len(st.PinnedNotes))
 	for _, p := range st.PinnedNotes {

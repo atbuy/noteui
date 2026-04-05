@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -13,7 +14,10 @@ import (
 	notesync "atbuy/noteui/internal/sync"
 )
 
-const paletteMaxVisible = 12
+const (
+	paletteMaxVisible        = 12
+	paletteMaxRecentCommands = 8
+)
 
 // paletteCommand holds the definition for a single app command.
 type paletteCommand struct {
@@ -66,13 +70,64 @@ const (
 	paletteKindCommand                     // named app command
 )
 
+type paletteSection int
+
+const (
+	paletteSectionSuggested paletteSection = iota
+	paletteSectionCommand
+	paletteSectionNote
+	paletteSectionTempNote
+)
+
 // paletteItem is one entry shown in the command palette.
 type paletteItem struct {
-	kind  paletteKind
-	title string     // primary display (note title)
-	sub   string     // secondary display (relPath, or ".tmp/relPath")
-	note  notes.Note // valid for paletteKindNote and paletteKindTempNote
-	cmd   paletteCommand
+	kind    paletteKind
+	section paletteSection
+	score   int
+	title   string     // primary display (note title)
+	sub     string     // secondary display (relPath, or ".tmp/relPath")
+	note    notes.Note // valid for paletteKindNote and paletteKindTempNote
+	cmd     paletteCommand
+}
+
+type paletteSearchField struct {
+	text   string
+	weight int
+}
+
+func normalizePaletteRecentCommands(actions []string) []string {
+	if len(actions) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(actions))
+	out := make([]string, 0, min(len(actions), paletteMaxRecentCommands))
+	for _, action := range actions {
+		action = strings.TrimSpace(action)
+		if action == "" || seen[action] {
+			continue
+		}
+		seen[action] = true
+		out = append(out, action)
+		if len(out) >= paletteMaxRecentCommands {
+			break
+		}
+	}
+	return out
+}
+
+func paletteSectionTitle(section paletteSection) string {
+	switch section {
+	case paletteSectionSuggested:
+		return "Suggested actions"
+	case paletteSectionCommand:
+		return "Commands"
+	case paletteSectionNote:
+		return "Notes"
+	case paletteSectionTempNote:
+		return "Temporary notes"
+	default:
+		return "Results"
+	}
 }
 
 // isConflictCopy reports whether relPath matches the conflict copy naming pattern
@@ -328,23 +383,32 @@ func (m *Model) rebuildPaletteFiltered() {
 	filtered := make([]paletteItem, 0, len(m.commandPaletteItems)+32)
 
 	for _, item := range m.commandPaletteItems {
-		if query == "" || m.noteMatches(item.note, query) {
-			filtered = append(filtered, item)
+		score, ok := m.paletteItemScore(item, query)
+		if !ok {
+			continue
 		}
+		item.score = score
+		item.section = m.paletteSectionForItem(item, query)
+		filtered = append(filtered, item)
 	}
 	for _, cmd := range paletteCommands(*m) {
-		if query == "" || paletteCommandMatches(cmd, query) {
-			filtered = append(filtered, paletteItem{
-				kind:  paletteKindCommand,
-				title: cmd.name,
-				sub:   cmd.category,
-				cmd:   cmd,
-			})
+		item := paletteItem{
+			kind:  paletteKindCommand,
+			title: cmd.name,
+			sub:   cmd.category,
+			cmd:   cmd,
 		}
+		score, ok := m.paletteItemScore(item, query)
+		if !ok {
+			continue
+		}
+		item.score = score + m.paletteCommandBoost(cmd, query)
+		item.section = m.paletteSectionForItem(item, query)
+		filtered = append(filtered, item)
 	}
 
 	sort.SliceStable(filtered, func(i, j int) bool {
-		return paletteItemLess(filtered[i], filtered[j], query)
+		return m.paletteItemLess(filtered[i], filtered[j])
 	})
 
 	m.commandPaletteFiltered = filtered
@@ -353,28 +417,309 @@ func (m *Model) rebuildPaletteFiltered() {
 	}
 }
 
-func paletteCommandMatches(cmd paletteCommand, query string) bool {
+func (m Model) paletteItemScore(item paletteItem, query string) (int, bool) {
+	switch item.kind {
+	case paletteKindCommand:
+		return m.paletteCommandScore(item.cmd, query)
+	case paletteKindNote, paletteKindTempNote:
+		return m.paletteNoteScore(item.note, query)
+	default:
+		return 0, false
+	}
+}
+
+func (m Model) paletteNoteScore(n notes.Note, query string) (int, bool) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
-		return true
+		return 0, true
 	}
-	blob := strings.ToLower(strings.Join([]string{cmd.name, cmd.desc, cmd.category}, " "))
-	for term := range strings.FieldsSeq(q) {
-		if !strings.Contains(blob, term) {
+
+	if after, ok := strings.CutPrefix(q, "#"); ok {
+		score := paletteTagScore(n.Tags, after)
+		if score == 0 {
+			return 0, false
+		}
+		return 320 + score, true
+	}
+
+	previewText := n.Preview
+	if n.Encrypted {
+		previewText = "<encrypted>"
+	}
+	tagText := strings.Join(n.Tags, " ")
+	blob := strings.Join([]string{n.Title(), n.Name, n.RelPath, tagText, previewText}, " ")
+	matched := m.noteMatches(n, q)
+	score := paletteCompositeScore(q,
+		paletteSearchField{text: n.Title(), weight: 100},
+		paletteSearchField{text: n.RelPath, weight: 88},
+		paletteSearchField{text: n.Name, weight: 75},
+		paletteSearchField{text: tagText, weight: 72},
+		paletteSearchField{text: previewText, weight: 55},
+		paletteSearchField{text: blob, weight: 62},
+	)
+	if matched {
+		if score == 0 {
+			score = 1
+		}
+		return 120 + score, true
+	}
+	if score == 0 {
+		return 0, false
+	}
+	return score, true
+}
+
+func (m Model) paletteCommandScore(cmd paletteCommand, query string) (int, bool) {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return 0, true
+	}
+	blob := strings.Join([]string{cmd.name, cmd.desc, cmd.category}, " ")
+	score := paletteCompositeScore(q,
+		paletteSearchField{text: cmd.name, weight: 100},
+		paletteSearchField{text: cmd.desc, weight: 72},
+		paletteSearchField{text: cmd.category, weight: 58},
+		paletteSearchField{text: blob, weight: 70},
+	)
+	if score == 0 && !paletteHasAllTerms(strings.ToLower(blob), q) {
+		return 0, false
+	}
+	if score == 0 {
+		score = 1
+	}
+	if paletteHasAllTerms(strings.ToLower(blob), q) {
+		score += 90
+	}
+	return 100 + score, true
+}
+
+func (m Model) paletteCommandBoost(cmd paletteCommand, query string) int {
+	boost := 0
+	if m.paletteCommandIsSuggested(cmd.action) {
+		boost += 180
+	}
+	if idx := m.paletteRecentCommandIndex(cmd.action); idx >= 0 {
+		if strings.TrimSpace(query) == "" {
+			boost += max(0, 220-idx*28)
+		} else {
+			boost += max(0, 110-idx*16)
+		}
+	}
+	return boost
+}
+
+func (m Model) paletteSectionForItem(item paletteItem, query string) paletteSection {
+	switch item.kind {
+	case paletteKindCommand:
+		if m.paletteCommandIsSuggested(item.cmd.action) {
+			return paletteSectionSuggested
+		}
+		if strings.TrimSpace(query) == "" && m.paletteRecentCommandIndex(item.cmd.action) >= 0 {
+			return paletteSectionSuggested
+		}
+		return paletteSectionCommand
+	case paletteKindTempNote:
+		return paletteSectionTempNote
+	default:
+		return paletteSectionNote
+	}
+}
+
+func (m Model) paletteCommandIsSuggested(action string) bool {
+	switch action {
+	case cmdMoveCurrent,
+		cmdMarkCurrent,
+		cmdRenameCurrent,
+		cmdAddTags,
+		cmdTrashCurrent,
+		cmdTogglePin,
+		cmdToggleSync,
+		cmdMakeShared,
+		cmdShowSyncDetails,
+		cmdResolveConflict,
+		cmdDeleteRemoteKeepLocal,
+		cmdImportCurrent,
+		cmdToggleEncryption,
+		cmdAddTodo,
+		cmdToggleTodo,
+		cmdDeleteTodo,
+		cmdEditTodo:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m Model) paletteRecentCommandIndex(action string) int {
+	for idx, recent := range m.state.RecentCommands {
+		if recent == action {
+			return idx
+		}
+	}
+	return -1
+}
+
+func paletteCompositeScore(query string, fields ...paletteSearchField) int {
+	best := 0
+	for _, field := range fields {
+		if strings.TrimSpace(field.text) == "" || field.weight <= 0 {
+			continue
+		}
+		score := paletteFieldScore(field.text, query)
+		if score == 0 {
+			continue
+		}
+		weighted := score * field.weight / 100
+		if weighted > best {
+			best = weighted
+		}
+	}
+	return best
+}
+
+func paletteFieldScore(text, query string) int {
+	field := strings.ToLower(strings.TrimSpace(text))
+	q := strings.ToLower(strings.TrimSpace(query))
+	if field == "" || q == "" {
+		return 0
+	}
+
+	best := 0
+	if field == q {
+		best = max(best, 1000)
+	}
+	if strings.HasPrefix(field, q) {
+		best = max(best, 900-min(160, len(field)-len(q))*4)
+	}
+	if idx := strings.Index(field, q); idx >= 0 {
+		best = max(best, 760-min(240, idx*16))
+	}
+	tokenCount := len(strings.FieldsFunc(field, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}))
+	if tokenCount <= 3 {
+		if initials := paletteInitialism(field); initials != "" && strings.HasPrefix(initials, paletteCompact(q)) {
+			best = max(best, 690)
+		}
+		if fuzzy, ok := paletteFuzzyScore(field, q); ok {
+			best = max(best, 520+fuzzy)
+		}
+	}
+	terms := strings.Fields(q)
+	if len(terms) > 1 && paletteHasAllTerms(field, q) {
+		termScore := 0
+		for _, term := range terms {
+			switch {
+			case field == term:
+				termScore += 120
+			case strings.HasPrefix(field, term):
+				termScore += 96
+			case strings.Contains(field, term):
+				termScore += 72
+			}
+		}
+		best = max(best, 420+termScore)
+	}
+	return max(0, best)
+}
+
+func paletteTagScore(tags []string, tag string) int {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return 240
+	}
+	best := 0
+	for _, candidate := range tags {
+		score := paletteFieldScore(candidate, tag)
+		if score > best {
+			best = score
+		}
+	}
+	return best
+}
+
+func paletteHasAllTerms(text, query string) bool {
+	for _, term := range strings.Fields(strings.ToLower(strings.TrimSpace(query))) {
+		if !strings.Contains(text, term) {
 			return false
 		}
 	}
 	return true
 }
 
-func paletteItemLess(a, b paletteItem, query string) bool {
-	ab, bb := paletteItemBucket(a, query), paletteItemBucket(b, query)
-	if ab != bb {
-		return ab < bb
+func paletteFuzzyScore(text, query string) (int, bool) {
+	fieldRunes := []rune(paletteCompact(text))
+	queryRunes := []rune(paletteCompact(query))
+	if len(fieldRunes) == 0 || len(queryRunes) == 0 {
+		return 0, false
 	}
-	ap, bp := paletteItemTypePriority(a), paletteItemTypePriority(b)
-	if ap != bp {
+
+	qIdx := 0
+	start := -1
+	prev := -1
+	gaps := 0
+	for i, r := range fieldRunes {
+		if qIdx >= len(queryRunes) || r != queryRunes[qIdx] {
+			continue
+		}
+		if start < 0 {
+			start = i
+		}
+		if prev >= 0 {
+			gaps += i - prev - 1
+		}
+		prev = i
+		qIdx++
+		if qIdx == len(queryRunes) {
+			break
+		}
+	}
+	if qIdx != len(queryRunes) {
+		return 0, false
+	}
+
+	score := 180 - gaps*10 - start*4 - max(0, len(fieldRunes)-len(queryRunes))*2
+	if score < 120 {
+		return 0, false
+	}
+	return score, true
+}
+
+func paletteCompact(text string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(strings.TrimSpace(text)) {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r):
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func paletteInitialism(text string) string {
+	parts := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, part := range parts {
+		r := []rune(part)
+		if len(r) == 0 {
+			continue
+		}
+		b.WriteRune(r[0])
+	}
+	return b.String()
+}
+
+func (m Model) paletteItemLess(a, b paletteItem) bool {
+	if ap, bp := paletteSectionPriority(a.section), paletteSectionPriority(b.section); ap != bp {
 		return ap < bp
+	}
+	if a.score != b.score {
+		return a.score > b.score
 	}
 	at, bt := strings.ToLower(a.title), strings.ToLower(b.title)
 	if at != bt {
@@ -383,39 +728,19 @@ func paletteItemLess(a, b paletteItem, query string) bool {
 	return strings.ToLower(a.sub) < strings.ToLower(b.sub)
 }
 
-func paletteItemBucket(item paletteItem, query string) int {
-	q := strings.ToLower(strings.TrimSpace(query))
-	if q == "" {
-		return 4
-	}
-	title := strings.ToLower(item.title)
-	sub := strings.ToLower(item.sub)
-	if title == q {
+func paletteSectionPriority(section paletteSection) int {
+	switch section {
+	case paletteSectionSuggested:
 		return 0
-	}
-	if strings.HasPrefix(title, q) {
+	case paletteSectionCommand:
 		return 1
-	}
-	if strings.Contains(title, q) {
+	case paletteSectionNote:
 		return 2
-	}
-	if item.kind == paletteKindCommand && strings.Contains(strings.ToLower(item.cmd.desc), q) {
+	case paletteSectionTempNote:
 		return 3
-	}
-	if strings.Contains(sub, q) {
+	default:
 		return 4
 	}
-	return 5
-}
-
-func paletteItemTypePriority(item paletteItem) int {
-	if item.kind == paletteKindCommand {
-		return 0
-	}
-	if item.kind == paletteKindNote {
-		return 1
-	}
-	return 2
 }
 
 func (m *Model) tabCompletePalette() {
@@ -444,9 +769,30 @@ func (m *Model) commitPaletteSelection() tea.Cmd {
 		m.switchToTemporaryMode()
 		m.selectTemporaryNote(item.note.RelPath)
 	case paletteKindCommand:
+		m.recordPaletteCommandUse(item.cmd.action)
 		return m.executePaletteCommand(item.cmd.action)
 	}
 	return nil
+}
+
+func (m *Model) recordPaletteCommandUse(action string) {
+	action = strings.TrimSpace(action)
+	if action == "" {
+		return
+	}
+	next := make([]string, 0, paletteMaxRecentCommands)
+	next = append(next, action)
+	for _, existing := range m.state.RecentCommands {
+		if existing == action || strings.TrimSpace(existing) == "" {
+			continue
+		}
+		next = append(next, existing)
+		if len(next) >= paletteMaxRecentCommands {
+			break
+		}
+	}
+	m.state.RecentCommands = normalizePaletteRecentCommands(next)
+	_ = m.saveLocalState()
 }
 
 func (m *Model) openHelpModal() {
@@ -726,8 +1072,9 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 }
 
 func (m Model) renderCommandPaletteModal() string {
-	modalWidth, innerWidth := m.modalDimensions(60, 90)
+	modalWidth, innerWidth := m.modalDimensions(68, 104)
 	total := len(m.commandPaletteFiltered)
+	groups := m.paletteVisibleSectionCount()
 
 	// Compute scroll so the cursor row is always visible.
 	scroll := max(0, m.commandPaletteCursor-paletteMaxVisible+1)
@@ -738,20 +1085,19 @@ func (m Model) renderCommandPaletteModal() string {
 		Background(modalBgColor).
 		Bold(true).
 		Render("Command palette")
+	countTextValue := fmt.Sprintf("%d results", total)
+	if groups > 0 {
+		countTextValue = fmt.Sprintf("%d results · %d groups", total, groups)
+	}
 	countText := lipgloss.NewStyle().
 		Foreground(modalMutedColor).
 		Background(modalBgColor).
-		Render(fmt.Sprintf("%d results", total))
+		Render(countTextValue)
 	gapSize := max(0, innerWidth-lipgloss.Width(titleLeft)-lipgloss.Width(countText))
 	gapStr := lipgloss.NewStyle().Background(modalBgColor).Render(strings.Repeat(" ", gapSize))
 	titleRow := fillWidthBackground(titleLeft+gapStr+countText, innerWidth, modalBgColor)
 
-	inputCopy := m.commandPaletteInput
-	inputCopy.Width = max(12, innerWidth-lipgloss.Width(inputCopy.Prompt))
-	inputCopy.TextStyle = lipgloss.NewStyle().Foreground(modalTextColor).Background(modalBgColor)
-	inputCopy.PlaceholderStyle = lipgloss.NewStyle().Foreground(modalMutedColor).Background(modalBgColor)
-	inputCopy.Cursor.Style = lipgloss.NewStyle().Foreground(modalTextColor).Background(modalTextColor)
-	inputRow := fillWidthBackground(inputCopy.View(), innerWidth, modalBgColor)
+	inputRow := m.renderCommandPaletteInputRow(innerWidth)
 
 	divider := lipgloss.NewStyle().
 		Width(innerWidth).
@@ -761,16 +1107,26 @@ func (m Model) renderCommandPaletteModal() string {
 
 	var resultLines []string
 	if total == 0 {
+		emptyText := "No matches"
+		if query := strings.TrimSpace(m.commandPaletteInput.Value()); query != "" {
+			emptyText = fmt.Sprintf("No matches for %q", query)
+		}
 		empty := lipgloss.NewStyle().
 			Width(innerWidth).
 			Foreground(modalMutedColor).
 			Background(modalBgColor).
-			Render("No matches")
+			Render(emptyText)
 		resultLines = append(resultLines, empty)
 	} else {
 		end := min(scroll+paletteMaxVisible, total)
+		currentSection := paletteSection(-1)
 		for i := scroll; i < end; i++ {
-			resultLines = append(resultLines, m.renderPaletteRow(m.commandPaletteFiltered[i], i, innerWidth))
+			item := m.commandPaletteFiltered[i]
+			if i == scroll || item.section != currentSection {
+				resultLines = append(resultLines, m.renderPaletteSectionHeader(item.section, innerWidth))
+				currentSection = item.section
+			}
+			resultLines = append(resultLines, m.renderPaletteRow(item, i, innerWidth))
 		}
 		if scroll > 0 {
 			indicator := lipgloss.NewStyle().
@@ -814,34 +1170,118 @@ func (m Model) renderCommandPaletteModal() string {
 	return modalCardStyle(modalWidth).Render(content)
 }
 
+func (m Model) paletteVisibleSectionCount() int {
+	if len(m.commandPaletteFiltered) == 0 {
+		return 0
+	}
+	count := 1
+	prev := m.commandPaletteFiltered[0].section
+	for _, item := range m.commandPaletteFiltered[1:] {
+		if item.section != prev {
+			count++
+			prev = item.section
+		}
+	}
+	return count
+}
+
+func (m Model) renderPaletteSectionHeader(section paletteSection, innerWidth int) string {
+	fg := modalMutedColor
+	if section == paletteSectionSuggested {
+		fg = modalAccentColor
+	}
+	return lipgloss.NewStyle().
+		Width(innerWidth).
+		Foreground(fg).
+		Background(modalBgColor).
+		Bold(section == paletteSectionSuggested).
+		Render(paletteSectionTitle(section))
+}
+
+func (m Model) renderCommandPaletteInputRow(innerWidth int) string {
+	inputCopy := m.commandPaletteInput
+	inputCopy.Prompt = ""
+	fieldOuterWidth := max(12, innerWidth)
+	fieldContentWidth := max(8, fieldOuterWidth-4)
+	prefix := lipgloss.NewStyle().
+		Foreground(modalAccentColor).
+		Background(modalBgColor).
+		Bold(true).
+		Render("> ")
+	inputCopy.Width = max(1, fieldContentWidth-lipgloss.Width(prefix))
+	inputCopy.TextStyle = lipgloss.NewStyle().Foreground(modalTextColor).Background(modalBgColor)
+	inputCopy.PlaceholderStyle = lipgloss.NewStyle().Foreground(modalMutedColor).Background(modalBgColor)
+	inputCopy.Cursor.Style = lipgloss.NewStyle().Foreground(modalTextColor).Background(modalTextColor)
+
+	rawInput := strings.TrimRight(inputCopy.View(), " ")
+	inputPad := max(0, fieldContentWidth-lipgloss.Width(prefix)-lipgloss.Width(rawInput))
+	inputView := prefix + rawInput + lipgloss.NewStyle().
+		Width(inputPad).
+		Background(modalBgColor).
+		Render(strings.Repeat(" ", inputPad))
+
+	inputField := lipgloss.NewStyle().
+		Width(fieldContentWidth).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(modalAccentColor).
+		BorderBackground(modalBgColor).
+		Background(modalBgColor).
+		Padding(0, 1).
+		Render(inputView)
+
+	return lipgloss.NewStyle().
+		Width(innerWidth).
+		Background(modalBgColor).
+		Render(inputField)
+}
+
 func (m Model) renderPaletteRow(item paletteItem, idx, innerWidth int) string {
 	selected := idx == m.commandPaletteCursor
+	bg := modalBgColor
+	titleFg := modalTextColor
+	subFg := modalMutedColor
+	cursorFg := modalMutedColor
+	badgeFg := modalMutedColor
+	if selected {
+		bg = selectedBgColor
+		titleFg = selectedFgColor
+		subFg = selectedFgColor
+		cursorFg = selectedFgColor
+		badgeFg = selectedFgColor
+	} else if item.kind == paletteKindCommand {
+		badgeFg = modalAccentColor
+	}
 
 	cursor := "  "
 	if selected {
 		cursor = "› "
 	}
+	badgeText := paletteBadgeLabel(item)
 	cursorW := lipgloss.Width(cursor)
-	subWidth := max(8, min(36, innerWidth/3))
-	titleWidth := max(8, innerWidth-subWidth-cursorW-2)
+	badgeW := lipgloss.Width(badgeText)
+	subWidth := max(12, min(30, innerWidth/3))
+	titleWidth := max(8, innerWidth-cursorW-badgeW-subWidth-4)
 
 	titleStr := paletteTruncate(item.title, titleWidth)
 	subStr := paletteTruncateLeft(item.sub, subWidth)
 
-	if selected {
-		subFg := selectedFgColor
-		if item.kind == paletteKindCommand {
-			subFg = modalMutedColor
-		}
-		return lipgloss.NewStyle().Foreground(selectedFgColor).Background(selectedBgColor).Render(cursor) +
-			lipgloss.NewStyle().Width(titleWidth).Foreground(selectedFgColor).Background(selectedBgColor).Render(titleStr) +
-			lipgloss.NewStyle().Width(2).Background(selectedBgColor).Render("  ") +
-			lipgloss.NewStyle().Width(subWidth).Align(lipgloss.Right).Foreground(subFg).Background(selectedBgColor).Render(subStr)
+	return lipgloss.NewStyle().Foreground(cursorFg).Background(bg).Render(cursor) +
+		lipgloss.NewStyle().Foreground(badgeFg).Background(bg).Render(badgeText) +
+		lipgloss.NewStyle().Background(bg).Render(" ") +
+		lipgloss.NewStyle().Width(titleWidth).Foreground(titleFg).Background(bg).Render(titleStr) +
+		lipgloss.NewStyle().Width(3).Background(bg).Render("   ") +
+		lipgloss.NewStyle().Width(subWidth).Align(lipgloss.Right).Foreground(subFg).Background(bg).Render(subStr)
+}
+
+func paletteBadgeLabel(item paletteItem) string {
+	switch item.kind {
+	case paletteKindCommand:
+		return "CMD "
+	case paletteKindTempNote:
+		return "TEMP"
+	default:
+		return "NOTE"
 	}
-	return lipgloss.NewStyle().Foreground(modalMutedColor).Background(modalBgColor).Render(cursor) +
-		lipgloss.NewStyle().Width(titleWidth).Foreground(modalTextColor).Background(modalBgColor).Render(titleStr) +
-		lipgloss.NewStyle().Width(2).Background(modalBgColor).Render("  ") +
-		lipgloss.NewStyle().Width(subWidth).Align(lipgloss.Right).Foreground(modalMutedColor).Background(modalBgColor).Render(subStr)
 }
 
 // paletteTruncate truncates s to at most maxWidth visual characters.

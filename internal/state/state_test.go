@@ -69,6 +69,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		PinnedNotes:         []string{"inbox/today.md", "ideas.md"},
 		PinnedCategories:    []string{"inbox", "work/projects"},
 		CollapsedCategories: []string{"archive"},
+		RecentCommands:      []string{"show_help", "refresh"},
 		SortByModTime:       true,
 	}
 
@@ -82,6 +83,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		`"pinned_notes"`,
 		`"pinned_categories"`,
 		`"collapsed_categories"`,
+		`"recent_commands"`,
 		`"sort_by_mod_time": true`,
 	} {
 		require.Contains(t, text, fragment)
