@@ -600,7 +600,7 @@ func todoDueDateFromText(text string) (string, bool) {
 func renderTodoPreviewBody(text string, selected bool, bg lipgloss.Color, textFg lipgloss.Color) string {
 	display, metadata := notes.ParseTodoMetadata(text)
 	if strings.TrimSpace(metadata.DueDate) == "" {
-		return lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(text)
+		return lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(display)
 	}
 
 	due := "[due:" + metadata.DueDate + "]"
