@@ -3,6 +3,7 @@ package sync
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -143,48 +144,55 @@ func HandleRPC(op string, payload []byte) ([]byte, error) {
 	switch op {
 	case "pull_index":
 		var req PullIndexRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.PullIndex(req)
 		}
 	case "fetch_note":
 		var req FetchNoteRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.FetchNote(req)
 		}
 	case "register_note":
 		var req RegisterNoteRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.RegisterNote(req)
 		}
 	case "push_note":
 		var req PushNoteRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.PushNote(req)
 		}
 	case "update_note_path":
 		var req UpdateNotePathRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.UpdateNotePath(req)
 		}
 	case "delete_note":
 		var req DeleteNoteRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.DeleteNote(req)
 		}
 	case "pins_get":
 		var req PinsGetRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.PinsGet(req)
 		}
 	case "pins_put":
 		var req PinsPutRequest
-		if err = json.Unmarshal(payload, &req); err == nil {
+		if err = decodeRPCPayload(op, payload, &req); err == nil {
 			data, err = server.PinsPut(req)
 		}
 	default:
 		err = &RPCError{Code: ErrCodeInvalid, Message: "unknown operation"}
 	}
 	return marshalRPCResponse(data, err)
+}
+
+func decodeRPCPayload(op string, payload []byte, out any) error {
+	if err := json.Unmarshal(payload, out); err != nil {
+		return &RPCError{Code: ErrCodeInvalid, Message: fmt.Sprintf("invalid %s request payload: %v", op, err)}
+	}
+	return nil
 }
 
 func marshalRPCResponse(data any, err error) ([]byte, error) {
@@ -223,7 +231,8 @@ func loadRemoteNotes(root string) ([]remoteNoteFile, error) {
 			return nil, err
 		}
 		var note remoteNoteFile
-		if err := json.Unmarshal(data, &note); err != nil {
+		path := filepath.Join(dir, entry.Name())
+		if err := unmarshalRemoteJSON(path, "note metadata", data, &note); err != nil {
 			return nil, err
 		}
 		out = append(out, note)
@@ -240,7 +249,7 @@ func loadRemoteNote(root, noteID string) (remoteNoteFile, error) {
 		}
 		return note, err
 	}
-	if err := json.Unmarshal(data, &note); err != nil {
+	if err := unmarshalRemoteJSON(remoteMetaPath(root, noteID), "note metadata", data, &note); err != nil {
 		return remoteNoteFile{}, err
 	}
 	return note, nil
@@ -281,10 +290,18 @@ func loadRemotePins(root string) (Pins, error) {
 	if len(data) == 0 {
 		return pins, nil
 	}
-	if err := json.Unmarshal(data, &pins); err != nil {
+	path := filepath.Join(root, "pins.json")
+	if err := unmarshalRemoteJSON(path, "pins", data, &pins); err != nil {
 		return Pins{}, err
 	}
 	return pins, nil
+}
+
+func unmarshalRemoteJSON(path, label string, data []byte, out any) error {
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("invalid remote %s JSON at %s: %w", label, path, err)
+	}
+	return nil
 }
 
 func saveRemotePins(root string, pins Pins) error {

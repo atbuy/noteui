@@ -60,6 +60,38 @@ func testSyncConfig(remoteRoot string) config.SyncConfig {
 	}
 }
 
+func TestHandleRPCReportsInvalidPayloadOperation(t *testing.T) {
+	out, err := HandleRPC("pull_index", []byte(`{"remote_root":"/srv/noteui"}"`))
+	require.NoError(t, err)
+	require.Contains(t, string(out), `"code":"invalid_request"`)
+	require.Contains(t, string(out), `invalid pull_index request payload`)
+	require.Contains(t, string(out), `invalid character '\"' after top-level value`)
+}
+
+func TestPullIndexReportsCorruptRemoteNoteMetadataPath(t *testing.T) {
+	remote := t.TempDir()
+	notesDir := filepath.Join(remote, "notes")
+	require.NoError(t, os.MkdirAll(notesDir, 0o755))
+	badPath := filepath.Join(notesDir, "n_bad.json")
+	require.NoError(t, os.WriteFile(badPath, []byte(`{"id":"n_bad","rel_path":"bad.md","revision":1}"`), 0o644))
+
+	_, err := (Server{}).PullIndex(PullIndexRequest{RemoteRoot: remote})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid remote note metadata JSON at "+badPath)
+	require.Contains(t, err.Error(), `invalid character '"' after top-level value`)
+}
+
+func TestPullIndexReportsCorruptRemotePinsPath(t *testing.T) {
+	remote := t.TempDir()
+	badPath := filepath.Join(remote, "pins.json")
+	require.NoError(t, os.WriteFile(badPath, []byte(`{"pinned_note_ids":[]}"`), 0o644))
+
+	_, err := (Server{}).PullIndex(PullIndexRequest{RemoteRoot: remote})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid remote pins JSON at "+badPath)
+	require.Contains(t, err.Error(), `invalid character '"' after top-level value`)
+}
+
 func TestSyncRootRegistersUpdatesAndPersistsPins(t *testing.T) {
 	root := t.TempDir()
 	remote := t.TempDir()
