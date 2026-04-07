@@ -131,6 +131,18 @@ func TestSaveAndLoadRootConfig(t *testing.T) {
 	require.Equal(t, cfg, loaded)
 }
 
+func TestLoadRootConfigReportsCorruptPath(t *testing.T) {
+	root := t.TempDir()
+	path := ConfigPath(root)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"schema_version":1}"`), 0o644))
+
+	_, err := LoadRootConfig(root)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid local sync root config JSON at "+path)
+	require.Contains(t, err.Error(), `invalid character '"' after top-level value`)
+}
+
 func TestEnsureRootConfig(t *testing.T) {
 	root := t.TempDir()
 	syncCfg := config.SyncConfig{
@@ -176,6 +188,18 @@ func TestSaveAndLoadNoteRecords(t *testing.T) {
 	require.Equal(t, rec.RemoteRev, records["note-abc"].RemoteRev)
 }
 
+func TestLoadNoteRecordsReportsCorruptPath(t *testing.T) {
+	root := t.TempDir()
+	path := NoteRecordPath(root, "n_bad")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"id":"n_bad"}"`), 0o644))
+
+	_, err := LoadNoteRecords(root)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid local sync note record JSON at "+path)
+	require.Contains(t, err.Error(), `invalid character '"' after top-level value`)
+}
+
 func TestSaveNoteRecordRejectsEmptyID(t *testing.T) {
 	root := t.TempDir()
 	err := SaveNoteRecord(root, NoteRecord{ID: "", RelPath: "note.md"})
@@ -216,6 +240,18 @@ func TestSaveAndLoadPins(t *testing.T) {
 	// duplicates should be removed and entries sorted
 	require.Equal(t, []string{"id-a", "id-b"}, loaded.PinnedNoteIDs)
 	require.Equal(t, []string{"personal", "work"}, loaded.PinnedCategories)
+}
+
+func TestLoadPinsReportsCorruptPath(t *testing.T) {
+	root := t.TempDir()
+	path := PinsPath(root)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"pinned_note_ids":[]}"`), 0o644))
+
+	_, err := LoadPins(root)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid local sync pins JSON at "+path)
+	require.Contains(t, err.Error(), `invalid character '"' after top-level value`)
 }
 
 func TestRemovePinnedNoteID(t *testing.T) {

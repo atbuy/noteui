@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -63,11 +64,12 @@ func EnsureRootConfig(root string, cfg config.SyncConfig) (RootConfig, error) {
 
 func LoadRootConfig(root string) (RootConfig, error) {
 	var cfg RootConfig
-	data, err := os.ReadFile(ConfigPath(root))
+	path := ConfigPath(root)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return cfg, err
 	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
+	if err := unmarshalLocalSyncJSON(path, "root config", data, &cfg); err != nil {
 		return RootConfig{}, err
 	}
 	return cfg, nil
@@ -89,12 +91,13 @@ func LoadNoteRecords(root string) (map[string]NoteRecord, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		path := filepath.Join(dir, entry.Name())
+		data, err := os.ReadFile(path)
 		if err != nil {
 			return nil, err
 		}
 		var rec NoteRecord
-		if err := json.Unmarshal(data, &rec); err != nil {
+		if err := unmarshalLocalSyncJSON(path, "note record", data, &rec); err != nil {
 			return nil, err
 		}
 		if rec.ID != "" {
@@ -145,14 +148,15 @@ func SaveConflictRecord(root string, rec ConflictRecord) error {
 
 func LoadPins(root string) (Pins, error) {
 	var pins Pins
-	data, err := os.ReadFile(PinsPath(root))
+	path := PinsPath(root)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return pins, err
 	}
 	if len(data) == 0 {
 		return pins, nil
 	}
-	if err := json.Unmarshal(data, &pins); err != nil {
+	if err := unmarshalLocalSyncJSON(path, "pins", data, &pins); err != nil {
 		return Pins{}, err
 	}
 	pins.PinnedNoteIDs = sortedUnique(pins.PinnedNoteIDs)
@@ -242,6 +246,13 @@ func MigratePinsFromState(root string, currentNotes []notes.Note, pinnedNotes []
 func HashContent(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func unmarshalLocalSyncJSON(path, label string, data []byte, out any) error {
+	if err := json.Unmarshal(data, out); err != nil {
+		return fmt.Errorf("invalid local sync %s JSON at %s: %w", label, path, err)
+	}
+	return nil
 }
 
 func writeJSON(path string, v any) error {
