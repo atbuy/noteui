@@ -1,3 +1,4 @@
+// Package config loads and validates the noteui configuration file.
 package config
 
 import (

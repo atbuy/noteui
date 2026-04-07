@@ -220,33 +220,6 @@ func decryptNoteCmd(path, passphrase string) tea.Cmd {
 	}
 }
 
-func openEncryptedNoteCmd(path, passphrase string) tea.Cmd {
-	return func() tea.Msg {
-		raw, err := notes.ReadAll(path)
-		if err != nil {
-			return openEncryptedNoteReadyMsg{origPath: path, err: err}
-		}
-
-		tempContent, err := notes.PrepareForEdit(raw, passphrase)
-		if err != nil {
-			return openEncryptedNoteReadyMsg{origPath: path, err: err}
-		}
-
-		tmpFile, err := os.CreateTemp("", "noteui-*.md")
-		if err != nil {
-			return openEncryptedNoteReadyMsg{origPath: path, err: err}
-		}
-		tmpFile.Close()
-
-		if err := os.WriteFile(tmpFile.Name(), []byte(tempContent), 0o600); err != nil {
-			os.Remove(tmpFile.Name())
-			return openEncryptedNoteReadyMsg{origPath: path, err: err}
-		}
-
-		return openEncryptedNoteReadyMsg{origPath: path, tempPath: tmpFile.Name()}
-	}
-}
-
 func reencryptFromTempCmd(origPath, tempPath, passphrase string) tea.Cmd {
 	return func() tea.Msg {
 		newPath, err := notes.ReencryptFromTemp(origPath, tempPath, passphrase)
@@ -266,11 +239,13 @@ func waitForWatchTeaCmd(events <-chan teaMsg) tea.Cmd {
 	}
 }
 
-type syncStartMsg struct{ sessionToken int }
-type syncDebouncedMsg struct {
-	token        int
-	sessionToken int
-}
+type (
+	syncStartMsg     struct{ sessionToken int }
+	syncDebouncedMsg struct {
+		token        int
+		sessionToken int
+	}
+)
 
 type syncFinishedMsg struct {
 	result       notesync.SyncResult
@@ -419,9 +394,9 @@ func saveNoteVersionAndOpenEncryptedCmd(root, path, passphrase string) tea.Cmd {
 		if err != nil {
 			return openEncryptedNoteReadyMsg{origPath: path, err: err}
 		}
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		if err := os.WriteFile(tmpFile.Name(), []byte(tempContent), 0o600); err != nil {
-			os.Remove(tmpFile.Name())
+			_ = os.Remove(tmpFile.Name())
 			return openEncryptedNoteReadyMsg{origPath: path, err: err}
 		}
 		return openEncryptedNoteReadyMsg{origPath: path, tempPath: tmpFile.Name()}

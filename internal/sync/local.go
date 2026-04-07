@@ -21,6 +21,7 @@ func PinsPath(root string) string   { return filepath.Join(SyncDir(root), "pins.
 func NoteRecordPath(root, noteID string) string {
 	return filepath.Join(SyncDir(root), NotesDirName, noteID+".json")
 }
+
 func ConflictPath(root, noteID string) string {
 	return filepath.Join(SyncDir(root), ConflictsDirName, noteID+".json")
 }

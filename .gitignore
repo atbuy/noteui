@@ -10,3 +10,6 @@ site/
 
 # Ignore local tool caches
 .cache/
+
+# Python
+.python-version

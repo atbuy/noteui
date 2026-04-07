@@ -31,22 +31,27 @@ func (c SSHClient) PullIndex(ctx context.Context, profile config.SyncProfile, re
 	var resp PullIndexResponse
 	return resp, c.call(ctx, profile, "pull_index", req, &resp)
 }
+
 func (c SSHClient) FetchNote(ctx context.Context, profile config.SyncProfile, req FetchNoteRequest) (FetchNoteResponse, error) {
 	var resp FetchNoteResponse
 	return resp, c.call(ctx, profile, "fetch_note", req, &resp)
 }
+
 func (c SSHClient) RegisterNote(ctx context.Context, profile config.SyncProfile, req RegisterNoteRequest) (RegisterNoteResponse, error) {
 	var resp RegisterNoteResponse
 	return resp, c.call(ctx, profile, "register_note", req, &resp)
 }
+
 func (c SSHClient) PushNote(ctx context.Context, profile config.SyncProfile, req PushNoteRequest) (PushNoteResponse, error) {
 	var resp PushNoteResponse
 	return resp, c.call(ctx, profile, "push_note", req, &resp)
 }
+
 func (c SSHClient) UpdateNotePath(ctx context.Context, profile config.SyncProfile, req UpdateNotePathRequest) (UpdateNotePathResponse, error) {
 	var resp UpdateNotePathResponse
 	return resp, c.call(ctx, profile, "update_note_path", req, &resp)
 }
+
 func (c SSHClient) DeleteNote(ctx context.Context, profile config.SyncProfile, req DeleteNoteRequest) (DeleteNoteResponse, error) {
 	var resp DeleteNoteResponse
 	err := c.call(ctx, profile, "delete_note", req, &resp)
@@ -58,10 +63,12 @@ func (c SSHClient) DeleteNote(ctx context.Context, profile config.SyncProfile, r
 	}
 	return resp, c.legacyDeleteNote(ctx, profile, req)
 }
+
 func (c SSHClient) PinsGet(ctx context.Context, profile config.SyncProfile, req PinsGetRequest) (PinsGetResponse, error) {
 	var resp PinsGetResponse
 	return resp, c.call(ctx, profile, "pins_get", req, &resp)
 }
+
 func (c SSHClient) PinsPut(ctx context.Context, profile config.SyncProfile, req PinsPutRequest) (PinsPutResponse, error) {
 	var resp PinsPutResponse
 	return resp, c.call(ctx, profile, "pins_put", req, &resp)

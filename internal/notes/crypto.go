@@ -164,7 +164,7 @@ func DecryptNoteFile(path, passphrase string) error {
 // ReencryptFromTemp re-encrypts content from a temp file back to the original path.
 // It handles title-based renaming of the original file. The temp file is always deleted.
 func ReencryptFromTemp(origPath, tempPath, passphrase string) (string, error) {
-	defer os.Remove(tempPath)
+	defer func() { _ = os.Remove(tempPath) }()
 
 	tempContent, err := ReadAll(tempPath)
 	if err != nil {

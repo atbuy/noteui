@@ -1,3 +1,4 @@
+// Package state persists local UI state such as pins, sort preference, and recent commands.
 package state
 
 import (

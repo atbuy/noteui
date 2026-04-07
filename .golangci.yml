@@ -1,0 +1,16 @@
+version: "2"
+
+linters:
+  enable:
+    - unused
+    - ineffassign
+    - staticcheck
+  settings:
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1019"  # deprecation warnings from upstream libraries (goldmark, lipgloss)
+
+
+issues:
+  max-same-issues: 0

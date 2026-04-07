@@ -19,7 +19,7 @@ const (
 
 // HistoryEntry describes one saved version of a note.
 type HistoryEntry struct {
-	ID        string    // filename stem, e.g. "20260407-150405-a1b2c3d4"
+	ID        string // filename stem, e.g. "20260407-150405-a1b2c3d4"
 	Timestamp time.Time
 	Hash      string // first 8 hex chars of SHA-256
 	Size      int

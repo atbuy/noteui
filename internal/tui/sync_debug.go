@@ -187,19 +187,6 @@ func (m *Model) copyCurrentSyncDebugRawError() {
 	m.status = "copied sync detail to clipboard"
 }
 
-func (m *Model) moveConflictResolutionChoice(delta int) {
-	if !m.hasConflictCopyForCurrentSelection() || delta == 0 {
-		return
-	}
-	m.conflictResolutionChoice += delta
-	if m.conflictResolutionChoice < conflictResolutionKeepLocal {
-		m.conflictResolutionChoice = conflictResolutionKeepLocal
-	}
-	if m.conflictResolutionChoice > conflictResolutionKeepRemote {
-		m.conflictResolutionChoice = conflictResolutionKeepRemote
-	}
-}
-
 func (m Model) selectedConflictChoiceLabel() string {
 	if m.conflictResolutionChoice == conflictResolutionKeepRemote {
 		return "remote"

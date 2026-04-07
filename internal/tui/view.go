@@ -944,9 +944,9 @@ func (m Model) renderTemporaryListView() string {
 		rowStyle := treeNoteStyle
 		switch {
 		case marked:
-			rowStyle = rowStyle.Copy().Foreground(markedItemColor)
+			rowStyle = rowStyle.Foreground(markedItemColor)
 		case m.isPinnedTemporaryNote(n.RelPath):
-			rowStyle = rowStyle.Copy().Foreground(pinnedNoteColor)
+			rowStyle = rowStyle.Foreground(pinnedNoteColor)
 		}
 
 		lines = append(lines, rowStyle.
@@ -1954,7 +1954,7 @@ func (m Model) renderLeftPaneHint(width int) string {
 			hint = "focused • / search • j/k move • tab to preview"
 		}
 	}
-	style := mutedStyle.Copy().Background(bgSoftColor)
+	style := mutedStyle.Background(bgSoftColor)
 	if m.focus == focusTree {
 		style = style.Foreground(accentSoftColor)
 	}
@@ -1973,7 +1973,7 @@ func (m Model) renderRightPaneHint(width int) string {
 		}
 		hint = strings.Join(parts, " • ")
 	}
-	style := mutedStyle.Copy().Background(bgSoftColor)
+	style := mutedStyle.Background(bgSoftColor)
 	if m.focus == focusPreview {
 		style = style.Foreground(accentSoftColor)
 	}

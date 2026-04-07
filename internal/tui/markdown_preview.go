@@ -122,7 +122,7 @@ func (r markdownPreviewRenderer) renderBlock(node ast.Node, indent int) string {
 		return prefixLines(line, strings.Repeat(" ", indent))
 
 	case *ast.HTMLBlock:
-		text := strings.TrimSpace(string(n.Text(r.source)))
+		text := strings.TrimSpace(string(n.Lines().Value(r.source)))
 		if text == "" {
 			return ""
 		}
@@ -135,7 +135,7 @@ func (r markdownPreviewRenderer) renderBlock(node ast.Node, indent int) string {
 		if node.FirstChild() != nil {
 			return r.renderBlocks(node, indent)
 		}
-		text := strings.TrimSpace(string(node.Text(r.source)))
+		text := strings.TrimSpace(string(nodeText(node, r.source)))
 		if text == "" {
 			return ""
 		}
@@ -289,7 +289,7 @@ func (r markdownPreviewRenderer) renderCodeBlock(n *ast.FencedCodeBlock, indent 
 
 	lang := ""
 	if n.Info != nil {
-		lang = strings.TrimSpace(string(n.Info.Text(r.source)))
+		lang = strings.TrimSpace(string(n.Info.Segment.Value(r.source)))
 		if fields := strings.Fields(lang); len(fields) > 0 {
 			lang = fields[0]
 		}
@@ -443,7 +443,7 @@ func nextTodoMetadataHint(text string, base lipgloss.Style, today string) (int, 
 			end := dueStart + endRel + 1
 			token := lower[dueStart:end]
 			due := strings.TrimSuffix(strings.TrimPrefix(token, "[due:"), "]")
-			setBest(dueStart, end, base.Copy().Foreground(todoDueDateColor(due, today)))
+			setBest(dueStart, end, base.Foreground(todoDueDateColor(due, today)))
 		}
 	}
 
@@ -459,7 +459,7 @@ func nextTodoMetadataHint(text string, base lipgloss.Style, today string) (int, 
 		}
 		end := start + endRel + 1
 		if priority, ok := parseTodoPriorityHintToken(lower[start:end]); ok {
-			setBest(start, end, base.Copy().Foreground(todoPriorityColor(priority)))
+			setBest(start, end, base.Foreground(todoPriorityColor(priority)))
 		}
 		offset = start + 2
 	}
@@ -556,7 +556,7 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 			Render(content)
 
 	case *ast.CodeSpan:
-		content := strings.TrimSpace(string(n.Text(r.source)))
+		content := strings.TrimSpace(string(nodeText(n, r.source)))
 		return lipgloss.NewStyle().
 			Foreground(accentSoftColor).
 			Background(inlineCodeBgColor).
@@ -565,7 +565,7 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 	case *ast.Link:
 		label := strings.TrimSpace(r.renderInlineChildren(n))
 		if label == "" {
-			label = strings.TrimSpace(string(n.Text(r.source)))
+			label = strings.TrimSpace(string(nodeText(n, r.source)))
 		}
 		dest := strings.TrimSpace(string(n.Destination))
 
@@ -584,7 +584,7 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		return styled
 
 	case *ast.AutoLink:
-		text := strings.TrimSpace(string(n.Text(r.source)))
+		text := strings.TrimSpace(string(n.Label(r.source)))
 		return lipgloss.NewStyle().
 			Underline(true).
 			Foreground(accentColor).
@@ -611,8 +611,28 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		return lipgloss.NewStyle().
 			Foreground(textColor).
 			Background(bgSoftColor).
-			Render(string(node.Text(r.source)))
+			Render(string(nodeText(node, r.source)))
 	}
+}
+
+// nodeText collects the text content of a goldmark AST node without using
+// the deprecated Node.Text method. For ast.Text leaf nodes it reads the
+// segment value directly; for block nodes with Lines it uses Lines.Value;
+// for other container nodes it recurses into children.
+func nodeText(node ast.Node, source []byte) []byte {
+	if tn, ok := node.(*ast.Text); ok {
+		return tn.Segment.Value(source)
+	}
+	if node.Type() == ast.TypeBlock {
+		if lines := node.Lines(); lines != nil && lines.Len() > 0 {
+			return lines.Value(source)
+		}
+	}
+	var buf bytes.Buffer
+	for c := node.FirstChild(); c != nil; c = c.NextSibling() {
+		buf.Write(nodeText(c, source))
+	}
+	return buf.Bytes()
 }
 
 func (r markdownPreviewRenderer) linesText(lines *gmtext.Segments) string {

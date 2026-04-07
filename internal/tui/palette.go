@@ -297,7 +297,7 @@ func (m Model) canMarkCurrent() bool {
 		if item == nil {
 			return false
 		}
-		return !(item.Kind == treeCategory && item.RelPath == "")
+		return item.Kind != treeCategory || item.RelPath != ""
 	default:
 		return false
 	}
@@ -314,7 +314,7 @@ func (m Model) canRenameCurrent() bool {
 	if item == nil {
 		return false
 	}
-	return item.Kind != treeRemoteNote && !(item.Kind == treeCategory && item.RelPath == "")
+	return item.Kind != treeRemoteNote && (item.Kind != treeCategory || item.RelPath != "")
 }
 
 func (m Model) canAddTagsCurrent() bool {
@@ -344,7 +344,7 @@ func (m Model) canTrashCurrent() bool {
 	if item.Kind == treeRemoteNote {
 		return false
 	}
-	return !(item.Kind == treeCategory && item.RelPath == "")
+	return item.Kind != treeCategory || item.RelPath != ""
 }
 
 func (m Model) canTogglePinCurrent() bool {
@@ -360,7 +360,7 @@ func (m Model) canTogglePinCurrent() bool {
 		return err == nil
 	}
 	item := m.currentTreeItem()
-	return item != nil && item.Kind != treeRemoteNote && !(item.Kind == treeCategory && item.RelPath == "")
+	return item != nil && item.Kind != treeRemoteNote && (item.Kind != treeCategory || item.RelPath != "")
 }
 
 func (m Model) canToggleSyncCurrent() bool {

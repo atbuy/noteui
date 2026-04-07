@@ -307,7 +307,7 @@ func (m *Model) armRenameCurrent() {
 	}
 }
 
-func (m Model) toggleCurrentPreviewTodo() tea.Cmd {
+func (m *Model) toggleCurrentPreviewTodo() tea.Cmd {
 	if len(m.previewTodos) == 0 {
 		m.status = "no todos"
 		return nil
@@ -319,7 +319,7 @@ func (m Model) toggleCurrentPreviewTodo() tea.Cmd {
 	return toggleTodoCmd(m.previewPath, todo.rawLine)
 }
 
-func (m Model) deleteCurrentPreviewTodo() tea.Cmd {
+func (m *Model) deleteCurrentPreviewTodo() tea.Cmd {
 	if len(m.previewTodos) == 0 {
 		m.status = "no todos"
 		return nil
@@ -506,6 +506,7 @@ func (m Model) currentCategoryPrefix() string {
 
 	return ""
 }
+
 func parseTagInput(value string) []string {
 	parts := strings.Split(value, ",")
 	out := make([]string, 0, len(parts))

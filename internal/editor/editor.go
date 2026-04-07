@@ -1,3 +1,4 @@
+// Package editor opens files in the user's preferred terminal editor.
 package editor
 
 import (

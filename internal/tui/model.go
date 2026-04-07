@@ -1,3 +1,4 @@
+// Package tui implements the Bubble Tea terminal UI for noteui.
 package tui
 
 import (
@@ -390,17 +391,17 @@ type Model struct {
 	pendingSyncedCategories  []string
 	applyPendingSyncedPins   bool
 
-	showNoteHistory     bool
-	noteHistoryEntries  []notes.HistoryEntry
-	noteHistoryCursor   int
-	noteHistoryRelPath  string
-	noteHistoryAbsPath  string
+	showNoteHistory    bool
+	noteHistoryEntries []notes.HistoryEntry
+	noteHistoryCursor  int
+	noteHistoryRelPath string
+	noteHistoryAbsPath string
 
-	showTemplatePicker    bool
+	showTemplatePicker     bool
 	templatePickerEditMode bool
-	templateItems         []notes.Template
-	templatePickerCursor  int
-	templatePickerRelDir  string
+	templateItems          []notes.Template
+	templatePickerCursor   int
+	templatePickerRelDir   string
 }
 
 type dataLoadedMsg struct {
@@ -427,8 +428,10 @@ type noteTaggedMsg struct {
 	err  error
 }
 
-type helpMouseResumeMsg struct{}
-type syncSpinnerTickMsg struct{}
+type (
+	helpMouseResumeMsg struct{}
+	syncSpinnerTickMsg struct{}
+)
 
 func disableMouseCmd() tea.Cmd {
 	return func() tea.Msg { return tea.DisableMouse() }

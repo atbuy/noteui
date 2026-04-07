@@ -170,7 +170,7 @@ func (m *Model) refreshPreview() {
 	}
 
 	if item.Kind == treeCategory {
-		pathText := item.Name
+		var pathText string
 		if item.RelPath == "" {
 			pathText = "~/notes"
 		} else {
@@ -590,14 +590,6 @@ func applyTodoLineHighlight(content string, rendLine int) string {
 		lines[rendLine] = renderSelectedTodoLine(lines[rendLine])
 	}
 	return strings.Join(lines, "\n")
-}
-
-func todoDueDateFromText(text string) (string, bool) {
-	_, metadata := notes.ParseTodoMetadata(text)
-	if strings.TrimSpace(metadata.DueDate) == "" {
-		return "", false
-	}
-	return metadata.DueDate, metadata.DueDate < time.Now().Format("2006-01-02")
 }
 
 func renderTodoPreviewBody(text string, selected bool, bg lipgloss.Color, textFg lipgloss.Color) string {

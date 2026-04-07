@@ -84,10 +84,6 @@ func (m Model) workspaceStateKey() string {
 	return "default"
 }
 
-func (m Model) hasConfiguredWorkspaces() bool {
-	return len(m.workspaceOptions) > 0
-}
-
 func (m Model) canSwitchWorkspace() bool {
 	return !m.workspaceOverride && len(m.workspaceOptions) > 1
 }

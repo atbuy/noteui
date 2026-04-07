@@ -1,3 +1,4 @@
+// Package sync implements the SSH-based note synchronisation protocol.
 package sync
 
 import (

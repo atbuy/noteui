@@ -46,11 +46,7 @@ var (
 	appStyle         lipgloss.Style
 	titleBarStyle    lipgloss.Style
 	panelTitleStyle  lipgloss.Style
-	headerStyle      lipgloss.Style
-	metaStyle        lipgloss.Style
 	mutedStyle       lipgloss.Style
-	chipStyle        lipgloss.Style
-	emptyStyle       lipgloss.Style
 	footerStyle      lipgloss.Style
 	statusOKStyle    lipgloss.Style
 	statusErrStyle   lipgloss.Style
@@ -71,7 +67,6 @@ var (
 
 	boldTitleBar    bool
 	boldPanelTitles bool
-	boldHeaders     bool
 	boldSelected    bool
 	boldModalTitles bool
 
@@ -80,11 +75,7 @@ var (
 	iconCategoryLeaf      string
 	iconNote              string
 
-	treeCategoryStyle         lipgloss.Style
-	treeNoteStyle             lipgloss.Style
-	treePinnedStyle           lipgloss.Style
-	treeSelectedCategoryStyle lipgloss.Style
-	treeSelectedNoteStyle     lipgloss.Style
+	treeNoteStyle lipgloss.Style
 )
 
 type themePalette struct {
@@ -208,7 +199,6 @@ func ApplyTheme(cfg config.Config) {
 
 	boldTitleBar = cfg.Typography.BoldTitleBar
 	boldPanelTitles = cfg.Typography.BoldPanelTitles
-	boldHeaders = cfg.Typography.BoldHeaders
 	boldSelected = cfg.Typography.BoldSelected
 	boldModalTitles = cfg.Typography.BoldModalTitles
 
@@ -236,26 +226,8 @@ func ApplyTheme(cfg config.Config) {
 		Background(bgSoftColor).
 		Padding(0, 0, 1, 0)
 
-	headerStyle = lipgloss.NewStyle().
-		Bold(boldHeaders).
-		Foreground(textColor)
-
-	metaStyle = lipgloss.NewStyle().
-		Foreground(mutedColor)
-
 	mutedStyle = lipgloss.NewStyle().
 		Foreground(mutedColor)
-
-	chipStyle = lipgloss.NewStyle().
-		Foreground(textColor).
-		Background(chipBgColor).
-		Padding(0, 1).
-		MarginRight(1)
-
-	emptyStyle = lipgloss.NewStyle().
-		Foreground(mutedColor).
-		Background(bgSoftColor).
-		Italic(true)
 
 	footerStyle = lipgloss.NewStyle().
 		Foreground(mutedColor).
@@ -302,27 +274,9 @@ func ApplyTheme(cfg config.Config) {
 		Background(modalBgColor).
 		Bold(true)
 
-	treeCategoryStyle = lipgloss.NewStyle().
-		Foreground(accentSoftColor).
-		Background(bgSoftColor)
-
 	treeNoteStyle = lipgloss.NewStyle().
 		Foreground(textColor).
 		Background(bgSoftColor)
-
-	treePinnedStyle = lipgloss.NewStyle().
-		Foreground(accentColor).
-		Background(bgSoftColor)
-
-	treeSelectedCategoryStyle = lipgloss.NewStyle().
-		Foreground(selectedFgColor).
-		Background(selectedBgColor).
-		Bold(boldSelected)
-
-	treeSelectedNoteStyle = lipgloss.NewStyle().
-		Foreground(selectedFgColor).
-		Background(selectedBgColor).
-		Bold(boldSelected)
 }
 
 func builtinTheme(name string) themePalette {

@@ -1,3 +1,4 @@
+// Package notes provides note discovery, creation, mutation, and metadata parsing.
 package notes
 
 import (
@@ -118,9 +119,6 @@ func ApplyTemplateVars(content string, t time.Time) string {
 	).Replace(content)
 }
 
-// CreateNoteFromTemplate creates a new note pre-filled with the content of
-// templatePath after applying variable substitution. The created file uses the
-// same .new-* naming convention as CreateNote.
 // CreateTemplate creates a new blank template file inside <root>/.templates/.
 // The directory is created if it does not exist. Returns the absolute path of
 // the new file.
@@ -137,6 +135,9 @@ func CreateTemplate(root string) (string, error) {
 	return path, nil
 }
 
+// CreateNoteFromTemplate creates a new note pre-filled with the content of
+// templatePath after applying variable substitution. The created file uses the
+// same .new-* naming convention as CreateNote.
 func CreateNoteFromTemplate(root, relDir, templatePath string) (string, error) {
 	raw, err := os.ReadFile(templatePath)
 	if err != nil {
@@ -362,7 +363,7 @@ func ReadPreview(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	buf := make([]byte, PreviewBytes)
 	n, err := f.Read(buf)
@@ -414,9 +415,9 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	}
 	tmpPath := tmp.Name()
 	// Always remove the temp file if we never reach the rename.
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

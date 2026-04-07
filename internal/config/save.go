@@ -38,9 +38,11 @@ func Save(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-
-	return toml.NewEncoder(f).Encode(cfg)
+	encErr := toml.NewEncoder(f).Encode(cfg)
+	if closeErr := f.Close(); closeErr != nil && encErr == nil {
+		return closeErr
+	}
+	return encErr
 }
 
 func SaveDefaultSyncProfile(profile string) (Config, string, error) {

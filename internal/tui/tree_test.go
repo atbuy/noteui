@@ -216,7 +216,7 @@ func TestFuzzySequenceMatch(t *testing.T) {
 		{"ntui", "noteui", true},
 		{"cfg", "config", true},
 		{"abc", "a-b-c", true},
-		{"abc", "acb", false},  // wrong order
+		{"abc", "acb", false}, // wrong order
 		{"xyz", "noteui", false},
 		{"", "anything", true}, // empty pattern always matches
 		{"a", "", false},
