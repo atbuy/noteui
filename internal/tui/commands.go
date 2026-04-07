@@ -46,6 +46,20 @@ func createNoteCmd(root, relDir string) tea.Cmd {
 	}
 }
 
+func createNoteFromTemplateCmd(root, relDir, templatePath string) tea.Cmd {
+	return func() tea.Msg {
+		path, err := notes.CreateNoteFromTemplate(root, relDir, templatePath)
+		return noteCreatedMsg{path: path, err: err}
+	}
+}
+
+func createTemplateCmd(root string) tea.Cmd {
+	return func() tea.Msg {
+		path, err := notes.CreateTemplate(root)
+		return noteCreatedMsg{path: path, err: err}
+	}
+}
+
 func createCategoryCmd(root, relPath string) tea.Cmd {
 	return func() tea.Msg {
 		err := notes.CreateCategory(root, relPath)

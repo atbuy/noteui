@@ -287,6 +287,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showTemplatePicker {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderTemplatePickerModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	return fullScreen
 }
 
@@ -1127,6 +1138,8 @@ func (m Model) renderModeSegment() string {
 		return "CONFIRM"
 	case m.showNoteHistory:
 		return "HISTORY"
+	case m.showTemplatePicker:
+		return "TEMPLATE"
 	case m.searchMode:
 		switch m.listMode {
 		case listModeTemporary:
@@ -2282,6 +2295,80 @@ func (m Model) renderNoteHistoryModal() string {
 			lipgloss.JoinVertical(lipgloss.Left, rows...),
 			m.renderModalBlank(innerWidth),
 			m.renderModalFooter("up/down navigate • enter restore • esc close", innerWidth),
+		),
+	)
+	return modalCardStyle(modalWidth).Render(content)
+}
+
+func (m Model) renderTemplatePickerModal() string {
+	modalWidth, innerWidth := m.modalDimensions(52, 78)
+
+	var rows []string
+	if m.templatePickerEditMode {
+		// Edit mode: list only templates, no "Blank note" entry.
+		for i, tmpl := range m.templateItems {
+			prefix := "  "
+			if i == m.templatePickerCursor {
+				prefix = "> "
+			}
+			bg := modalBgColor
+			fg := textColor
+			if i == m.templatePickerCursor {
+				bg = selectedBgColor
+				fg = selectedFgColor
+			}
+			rows = append(rows, lipgloss.NewStyle().
+				Width(innerWidth).
+				Padding(0, 1).
+				Foreground(fg).
+				Background(bg).
+				Render(prefix+tmpl.Name))
+		}
+	} else {
+		// Create mode: index 0 is "Blank note", indices 1..N are templates.
+		total := len(m.templateItems) + 1
+		for i := 0; i < total; i++ {
+			label := "Blank note"
+			if i > 0 {
+				label = m.templateItems[i-1].Name
+			}
+			prefix := "  "
+			if i == m.templatePickerCursor {
+				prefix = "> "
+			}
+			bg := modalBgColor
+			fg := textColor
+			if i == m.templatePickerCursor {
+				bg = selectedBgColor
+				fg = selectedFgColor
+			}
+			rows = append(rows, lipgloss.NewStyle().
+				Width(innerWidth).
+				Padding(0, 1).
+				Foreground(fg).
+				Background(bg).
+				Render(prefix+label))
+		}
+	}
+
+	title := "New note"
+	hint := "Choose a template or start with a blank note."
+	footer := "up/down navigate  enter confirm  e edit  esc cancel"
+	if m.templatePickerEditMode {
+		title = "Edit template"
+		hint = "Select a template to open it in your editor."
+		footer = "up/down navigate  enter open  esc cancel"
+	}
+
+	content := lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.renderModalTitle(title, innerWidth),
+			m.renderModalHint(hint, innerWidth),
+			m.renderModalBlank(innerWidth),
+			lipgloss.JoinVertical(lipgloss.Left, rows...),
+			m.renderModalBlank(innerWidth),
+			m.renderModalFooter(footer, innerWidth),
 		),
 	)
 	return modalCardStyle(modalWidth).Render(content)

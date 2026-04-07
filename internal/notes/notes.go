@@ -33,6 +33,140 @@ func TempRoot(root string) string {
 	return filepath.Join(root, ".tmp")
 }
 
+const TemplatesDirName = ".templates"
+
+func TemplatesRoot(root string) string {
+	return filepath.Join(root, TemplatesDirName)
+}
+
+// Template describes a user-defined note template stored in .templates/.
+type Template struct {
+	Name    string // display name derived from the filename
+	RelPath string // relative path inside .templates/
+	Path    string // absolute path
+}
+
+// DiscoverTemplates returns all note files inside <root>/.templates/, sorted
+// alphabetically by RelPath. Returns an empty slice with no error when the
+// directory does not exist.
+func DiscoverTemplates(root string) ([]Template, error) {
+	templatesRoot := TemplatesRoot(root)
+
+	if _, err := os.Stat(templatesRoot); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []Template{}, nil
+		}
+		return nil, err
+	}
+
+	var out []Template
+
+	err := filepath.WalkDir(templatesRoot, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") && path != templatesRoot {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		if strings.HasPrefix(d.Name(), ".") {
+			return nil
+		}
+
+		if !IsNoteFile(path) {
+			return nil
+		}
+
+		rel, err := filepath.Rel(templatesRoot, path)
+		if err != nil {
+			return err
+		}
+
+		out = append(out, Template{
+			Name:    fallbackTitleFromFilename(filepath.Base(path)),
+			RelPath: rel,
+			Path:    path,
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].RelPath < out[j].RelPath
+	})
+
+	return out, nil
+}
+
+// ApplyTemplateVars replaces template placeholders in content with values
+// derived from t. Supported variables:
+//
+//	{{date}}  - current date in YYYY-MM-DD format
+//	{{time}}  - current time in HH:MM (24-hour) format
+//	{{title}} - replaced with empty string; the note title is set by the editor
+func ApplyTemplateVars(content string, t time.Time) string {
+	return strings.NewReplacer(
+		"{{date}}", t.Format("2006-01-02"),
+		"{{time}}", t.Format("15:04"),
+		"{{title}}", "",
+	).Replace(content)
+}
+
+// CreateNoteFromTemplate creates a new note pre-filled with the content of
+// templatePath after applying variable substitution. The created file uses the
+// same .new-* naming convention as CreateNote.
+// CreateTemplate creates a new blank template file inside <root>/.templates/.
+// The directory is created if it does not exist. Returns the absolute path of
+// the new file.
+func CreateTemplate(root string) (string, error) {
+	dir := TemplatesRoot(root)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte("# Template title\n\n"), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func CreateNoteFromTemplate(root, relDir, templatePath string) (string, error) {
+	raw, err := os.ReadFile(templatePath)
+	if err != nil {
+		return "", err
+	}
+	content := ApplyTemplateVars(string(raw), time.Now())
+
+	relDir = strings.TrimSpace(relDir)
+	if relDir == "." {
+		relDir = ""
+	}
+
+	targetDir := root
+	if relDir != "" {
+		targetDir = filepath.Join(root, relDir)
+	}
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return "", err
+	}
+
+	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
+	path := filepath.Join(targetDir, name)
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", err
+	}
+
+	return path, nil
+}
+
 func DiscoverTemporary(root string) ([]Note, error) {
 	tempRoot := TempRoot(root)
 

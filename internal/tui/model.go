@@ -395,6 +395,12 @@ type Model struct {
 	noteHistoryCursor   int
 	noteHistoryRelPath  string
 	noteHistoryAbsPath  string
+
+	showTemplatePicker    bool
+	templatePickerEditMode bool
+	templateItems         []notes.Template
+	templatePickerCursor  int
+	templatePickerRelDir  string
 }
 
 type dataLoadedMsg struct {
@@ -1736,6 +1742,25 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.showTemplatePicker {
+			switch {
+			case msg.String() == "esc":
+				m.closeTemplatePicker("template selection cancelled")
+				return m, nil
+			case msg.String() == "enter":
+				return m, m.confirmTemplatePicker()
+			case msg.String() == "e" && !m.templatePickerEditMode && m.templatePickerCursor > 0:
+				return m, m.editTemplateAtCursor()
+			case key.Matches(msg, keys.MoveUp):
+				m.moveTemplateCursor(-1)
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				m.moveTemplateCursor(1)
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.showNoteHistory {
 			switch {
 			case msg.String() == "esc":
@@ -3132,6 +3157,20 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.NoteHistory) {
 			return m, m.openNoteHistory()
+		}
+
+		if key.Matches(msg, keys.NewTemplate) {
+			return m, createTemplateCmd(m.rootDir)
+		}
+
+		if key.Matches(msg, keys.EditTemplates) {
+			templates, err := notes.DiscoverTemplates(m.rootDir)
+			if err != nil || len(templates) == 0 {
+				m.status = "no templates found in .templates/"
+				return m, nil
+			}
+			m.openTemplatePickerEditMode(templates)
+			return m, nil
 		}
 
 		if key.Matches(msg, keys.Open) || key.Matches(msg, keys.ToggleCategory) {

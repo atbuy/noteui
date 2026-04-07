@@ -49,6 +49,8 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Tree", key: keys.CreateCategory.Help().Key, desc: "Create category"},
 		{section: "Tree", key: keys.NewTodoList.Help().Key, desc: "New todo list (tree focus)"},
 		{section: "Notes", key: keys.NewNote.Help().Key, desc: "New note in current view"},
+		{section: "Notes", key: keys.NewTemplate.Help().Key, desc: "New template in .templates/"},
+		{section: "Notes", key: keys.EditTemplates.Help().Key, desc: "Edit templates"},
 		{section: "Notes", key: keys.NewTemporaryNote.Help().Key, desc: "New temporary note"},
 		{section: "Notes", key: keys.ToggleTemporary.Help().Key, desc: "Toggle Notes / Temporary (tree focus)"},
 		{section: "Notes", key: keys.PromoteTemporary.Help().Key, desc: "Promote selected temporary note or marked batch"},

@@ -184,6 +184,8 @@ type KeysConfig struct {
 	ScrollPageUp             []string `toml:"scroll_page_up"`
 	ToggleEncryption         []string `toml:"toggle_encryption"`
 	NoteHistory              []string `toml:"note_history"`
+	NewTemplate              []string `toml:"new_template"`
+	EditTemplates            []string `toml:"edit_templates"`
 }
 
 func Default() Config {

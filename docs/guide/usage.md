@@ -75,10 +75,48 @@ Multi-term search requires all terms to match. For example, `config deploy` only
 
 ## Creating notes and categories
 
-- `n`: create a note
+- `n`: create a note (shows a template picker if `.templates/` contains any template files; otherwise creates a blank note immediately)
 - `N`: create a temporary note
 - `T`: create a todo note
 - `C`: create a category
+- `ctrl+n`: create a new blank template file in `.templates/` and open it in your editor
+
+## Note templates
+
+Store reusable note skeletons as note files (`.md`, `.txt`, `.org`, or `.norg`) inside a `.templates/` directory at the root of your notes workspace.
+
+When you press `n` and at least one template file exists, a picker appears. Select a template with `j`/`k` and press `enter`. Choose "Blank note" at the top of the list to skip templates and create a blank note as usual. Press `e` on a template entry to open that template directly in your editor for editing.
+
+To create a new template, press `ctrl+n`. This creates a blank template file in `.templates/` and opens it in your editor. You can also use "New Template" in the command palette.
+
+To edit an existing template, use "Edit Templates" in the command palette. This opens the same template picker but in edit mode: every item in the list opens in your editor when confirmed.
+
+Templates support these variables, which are replaced at creation time:
+
+| Variable    | Replaced with                          |
+| ----------- | -------------------------------------- |
+| `{{date}}`  | Current date in YYYY-MM-DD format      |
+| `{{time}}`  | Current time in HH:MM (24-hour) format |
+| `{{title}}` | Empty string; set by the note heading  |
+
+Example template file `.templates/meeting.md`:
+
+```markdown
+# {{title}}
+
+Date: {{date}}
+Time: {{time}}
+
+## Agenda
+
+## Notes
+
+## Action items
+```
+
+The `N` (temporary note) and `T` (todo note) keys always bypass the template picker.
+
+Templates are also accessible from the command palette as "New Note from Template" when `.templates/` is non-empty.
 
 ## Renaming and moving
 

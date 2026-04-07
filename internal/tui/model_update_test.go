@@ -1228,3 +1228,199 @@ func TestConfirmSelectedWorkspaceSwitchesRootAndIgnoresStaleLoad(t *testing.T) {
 	require.Len(t, m.notes, 1)
 	require.Equal(t, "new.md", m.notes[0].RelPath)
 }
+
+// --- Template picker tests ---
+
+func makeTemplateFile(t *testing.T, root, name, content string) {
+	t.Helper()
+	dir := filepath.Join(root, notes.TemplatesDirName)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644))
+}
+
+func TestNewNoteKeyOpensTemplatePickerWhenTemplatesExist(t *testing.T) {
+	m := newTestModel(t)
+	makeTemplateFile(t, m.rootDir, "weekly.md", "# Weekly\n")
+
+	next, cmd := m.Update(keyMsg("n"))
+	m = next.(Model)
+	require.Nil(t, cmd, "expected no command; picker should open instead")
+	require.True(t, m.showTemplatePicker)
+	require.Len(t, m.templateItems, 1)
+	require.Equal(t, 0, m.templatePickerCursor)
+}
+
+func TestNewNoteKeyCreatesBlankNoteWhenNoTemplates(t *testing.T) {
+	m := newTestModel(t)
+	// No .templates/ directory exists.
+
+	next, cmd := m.Update(keyMsg("n"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.NotNil(t, cmd)
+}
+
+func TestTemplatePickerEscCancels(t *testing.T) {
+	m := newTestModel(t)
+	m.showTemplatePicker = true
+	m.templateItems = []notes.Template{{Name: "weekly", RelPath: "weekly.md", Path: "/tmp/weekly.md"}}
+
+	next, _ := m.Update(keyMsg("esc"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.Contains(t, m.status, "cancelled")
+}
+
+func TestTemplatePickerEnterOnBlankIssuesCreateNoteCmd(t *testing.T) {
+	m := newTestModel(t)
+	m.showTemplatePicker = true
+	m.templateItems = []notes.Template{{Name: "weekly", RelPath: "weekly.md", Path: "/tmp/weekly.md"}}
+	m.templatePickerCursor = 0 // "Blank note"
+
+	next, cmd := m.Update(keyMsg("enter"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.NotNil(t, cmd)
+}
+
+func TestTemplatePickerEnterOnTemplateIssuesCreateFromTemplateCmd(t *testing.T) {
+	m := newTestModel(t)
+	tmplPath := filepath.Join(m.rootDir, notes.TemplatesDirName, "weekly.md")
+	makeTemplateFile(t, m.rootDir, "weekly.md", "# Weekly\n")
+	m.showTemplatePicker = true
+	m.templateItems = []notes.Template{{Name: "weekly", RelPath: "weekly.md", Path: tmplPath}}
+	m.templatePickerCursor = 1 // first template
+
+	next, cmd := m.Update(keyMsg("enter"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.NotNil(t, cmd)
+}
+
+func TestTemplatePickerCursorClamps(t *testing.T) {
+	m := newTestModel(t)
+	m.showTemplatePicker = true
+	m.templateItems = []notes.Template{
+		{Name: "a", RelPath: "a.md", Path: "/tmp/a.md"},
+		{Name: "b", RelPath: "b.md", Path: "/tmp/b.md"},
+	}
+	m.templatePickerCursor = 0
+
+	// Move down 5 times; total items = 3 (Blank + 2 templates), max index = 2.
+	for i := 0; i < 5; i++ {
+		next, _ := m.Update(keyMsg("down"))
+		m = next.(Model)
+	}
+	require.Equal(t, 2, m.templatePickerCursor)
+
+	// Move up 5 times; min index = 0.
+	for i := 0; i < 5; i++ {
+		next, _ := m.Update(keyMsg("up"))
+		m = next.(Model)
+	}
+	require.Equal(t, 0, m.templatePickerCursor)
+}
+
+func TestTemporaryNoteModeSkipsTemplatePicker(t *testing.T) {
+	m := newTestModel(t)
+	makeTemplateFile(t, m.rootDir, "weekly.md", "# Weekly\n")
+	m.listMode = listModeTemporary
+
+	next, cmd := m.Update(keyMsg("n"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.NotNil(t, cmd)
+}
+
+func TestNewTemplateKeyIssuesCreateTemplateCmd(t *testing.T) {
+	m := newTestModel(t)
+
+	next, cmd := m.Update(keyMsg("ctrl+n"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.NotNil(t, cmd)
+}
+
+func TestEditTemplatesKeyOpensPickerInEditMode(t *testing.T) {
+	m := newTestModel(t)
+	makeTemplateFile(t, m.rootDir, "meeting.md", "# Meeting\n")
+
+	// keys.EditTemplates has no default key, so trigger via openTemplatePickerEditMode directly.
+	templates, err := notes.DiscoverTemplates(m.rootDir)
+	require.NoError(t, err)
+	m.openTemplatePickerEditMode(templates)
+
+	require.True(t, m.showTemplatePicker)
+	require.True(t, m.templatePickerEditMode)
+	require.Len(t, m.templateItems, 1)
+}
+
+func TestTemplatePickerEditModeEnterOpensEditor(t *testing.T) {
+	m := newTestModel(t)
+	makeTemplateFile(t, m.rootDir, "standup.md", "# Standup\n")
+
+	templates, err := notes.DiscoverTemplates(m.rootDir)
+	require.NoError(t, err)
+	m.openTemplatePickerEditMode(templates)
+
+	// Press enter to confirm (open in editor).
+	next, cmd := m.Update(keyMsg("enter"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.NotNil(t, cmd)
+}
+
+func TestTemplatePickerEditModeEscCloses(t *testing.T) {
+	m := newTestModel(t)
+	makeTemplateFile(t, m.rootDir, "standup.md", "# Standup\n")
+
+	templates, err := notes.DiscoverTemplates(m.rootDir)
+	require.NoError(t, err)
+	m.openTemplatePickerEditMode(templates)
+
+	next, _ := m.Update(keyMsg("esc"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.False(t, m.templatePickerEditMode)
+}
+
+func TestTemplatePickerCreateModeEKeyOpensEditor(t *testing.T) {
+	m := newTestModel(t)
+	makeTemplateFile(t, m.rootDir, "standup.md", "# Standup\n")
+
+	templates, err := notes.DiscoverTemplates(m.rootDir)
+	require.NoError(t, err)
+	m.openTemplatePicker(templates)
+	// Move to the first template (index 1, past "Blank note").
+	m.templatePickerCursor = 1
+
+	next, cmd := m.Update(keyMsg("e"))
+	m = next.(Model)
+	require.False(t, m.showTemplatePicker)
+	require.NotNil(t, cmd)
+}
+
+func TestTemplatePickerCursorClampsEditMode(t *testing.T) {
+	m := newTestModel(t)
+	m.showTemplatePicker = true
+	m.templatePickerEditMode = true
+	m.templateItems = []notes.Template{
+		{Name: "a", RelPath: "a.md", Path: "/tmp/a.md"},
+		{Name: "b", RelPath: "b.md", Path: "/tmp/b.md"},
+	}
+	m.templatePickerCursor = 0
+
+	// Move down 5 times: should clamp at 1 (total 2 items, no "Blank note").
+	for range 5 {
+		next, _ := m.Update(keyMsg("j"))
+		m = next.(Model)
+	}
+	require.Equal(t, 1, m.templatePickerCursor)
+
+	// Move up 5 times: should clamp at 0.
+	for range 5 {
+		next, _ := m.Update(keyMsg("k"))
+		m = next.(Model)
+	}
+	require.Equal(t, 0, m.templatePickerCursor)
+}

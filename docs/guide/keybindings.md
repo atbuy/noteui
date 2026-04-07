@@ -23,7 +23,9 @@ This page documents the default keybindings that most users care about first.
 
 ## Create and organize
 
-- `n`: new note
+- `n`: new note (shows a template picker if `.templates/` contains any template files; press `e` on a template entry to edit it)
+- `ctrl+n`: new template in `.templates/`
+- `ctrl+k`: edit templates (opens template picker in edit mode)
 - `N`: new temporary note
 - `T`: new todo list
 - `C`: create category

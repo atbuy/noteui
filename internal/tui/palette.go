@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"atbuy/noteui/internal/editor"
 	"atbuy/noteui/internal/notes"
 	notesync "atbuy/noteui/internal/sync"
 )
@@ -31,6 +32,9 @@ const (
 	cmdNewNote               = "new_note"
 	cmdNewTemporaryNote      = "new_temporary_note"
 	cmdNewTodoList           = "new_todo_list"
+	cmdNewNoteFromTemplate   = "new_note_from_template"
+	cmdNewTemplate           = "new_template"
+	cmdEditTemplates         = "edit_templates"
 	cmdNewCategory           = "new_category"
 	cmdMoveCurrent           = "move_current"
 	cmdMarkCurrent           = "mark_current"
@@ -202,6 +206,12 @@ func paletteCommands(m Model) []paletteCommand {
 		paletteCommand{name: "Switch Workspace", desc: "Switch to another configured workspace", category: "app", action: cmdSwitchWorkspace})
 	cmds = appendPaletteCommand(cmds, m.listMode != listModeTemporary && m.listMode != listModePins,
 		paletteCommand{name: "New Todo List", desc: "Create a new todo list in the current location", category: "notes", action: cmdNewTodoList})
+	cmds = appendPaletteCommand(cmds, m.hasTemplates(),
+		paletteCommand{name: "New Note from Template", desc: "Create a note using a user-defined template", category: "notes", action: cmdNewNoteFromTemplate})
+	cmds = appendPaletteCommand(cmds, true,
+		paletteCommand{name: "New Template", desc: "Create a new blank template in .templates/", category: "notes", action: cmdNewTemplate})
+	cmds = appendPaletteCommand(cmds, m.hasTemplates(),
+		paletteCommand{name: "Edit Templates", desc: "Open a template for editing", category: "notes", action: cmdEditTemplates})
 	cmds = appendPaletteCommand(cmds, m.listMode == listModeNotes,
 		paletteCommand{name: "New Category", desc: "Create a category in the notes tree", category: "tree", action: cmdNewCategory})
 	cmds = appendPaletteCommand(cmds, m.canMoveCurrent(),
@@ -881,10 +891,97 @@ func (m *Model) startNewNote() tea.Cmd {
 		m.status = "press enter to jump to item first"
 		return nil
 	}
-	if m.listMode == listModeTodos {
+	templates, err := notes.DiscoverTemplates(m.rootDir)
+	if err != nil || len(templates) == 0 {
 		return createNoteCmd(m.rootDir, m.currentTargetDir())
 	}
-	return createNoteCmd(m.rootDir, m.currentTargetDir())
+	m.openTemplatePicker(templates)
+	return nil
+}
+
+func (m *Model) openTemplatePicker(templates []notes.Template) {
+	m.templateItems = templates
+	m.templatePickerCursor = 0
+	m.templatePickerEditMode = false
+	m.templatePickerRelDir = m.currentTargetDir()
+	m.showTemplatePicker = true
+	m.status = "select template"
+}
+
+func (m *Model) openTemplatePickerEditMode(templates []notes.Template) {
+	m.templateItems = templates
+	m.templatePickerCursor = 0
+	m.templatePickerEditMode = true
+	m.templatePickerRelDir = ""
+	m.showTemplatePicker = true
+	m.status = "select template to edit"
+}
+
+func (m *Model) closeTemplatePicker(status string) {
+	m.showTemplatePicker = false
+	m.templatePickerEditMode = false
+	m.templateItems = nil
+	m.templatePickerCursor = 0
+	m.templatePickerRelDir = ""
+	if strings.TrimSpace(status) != "" {
+		m.status = status
+	}
+}
+
+func (m *Model) moveTemplateCursor(delta int) {
+	total := len(m.templateItems)
+	if !m.templatePickerEditMode {
+		total++ // +1 for "Blank note" at index 0
+	}
+	next := m.templatePickerCursor + delta
+	if next < 0 {
+		next = 0
+	}
+	if next >= total {
+		next = total - 1
+	}
+	m.templatePickerCursor = next
+}
+
+func (m *Model) confirmTemplatePicker() tea.Cmd {
+	if m.templatePickerEditMode {
+		return m.editTemplateAtCursor()
+	}
+	if m.templatePickerCursor == 0 {
+		relDir := m.templatePickerRelDir
+		m.closeTemplatePicker("")
+		return createNoteCmd(m.rootDir, relDir)
+	}
+	idx := m.templatePickerCursor - 1
+	if idx >= len(m.templateItems) {
+		m.closeTemplatePicker("template selection out of range")
+		return nil
+	}
+	tmpl := m.templateItems[idx]
+	relDir := m.templatePickerRelDir
+	m.closeTemplatePicker("")
+	return createNoteFromTemplateCmd(m.rootDir, relDir, tmpl.Path)
+}
+
+func (m *Model) editTemplateAtCursor() tea.Cmd {
+	idx := m.templatePickerCursor
+	if m.templatePickerEditMode {
+		// In edit mode, index 0 maps directly to templateItems[0] (no "Blank note").
+	} else {
+		// In create mode, cursor > 0 maps to templateItems[cursor-1].
+		idx = m.templatePickerCursor - 1
+	}
+	if idx < 0 || idx >= len(m.templateItems) {
+		return nil
+	}
+	tmpl := m.templateItems[idx]
+	m.closeTemplatePicker("")
+	return editor.Open(tmpl.Path)
+}
+
+func (m Model) hasTemplates() bool {
+	templates, err := notes.DiscoverTemplates(m.rootDir)
+	return err == nil && len(templates) > 0
 }
 
 func (m *Model) startNewTodoList() tea.Cmd {
@@ -1034,6 +1131,24 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 		return createTemporaryNoteCmd(m.rootDir)
 	case cmdNewTodoList:
 		return m.startNewTodoList()
+	case cmdNewNoteFromTemplate:
+		templates, err := notes.DiscoverTemplates(m.rootDir)
+		if err != nil || len(templates) == 0 {
+			m.status = "no templates found in .templates/"
+			return nil
+		}
+		m.openTemplatePicker(templates)
+		return nil
+	case cmdNewTemplate:
+		return createTemplateCmd(m.rootDir)
+	case cmdEditTemplates:
+		templates, err := notes.DiscoverTemplates(m.rootDir)
+		if err != nil || len(templates) == 0 {
+			m.status = "no templates found in .templates/"
+			return nil
+		}
+		m.openTemplatePickerEditMode(templates)
+		return nil
 	case cmdNewCategory:
 		m.openCreateCategory()
 		return nil

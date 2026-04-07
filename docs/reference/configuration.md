@@ -612,6 +612,15 @@ note_history = ["H"]
   Default: `["H"]`
   Opens the version history modal for the selected local note.
 
+### Templates
+
+- `new_template`
+  Default: `["ctrl+n"]`
+  Creates a blank template file in `.templates/` and opens it in your editor.
+- `edit_templates`
+  Default: `["ctrl+k"]`
+  Opens the template picker in edit mode so you can select a template to edit.
+
 ### Todo and extra motions
 
 - `bracket_forward`
@@ -657,3 +666,14 @@ Sync-related key defaults:
 - `delete_remote_keep_local = ["U"]`
 - `sync_import_current = ["i"]`
 - `sync_import = ["I"]`
+
+## Reserved directories
+
+noteui uses the following hidden directories inside the notes root and skips them during normal note discovery:
+
+| Directory | Purpose |
+|---|---|
+| `.tmp/` | Temporary notes |
+| `.noteui-history/` | Automatic per-note version history |
+| `.noteui-sync/` | Sync bookkeeping metadata |
+| `.templates/` | User-defined note templates (see [Note templates](../guide/usage.md#note-templates)) |
