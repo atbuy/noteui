@@ -232,12 +232,11 @@ func (m Model) renderTodoListRow(item todoListItem, rowWidth int, selected bool)
 
 	rowBg := bgSoftColor
 	textFg := textColor
-	priorityFg := accentSoftColor
+	priorityFg := todoPriorityColor(item.Todo.Metadata.Priority)
 	dueFg := mutedColor
 	sourceFg := mutedColor
 	if item.Todo.Metadata.Priority == 1 {
 		textFg = accentColor
-		priorityFg = accentColor
 	}
 	if todoDueDateIsOverdue(item) {
 		dueFg = errorColor

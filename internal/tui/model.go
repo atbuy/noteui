@@ -362,8 +362,10 @@ type Model struct {
 	showTodoAdd        bool
 	showTodoEdit       bool
 	showTodoDueDate    bool
+	showTodoPriority   bool
 	todoInput          textinput.Model
 	dueDateInput       textinput.Model
+	priorityInput      textinput.Model
 
 	sessionPassphrase    string
 	showPassphraseModal  bool
@@ -495,6 +497,12 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 	dueDateInput.CharLimit = 32
 	dueDateInput.Width = 24
 
+	priorityInput := textinput.New()
+	priorityInput.Placeholder = "1, 2, 3..."
+	priorityInput.Prompt = ""
+	priorityInput.CharLimit = 8
+	priorityInput.Width = 16
+
 	commandPaletteInput := textinput.New()
 	commandPaletteInput.Placeholder = "Search notes and commands..."
 	commandPaletteInput.Prompt = "> "
@@ -532,6 +540,7 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 		helpInput:                 helpInput,
 		todoInput:                 todoInput,
 		dueDateInput:              dueDateInput,
+		priorityInput:             priorityInput,
 		passphraseInput:           passphraseInput,
 		preserveCursor:            -1,
 		pendingTodoCursor:         -1,
@@ -1193,6 +1202,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.tagInput.Width = max(24, min(60, m.width-16))
 		m.todoInput.Width = max(24, min(60, m.width-16))
 		m.dueDateInput.Width = max(18, min(24, m.width-20))
+		m.priorityInput.Width = max(12, min(20, m.width-20))
 
 		previewInnerWidth := max(20, rightWidth-8)
 		previewInnerHeight := max(6, msg.Height-14)
@@ -1855,6 +1865,40 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 
+		if m.showTodoPriority {
+			switch msg.String() {
+			case "esc":
+				m.showTodoPriority = false
+				m.priorityInput.Blur()
+				m.priorityInput.SetValue("")
+				m.status = "todo priority cancelled"
+				return m, nil
+			case "enter":
+				priority := strings.TrimSpace(strings.TrimPrefix(strings.ToLower(m.priorityInput.Value()), "p"))
+				if priority != "" {
+					if _, ok := parseTodoPriorityHintToken("[p" + priority + "]"); !ok {
+						m.status = "priority must be a positive number"
+						return m, nil
+					}
+				}
+				path, rawLine, _, ok := m.currentPreviewTodoSelection()
+				m.showTodoPriority = false
+				m.priorityInput.Blur()
+				m.priorityInput.SetValue("")
+				if !ok {
+					m.status = "no todo selected"
+					return m, nil
+				}
+				return m, updateTodoPriorityCmd(path, rawLine, priority)
+			}
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.priorityInput, cmd = m.priorityInput.Update(msg)
+			return m, cmd
+		}
+
 		if m.showTodoDueDate {
 			switch msg.String() {
 			case "esc":
@@ -2484,7 +2528,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 			if m.pendingT && !key.Matches(msg, keys.TodoKey) && !key.Matches(msg, keys.TodoAdd) &&
 				!key.Matches(msg, keys.TodoDelete) &&
-				!key.Matches(msg, keys.TodoEdit) && !key.Matches(msg, keys.TodoDueDate) {
+				!key.Matches(msg, keys.TodoEdit) && !key.Matches(msg, keys.TodoDueDate) && !key.Matches(msg, keys.TodoPriority) {
 				m.pendingT = false
 			}
 			switch {
@@ -2653,9 +2697,14 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingT = false
 				return m, m.armEditCurrentPreviewTodo()
 
-			case key.Matches(msg, keys.TodoDueDate) && m.pendingT:
+			case key.Matches(msg, keys.TodoDueDate) && !key.Matches(msg, keys.TodoPriority) && m.pendingT:
 				m.pendingT = false
 				m.armSetCurrentTodoDueDate()
+				return m, nil
+
+			case key.Matches(msg, keys.TodoPriority) && m.pendingT:
+				m.pendingT = false
+				m.armSetCurrentTodoPriority()
 				return m, nil
 
 			case key.Matches(msg, keys.NextMatch):
@@ -2684,7 +2733,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if m.focus == focusTree && m.listMode == listModeTodos {
 			if m.pendingT && !key.Matches(msg, keys.TodoKey) && !key.Matches(msg, keys.TodoAdd) &&
 				!key.Matches(msg, keys.TodoDelete) && !key.Matches(msg, keys.TodoEdit) &&
-				!key.Matches(msg, keys.TodoDueDate) {
+				!key.Matches(msg, keys.TodoDueDate) && !key.Matches(msg, keys.TodoPriority) {
 				m.pendingT = false
 			}
 			switch {
@@ -2705,9 +2754,14 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case key.Matches(msg, keys.TodoEdit) && m.pendingT:
 				m.pendingT = false
 				return m, m.armEditCurrentPreviewTodo()
-			case key.Matches(msg, keys.TodoDueDate) && m.pendingT:
+			case key.Matches(msg, keys.TodoDueDate) && !key.Matches(msg, keys.TodoPriority) && m.pendingT:
 				m.pendingT = false
 				m.armSetCurrentTodoDueDate()
+				return m, nil
+
+			case key.Matches(msg, keys.TodoPriority) && m.pendingT:
+				m.pendingT = false
+				m.armSetCurrentTodoPriority()
 				return m, nil
 			}
 		}

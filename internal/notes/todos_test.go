@@ -28,6 +28,12 @@ tags: work
 	require.Equal(t, "Inbox cleanup", items[1].DisplayText)
 }
 
+func TestParseTodoMetadataAcceptsArbitraryPriority(t *testing.T) {
+	display, metadata := ParseTodoMetadata("Later task [p5]")
+	require.Equal(t, "Later task", display)
+	require.Equal(t, 5, metadata.Priority)
+}
+
 func TestParseTodoMetadataLeavesMalformedDueDateInText(t *testing.T) {
 	display, metadata := ParseTodoMetadata("Review docs [due:soon] [p2]")
 	require.Equal(t, "Review docs [due:soon]", display)

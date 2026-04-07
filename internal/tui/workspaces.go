@@ -204,10 +204,13 @@ func (m *Model) resetWorkspaceTransientState() {
 	m.showTodoAdd = false
 	m.showTodoEdit = false
 	m.showTodoDueDate = false
+	m.showTodoPriority = false
 	m.todoInput.Blur()
 	m.todoInput.SetValue("")
 	m.dueDateInput.Blur()
 	m.dueDateInput.SetValue("")
+	m.priorityInput.Blur()
+	m.priorityInput.SetValue("")
 	m.showPassphraseModal = false
 	m.passphraseInput.Blur()
 	m.passphraseInput.SetValue("")

@@ -796,3 +796,15 @@ func TestRenderTodoDueDateModal(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected 'Set todo due date' in modal, got %q", plain[:min(len(plain), 200)])
 	}
 }
+
+func TestRenderTodoPriorityModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showTodoPriority = true
+	m.width = 120
+	m.height = 40
+	rendered := m.renderTodoPriorityModal()
+	plain := stripANSI(rendered)
+	if !strings.Contains(plain, "Set todo priority") {
+		require.Failf(t, "assertion failed", "expected 'Set todo priority' in modal, got %q", plain[:min(len(plain), 200)])
+	}
+}

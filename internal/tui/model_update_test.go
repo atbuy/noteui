@@ -1086,6 +1086,29 @@ func TestTodoDueDateActionOpensModalWithPrefill(t *testing.T) {
 	require.Equal(t, "2026-04-12", m.dueDateInput.Value())
 }
 
+func TestTodoPriorityEscCancels(t *testing.T) {
+	m := newTestModel(t)
+	m.showTodoPriority = true
+	m.priorityInput.Focus()
+	m = updateModel(m, keyMsg("esc"))
+	if m.showTodoPriority {
+		require.FailNow(t, "expected showTodoPriority to be false after esc")
+	}
+}
+
+func TestTodoPriorityActionOpensModalWithPrefill(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.previewPath = filepath.Join(m.rootDir, "work", "todo.md")
+	m.previewTodos = []previewTodoItem{{rawLine: 3, text: "Ship release [p2] [due:2026-04-12]"}}
+	m.previewTodoCursor = 0
+	m.pendingT = true
+
+	m = updateModel(m, keyMsg("p"))
+	require.True(t, m.showTodoPriority)
+	require.Equal(t, "2", m.priorityInput.Value())
+}
+
 func TestPreviewRenderedAppliesTodoDueDateHintsWithoutTodoNav(t *testing.T) {
 	m := newTestModel(t)
 	m.previewPath = filepath.Join(m.rootDir, "work", "todo.md")

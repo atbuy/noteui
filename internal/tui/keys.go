@@ -65,6 +65,7 @@ type keyMap struct {
 	TodoDelete       key.Binding
 	TodoEdit         key.Binding
 	TodoDueDate      key.Binding
+	TodoPriority     key.Binding
 	PendingZ         key.Binding
 	DeleteConfirm    key.Binding
 	ScrollPageDown   key.Binding
@@ -294,6 +295,10 @@ var keys = keyMap{
 		key.WithKeys("u"),
 		key.WithHelp("u", "Todo due date key"),
 	),
+	TodoPriority: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "Todo priority key"),
+	),
 	PendingZ: key.NewBinding(
 		key.WithKeys("z"),
 		key.WithHelp("z", "Center (zz)"),
@@ -383,6 +388,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.TodoDelete, cfg.TodoDelete)
 	apply(&keys.TodoEdit, cfg.TodoEdit)
 	apply(&keys.TodoDueDate, cfg.TodoDueDate)
+	apply(&keys.TodoPriority, cfg.TodoPriority)
 	apply(&keys.PendingZ, cfg.PendingZ)
 	apply(&keys.DeleteConfirm, cfg.DeleteConfirm)
 	apply(&keys.ScrollPageDown, cfg.ScrollPageDown)

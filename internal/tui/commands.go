@@ -184,6 +184,13 @@ func updateTodoDueDateCmd(path string, lineIdx int, dueDate string) tea.Cmd {
 	}
 }
 
+func updateTodoPriorityCmd(path string, lineIdx int, priority string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.UpdateTodoPriority(path, lineIdx, priority)
+		return todoModifiedMsg{path: path, err: err}
+	}
+}
+
 func encryptNoteCmd(path, passphrase string) tea.Cmd {
 	return func() tea.Msg {
 		err := notes.EncryptNoteFile(path, passphrase)

@@ -66,6 +66,7 @@ const (
 	cmdDeleteTodo            = "delete_todo"
 	cmdEditTodo              = "edit_todo"
 	cmdSetTodoDueDate        = "set_todo_due_date"
+	cmdSetTodoPriority       = "set_todo_priority"
 )
 
 // paletteKind identifies the type of an item in the command palette.
@@ -253,6 +254,8 @@ func paletteCommands(m Model) []paletteCommand {
 		paletteCommand{name: "Edit Current Todo", desc: "Edit the selected todo item", category: "todo", action: cmdEditTodo})
 	cmds = appendPaletteCommand(cmds, m.canToggleCurrentTodo(),
 		paletteCommand{name: "Set Todo Due Date", desc: "Set or clear the selected todo due date", category: "todo", action: cmdSetTodoDueDate})
+	cmds = appendPaletteCommand(cmds, m.canToggleCurrentTodo(),
+		paletteCommand{name: "Set Todo Priority", desc: "Set or clear the selected todo priority", category: "todo", action: cmdSetTodoPriority})
 
 	return cmds
 }
@@ -1129,6 +1132,9 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 		return m.armEditCurrentPreviewTodo()
 	case cmdSetTodoDueDate:
 		m.armSetCurrentTodoDueDate()
+		return nil
+	case cmdSetTodoPriority:
+		m.armSetCurrentTodoPriority()
 		return nil
 	}
 	return nil

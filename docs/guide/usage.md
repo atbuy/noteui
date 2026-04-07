@@ -123,6 +123,7 @@ Use:
 - `te` to edit a todo item
 - `td` to delete a todo item
 - `tu` to set or clear a todo due date
+- `tp` to set or clear a todo priority
 - `enter` in Todos mode to jump to the source note
 
 Todo metadata can be stored inline in normal markdown task lines:

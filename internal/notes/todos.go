@@ -59,10 +59,9 @@ func ParseTodoMetadata(text string) (string, TodoMetadata) {
 	displayFields := make([]string, 0, len(fields))
 	for _, field := range fields {
 		normalized := strings.ToLower(strings.TrimSpace(field))
-		switch normalized {
-		case "[p1]", "[p2]", "[p3]":
+		if priority, ok := parseTodoPriorityToken(normalized); ok {
 			if metadata.Priority == 0 {
-				metadata.Priority = int(normalized[2] - '0')
+				metadata.Priority = priority
 			}
 			continue
 		}
@@ -81,6 +80,28 @@ func ParseTodoMetadata(text string) (string, TodoMetadata) {
 		display = strings.TrimSpace(text)
 	}
 	return display, metadata
+}
+
+func parseTodoPriorityToken(token string) (int, bool) {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if !strings.HasPrefix(token, "[p") || !strings.HasSuffix(token, "]") {
+		return 0, false
+	}
+	digits := token[2 : len(token)-1]
+	if digits == "" {
+		return 0, false
+	}
+	priority := 0
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+		priority = priority*10 + int(r-'0')
+	}
+	if priority <= 0 {
+		return 0, false
+	}
+	return priority, true
 }
 
 func todoBodyLineOffset(raw, body string) int {

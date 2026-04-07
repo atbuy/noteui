@@ -56,6 +56,7 @@ This page documents the default keybindings that most users care about first.
 - `te`: edit the selected task
 - `td`: delete the selected task
 - `tu`: set or clear the selected task due date
+- `tp`: set or clear the selected task priority
 
 ## Preview controls
 
@@ -69,6 +70,7 @@ This page documents the default keybindings that most users care about first.
 - `te`: edit the current todo item
 - `td`: delete the current todo item
 - `tu`: set or clear the current todo due date
+- `tp`: set or clear the current todo priority
 - `ctrl+u` / `ctrl+d`: half-page scroll
 - `ctrl+b` / `ctrl+f`: page up/down
 

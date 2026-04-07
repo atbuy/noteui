@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -370,6 +371,24 @@ func (m *Model) armSetCurrentTodoDueDate() {
 	m.dueDateInput.Focus()
 	m.dueDateInput.CursorEnd()
 	m.status = "set todo due date"
+}
+
+func (m *Model) armSetCurrentTodoPriority() {
+	_, _, text, ok := m.currentPreviewTodoSelection()
+	if !ok {
+		m.status = "no todo selected"
+		return
+	}
+	_, metadata := notes.ParseTodoMetadata(text)
+	m.showTodoPriority = true
+	if metadata.Priority > 0 {
+		m.priorityInput.SetValue(fmt.Sprintf("%d", metadata.Priority))
+	} else {
+		m.priorityInput.SetValue("")
+	}
+	m.priorityInput.Focus()
+	m.priorityInput.CursorEnd()
+	m.status = "set todo priority"
 }
 
 func (m *Model) toggleNotesTemporaryMode() {

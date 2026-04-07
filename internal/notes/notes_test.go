@@ -324,6 +324,22 @@ func TestCreateTodoNoteAndTodoMutations(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected due date to be added, got %q", text)
 	}
 
+	if err := UpdateTodoPriority(path, 2, "1"); err != nil {
+		require.Failf(t, "assertion failed", "UpdateTodoPriority returned error: %v", err)
+	}
+	text = mustRead(t, path)
+	if !strings.Contains(text, "- [x] updated task [due:2026-04-12] [p1]") {
+		require.Failf(t, "assertion failed", "expected priority to be added, got %q", text)
+	}
+
+	if err := UpdateTodoPriority(path, 2, ""); err != nil {
+		require.Failf(t, "assertion failed", "UpdateTodoPriority clear returned error: %v", err)
+	}
+	text = mustRead(t, path)
+	if strings.Contains(text, "[p1]") {
+		require.Failf(t, "assertion failed", "expected priority to be cleared, got %q", text)
+	}
+
 	if err := UpdateTodoDueDate(path, 2, ""); err != nil {
 		require.Failf(t, "assertion failed", "UpdateTodoDueDate clear returned error: %v", err)
 	}
@@ -359,6 +375,9 @@ func TestTodoMutationsRejectInvalidLines(t *testing.T) {
 	}
 	if err := UpdateTodoDueDate(path, 0, "2026-99-99"); err == nil {
 		require.FailNow(t, "expected invalid due date to be rejected")
+	}
+	if err := UpdateTodoPriority(path, 0, "zero"); err == nil {
+		require.FailNow(t, "expected invalid priority to be rejected")
 	}
 }
 

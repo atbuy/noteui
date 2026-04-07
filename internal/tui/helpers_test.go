@@ -159,6 +159,50 @@ func TestPreviewMatchBuilders(t *testing.T) {
 	}
 }
 
+func TestTodoPreviewDueHintsPreserveRenderedInlineMarkdown(t *testing.T) {
+	ApplyTheme(config.Default())
+	rendered := renderMarkdownTerminal("- [ ] Fix **bold** and `code` [p1] [due:2020-01-01]\n", markdownRenderOptions{Width: 80})
+	codeSpan := lipgloss.NewStyle().Foreground(accentSoftColor).Background(inlineCodeBgColor).Render("code")
+	prioritySpan := lipgloss.NewStyle().Foreground(todoPriorityColor(1)).Background(bgSoftColor).Render("[p1]")
+	dueSpan := lipgloss.NewStyle().Foreground(todoDueDateColor("2020-01-01", time.Now().Format("2006-01-02"))).Background(bgSoftColor).Render("[due:2020-01-01]")
+	require.Contains(t, rendered, codeSpan)
+	require.Contains(t, rendered, prioritySpan)
+	require.Contains(t, rendered, dueSpan)
+
+	hinted := applyTodoDueDateHints(rendered)
+	require.Contains(t, stripANSI(hinted), "[ ] Fix bold and code [p1] [due:2020-01-01]")
+	require.Contains(t, hinted, codeSpan)
+	require.Contains(t, hinted, prioritySpan)
+	require.Contains(t, hinted, dueSpan)
+
+	selected := applyTodoLineHighlight(hinted, 0)
+	require.Contains(t, stripANSI(selected), "[ ] Fix bold and code [p1] [due:2020-01-01]")
+	require.Contains(t, selected, codeSpan)
+	selectedPrioritySpan := lipgloss.NewStyle().Foreground(todoPriorityColor(1)).Background(selectedBgColor).Render("[p1]")
+	selectedDueSpan := lipgloss.NewStyle().Foreground(todoDueDateColor("2020-01-01", time.Now().Format("2006-01-02"))).Background(selectedBgColor).Render("[due:2020-01-01]")
+	require.Contains(t, selected, selectedPrioritySpan)
+	require.Contains(t, selected, selectedDueSpan)
+
+	plainRendered := renderTodoPreviewLine("[ ] Plain task [p2] [due:2020-01-01]", false)
+	require.Contains(t, stripANSI(plainRendered), "[ ] Plain task [p2] [due:2020-01-01]")
+	require.Contains(t, plainRendered, lipgloss.NewStyle().Foreground(todoPriorityColor(2)).Background(bgSoftColor).Render("[p2]"))
+	require.Contains(t, plainRendered, dueSpan)
+
+	row := (Model{}).renderTodoListRow(todoListItem{Todo: notes.TodoItem{DisplayText: "List task", Metadata: notes.TodoMetadata{Priority: 3}}}, 80, false)
+	require.Contains(t, row, lipgloss.NewStyle().Foreground(todoPriorityColor(3)).Background(bgSoftColor).Render("[p3]"))
+
+	m := Model{cfg: config.Default()}
+	m.preview.Width = 80
+	normalPreview, _ := m.renderNotePreview("work/todo.md", "- [ ] Normal task [p1] [due:2020-01-01]\n", nil)
+	require.Contains(t, stripANSI(normalPreview), "[ ] Normal task [p1] [due:2020-01-01]")
+	require.Contains(t, normalPreview, prioritySpan)
+	require.Contains(t, normalPreview, dueSpan)
+
+	gapRendered := applyTodoMetadataHighlights("[p1] [due:2020-01-01]")
+	gapSpan := lipgloss.NewStyle().Foreground(textColor).Background(bgSoftColor).Render(" ")
+	require.Contains(t, gapRendered, prioritySpan+gapSpan+dueSpan)
+}
+
 func TestThemeAndColorHelpers(t *testing.T) {
 	if got := normalizeThemeName(" mocha "); got != "catppuccin" {
 		require.Failf(t, "assertion failed", "expected mocha alias to normalize to catppuccin, got %q", got)

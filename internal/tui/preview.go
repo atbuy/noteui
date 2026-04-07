@@ -584,8 +584,11 @@ func applyTodoLineHighlight(content string, rendLine int) string {
 	if rendLine >= len(lines) {
 		return content
 	}
-	plain := stripANSI(lines[rendLine])
-	lines[rendLine] = renderSelectedTodoLine(plain)
+	if hasANSI(lines[rendLine]) {
+		lines[rendLine] = renderSelectedRenderedTodoLine(lines[rendLine])
+	} else {
+		lines[rendLine] = renderSelectedTodoLine(lines[rendLine])
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -599,21 +602,24 @@ func todoDueDateFromText(text string) (string, bool) {
 
 func renderTodoPreviewBody(text string, selected bool, bg lipgloss.Color, textFg lipgloss.Color) string {
 	display, metadata := notes.ParseTodoMetadata(text)
-	if strings.TrimSpace(metadata.DueDate) == "" {
-		return lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(display)
+	display = strings.TrimSpace(display)
+	base := lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected)
+	if metadata.Priority == 0 && strings.TrimSpace(metadata.DueDate) == "" {
+		return base.Render(display)
 	}
 
-	due := "[due:" + metadata.DueDate + "]"
-	display = strings.TrimSpace(display)
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
 	if display != "" {
-		parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(display))
+		parts = append(parts, base.Render(display))
 	}
-	dueFg := mutedColor
-	if metadata.DueDate < time.Now().Format("2006-01-02") {
-		dueFg = errorColor
+	if metadata.Priority > 0 {
+		priority := fmt.Sprintf("[p%d]", metadata.Priority)
+		parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(todoPriorityColor(metadata.Priority)).Bold(selected).Render(priority))
 	}
-	parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(dueFg).Bold(selected).Render(due))
+	if metadata.DueDate != "" {
+		due := "[due:" + metadata.DueDate + "]"
+		parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(todoDueDateColor(metadata.DueDate, time.Now().Format("2006-01-02"))).Bold(selected).Render(due))
+	}
 	return strings.Join(parts, lipgloss.NewStyle().Background(bg).Render(" "))
 }
 
@@ -661,9 +667,139 @@ func renderSelectedTodoLine(plain string) string {
 	return renderTodoPreviewLine(plain, true)
 }
 
+func renderSelectedRenderedTodoLine(line string) string {
+	line = replaceRenderedBackground(line, bgSoftColor, selectedBgColor)
+	if strings.TrimSpace(stripANSI(line)) == "" {
+		return lipgloss.NewStyle().Background(selectedBgColor).Render(stripANSI(line))
+	}
+	return line
+}
+
+func replaceRenderedBackground(line string, from, to lipgloss.Color) string {
+	fromParam, ok := ansiBackgroundParam(from)
+	if !ok {
+		return line
+	}
+	toParam, ok := ansiBackgroundParam(to)
+	if !ok {
+		return line
+	}
+	return strings.ReplaceAll(line, fromParam, toParam)
+}
+
+func ansiBackgroundParam(color lipgloss.Color) (string, bool) {
+	rgb, ok := parseHexColor(string(color))
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("48;2;%d;%d;%d", clampChannel(rgb.r), clampChannel(rgb.g), clampChannel(rgb.b)), true
+}
+
+func hasANSI(s string) bool {
+	return strings.Contains(s, "\x1b[")
+}
+
+func applyTodoMetadataHighlights(content string) string {
+	if content == "" {
+		return content
+	}
+	base := lipgloss.NewStyle().Foreground(textColor).Background(bgSoftColor)
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		lines[i] = renderTodoMetadataHintsInRenderedLine(line, base)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderTodoMetadataHintsInRenderedLine(line string, base lipgloss.Style) string {
+	plain, chars := renderedVisibleByteRanges(line)
+	if plain == "" {
+		return line
+	}
+
+	today := time.Now().Format("2006-01-02")
+	type interval struct {
+		start int
+		end   int
+		style lipgloss.Style
+	}
+	var intervals []interval
+	for offset := 0; offset < len(plain); {
+		start, end, style, ok := nextTodoMetadataHint(plain[offset:], base, today)
+		if !ok {
+			break
+		}
+		intervals = append(intervals, interval{
+			start: offset + start,
+			end:   offset + end,
+			style: style,
+		})
+		offset += end
+	}
+	if len(intervals) == 0 {
+		return line
+	}
+
+	var out strings.Builder
+	lastByte := 0
+	for _, item := range intervals {
+		if item.start < 0 || item.end > len(chars) || item.start >= item.end {
+			continue
+		}
+		byteStart := chars[item.start].start
+		byteEnd := chars[item.end-1].end
+		writeRenderedGapWithBackground(&out, line[lastByte:byteStart], base)
+		out.WriteString(item.style.Render(plain[item.start:item.end]))
+		lastByte = byteEnd
+	}
+	writeRenderedGapWithBackground(&out, line[lastByte:], base)
+	return out.String()
+}
+
+type renderedByteRange struct {
+	start int
+	end   int
+}
+
+func writeRenderedGapWithBackground(out *strings.Builder, gap string, base lipgloss.Style) {
+	plain := stripANSI(gap)
+	if plain != "" && strings.TrimSpace(plain) == "" {
+		out.WriteString(base.Render(plain))
+		return
+	}
+	out.WriteString(gap)
+}
+
+func renderedVisibleByteRanges(s string) (string, []renderedByteRange) {
+	var plain strings.Builder
+	var chars []renderedByteRange
+	inEsc := false
+
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if inEsc {
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		if ch == 0x1b {
+			inEsc = true
+			continue
+		}
+		plain.WriteByte(ch)
+		chars = append(chars, renderedByteRange{start: i, end: i + 1})
+	}
+
+	return plain.String(), chars
+}
+
 func applyTodoDueDateHints(content string) string {
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
+		if hasANSI(line) {
+			continue
+		}
 		plain := stripANSI(line)
 		trimmed := strings.TrimSpace(plain)
 		if strings.HasPrefix(trimmed, "[ ] ") || strings.HasPrefix(trimmed, "[X] ") || strings.HasPrefix(trimmed, "[x] ") {
@@ -799,6 +935,8 @@ func (m Model) renderNotePreview(relPath string, raw string, tags []string) (str
 		rendered = tagsHeader + "\n\n" + rendered
 		lineNumberStart += 2
 	}
+
+	rendered = applyTodoMetadataHighlights(rendered)
 
 	return rendered, lineNumberStart
 }

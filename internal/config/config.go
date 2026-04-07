@@ -176,6 +176,7 @@ type KeysConfig struct {
 	TodoDelete               []string `toml:"todo_delete"`
 	TodoEdit                 []string `toml:"todo_edit"`
 	TodoDueDate              []string `toml:"todo_due_date"`
+	TodoPriority             []string `toml:"todo_priority"`
 	PendingZ                 []string `toml:"pending_z"`
 	DeleteConfirm            []string `toml:"delete_confirm"`
 	ScrollPageDown           []string `toml:"scroll_page_down"`

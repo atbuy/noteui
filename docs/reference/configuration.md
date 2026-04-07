@@ -598,6 +598,8 @@ sync_import = ["I"]
   Default: `["e"]`
 - `todo_due_date`
   Default: `["u"]`
+- `todo_priority`
+  Default: `["p"]`
 - `pending_z`
   Default: `["z"]`
 - `delete_confirm`

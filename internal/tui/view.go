@@ -243,6 +243,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showTodoPriority {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderTodoPriorityModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showPassphraseModal {
 		return lipgloss.Place(
 			m.width,
@@ -1097,6 +1108,8 @@ func (m Model) renderModeSegment() string {
 		return "EDIT TODO"
 	case m.showTodoDueDate:
 		return "TODO DUE DATE"
+	case m.showTodoPriority:
+		return "TODO PRIORITY"
 	case m.showPassphraseModal:
 		return "PASSPHRASE"
 	case m.showEncryptConfirm:
@@ -1600,6 +1613,16 @@ func (m Model) renderTodoDueDateModal() string {
 		"Use YYYY-MM-DD. Leave empty to clear the current due date.",
 		"Due date",
 		m.dueDateInput,
+		"Enter to save • Esc to cancel",
+	)
+}
+
+func (m Model) renderTodoPriorityModal() string {
+	return m.renderStandardModal(
+		"Set todo priority",
+		"Use a positive number. Leave empty to clear the current priority.",
+		"Priority",
+		m.priorityInput,
 		"Enter to save • Esc to cancel",
 	)
 }

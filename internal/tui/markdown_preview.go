@@ -396,43 +396,116 @@ func (r markdownPreviewRenderer) renderPlainCode(code, lang string, indent int) 
 	return prefixLines(block, strings.Repeat(" ", indent))
 }
 
-func renderDueHintText(text string, base lipgloss.Style) string {
+func renderTodoMetadataHintText(text string, base lipgloss.Style) string {
 	if text == "" {
 		return ""
 	}
 
-	const prefix = "[due:"
 	var out strings.Builder
 	today := time.Now().Format("2006-01-02")
 
 	for len(text) > 0 {
-		start := strings.Index(text, prefix)
-		if start < 0 {
+		start, end, style, ok := nextTodoMetadataHint(text, base, today)
+		if !ok {
 			out.WriteString(base.Render(text))
 			break
 		}
 		if start > 0 {
 			out.WriteString(base.Render(text[:start]))
 		}
-		rest := text[start:]
-		end := strings.IndexByte(rest, ']')
-		if end < 0 {
-			out.WriteString(base.Render(rest))
-			break
-		}
-		token := rest[:end+1]
-		due := strings.TrimSuffix(strings.TrimPrefix(token, prefix), "]")
-		style := base.Copy().Foreground(mutedColor)
-		if len(due) == len("2006-01-02") {
-			if _, err := time.Parse("2006-01-02", due); err == nil && due < today {
-				style = base.Copy().Foreground(errorColor)
-			}
-		}
-		out.WriteString(style.Render(token))
-		text = rest[end+1:]
+		out.WriteString(style.Render(text[start:end]))
+		text = text[end:]
 	}
 
 	return out.String()
+}
+
+func nextTodoMetadataHint(text string, base lipgloss.Style, today string) (int, int, lipgloss.Style, bool) {
+	lower := strings.ToLower(text)
+	bestStart := -1
+	bestEnd := 0
+	bestStyle := base
+	setBest := func(start, end int, style lipgloss.Style) {
+		if bestStart < 0 || start < bestStart {
+			bestStart = start
+			bestEnd = end
+			bestStyle = style
+		}
+	}
+
+	if dueStart := strings.Index(lower, "[due:"); dueStart >= 0 {
+		if endRel := strings.IndexByte(lower[dueStart:], ']'); endRel >= 0 {
+			end := dueStart + endRel + 1
+			token := lower[dueStart:end]
+			due := strings.TrimSuffix(strings.TrimPrefix(token, "[due:"), "]")
+			setBest(dueStart, end, base.Copy().Foreground(todoDueDateColor(due, today)))
+		}
+	}
+
+	for offset := 0; offset < len(lower); {
+		rel := strings.Index(lower[offset:], "[p")
+		if rel < 0 {
+			break
+		}
+		start := offset + rel
+		endRel := strings.IndexByte(lower[start:], ']')
+		if endRel < 0 {
+			break
+		}
+		end := start + endRel + 1
+		if priority, ok := parseTodoPriorityHintToken(lower[start:end]); ok {
+			setBest(start, end, base.Copy().Foreground(todoPriorityColor(priority)))
+		}
+		offset = start + 2
+	}
+
+	if bestStart < 0 {
+		return 0, 0, lipgloss.Style{}, false
+	}
+	return bestStart, bestEnd, bestStyle, true
+}
+
+func todoDueDateColor(due, today string) lipgloss.Color {
+	if len(due) == len("2006-01-02") {
+		if _, err := time.Parse("2006-01-02", due); err == nil && due < today {
+			return errorColor
+		}
+	}
+	return mutedColor
+}
+
+func parseTodoPriorityHintToken(token string) (int, bool) {
+	if !strings.HasPrefix(token, "[p") || !strings.HasSuffix(token, "]") {
+		return 0, false
+	}
+	digits := token[2 : len(token)-1]
+	if digits == "" {
+		return 0, false
+	}
+	priority := 0
+	for i := 0; i < len(digits); i++ {
+		if digits[i] < 48 || digits[i] > 57 {
+			return 0, false
+		}
+		priority = priority*10 + int(digits[i]-48)
+	}
+	if priority <= 0 {
+		return 0, false
+	}
+	return priority, true
+}
+
+func todoPriorityColor(priority int) lipgloss.Color {
+	switch {
+	case priority <= 1:
+		return errorColor
+	case priority == 2:
+		return accentColor
+	case priority == 3:
+		return accentSoftColor
+	default:
+		return mutedColor
+	}
 }
 
 func (r markdownPreviewRenderer) renderInlineChildren(parent ast.Node) string {
@@ -450,15 +523,15 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		base := lipgloss.NewStyle().Foreground(textColor).Background(bgSoftColor)
 		switch {
 		case n.HardLineBreak():
-			return renderDueHintText(s, base) + "\n"
+			return renderTodoMetadataHintText(s, base) + "\n"
 		case n.SoftLineBreak():
-			return renderDueHintText(s+" ", base)
+			return renderTodoMetadataHintText(s+" ", base)
 		default:
-			return renderDueHintText(s, base)
+			return renderTodoMetadataHintText(s, base)
 		}
 
 	case *ast.String:
-		return renderDueHintText(string(n.Value), lipgloss.NewStyle().
+		return renderTodoMetadataHintText(string(n.Value), lipgloss.NewStyle().
 			Foreground(textColor).
 			Background(bgSoftColor))
 
