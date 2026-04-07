@@ -134,6 +134,36 @@ Use `U` on a synced local note to:
 
 Use this when you no longer want that note synced but do not want to delete the local content.
 
+## Per-workspace sync isolation
+
+If you run multiple workspaces and sync is configured, every workspace will sync to the same `remote_root` by default. This means notes from workspace A appear as remote-only placeholders in workspace B and vice versa, and pressing `I` in workspace B imports workspace A's notes into the wrong directory.
+
+The fix is to add a `sync_remote_root` field to each workspace that needs its own remote path:
+
+```toml
+[sync]
+default_profile = "homebox"
+
+[sync.profiles.homebox]
+ssh_host = "notes-prod"
+remote_root = "/srv/noteui"      # fallback for any workspace without an override
+remote_bin = "/usr/local/bin/noteui-sync"
+
+[workspaces.work]
+root = "/home/alice/notes/work"
+label = "Work"
+sync_remote_root = "/srv/noteui/work"
+
+[workspaces.personal]
+root = "/home/alice/notes/personal"
+label = "Personal"
+sync_remote_root = "/srv/noteui/personal"
+```
+
+`sync_remote_root` overrides the profile's `remote_root` for all sync operations originating from that workspace: push, pull, import, conflict resolution, and remote delete. The remote directories do not need to exist in advance — they are created on first sync.
+
+The workspace picker displays the effective remote path under each workspace entry so you can confirm the isolation before switching.
+
 ## How sync interacts with encrypted notes
 
 Encrypted notes can still be synced, but sync should be thought of as transport for the note file and sync metadata.

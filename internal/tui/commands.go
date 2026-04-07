@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -291,6 +292,19 @@ type conflictResolvedMsg struct {
 	err        error
 }
 
+type noteVersionSavedMsg struct{}
+
+type noteHistoryLoadedMsg struct {
+	relPath string
+	entries []notes.HistoryEntry
+	err     error
+}
+
+type noteVersionRestoredMsg struct {
+	relPath string
+	err     error
+}
+
 func startSyncCmd(sessionToken int) tea.Cmd {
 	return func() tea.Msg { return syncStartMsg{sessionToken: sessionToken} }
 }
@@ -301,11 +315,11 @@ func syncDebounceCmd(token, sessionToken int) tea.Cmd {
 	})
 }
 
-func syncNowCmd(root string, cfg config.SyncConfig, pinnedNotes []string, pinnedCats []string, sessionToken int) tea.Cmd {
+func syncNowCmd(root, remoteRootOverride string, cfg config.SyncConfig, pinnedNotes []string, pinnedCats []string, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		result, err := notesync.SyncRoot(ctx, root, cfg, pinnedNotes, pinnedCats, nil)
+		result, err := notesync.SyncRoot(ctx, root, remoteRootOverride, cfg, pinnedNotes, pinnedCats, nil)
 		return syncFinishedMsg{result: result, err: err, sessionToken: sessionToken}
 	}
 }
@@ -324,29 +338,91 @@ func makeNoteSharedCmd(path string) tea.Cmd {
 	}
 }
 
-func deleteRemoteNoteKeepLocalCmd(root, path string, cfg config.SyncConfig, sessionToken int) tea.Cmd {
+func deleteRemoteNoteKeepLocalCmd(root, path, remoteRootOverride string, cfg config.SyncConfig, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		err := notesync.DeleteRemoteNoteAndKeepLocal(ctx, root, path, cfg, nil)
+		err := notesync.DeleteRemoteNoteAndKeepLocal(ctx, root, path, remoteRootOverride, cfg, nil)
 		return remoteNoteDeletedMsg{path: path, err: err, sessionToken: sessionToken}
 	}
 }
 
-func importCurrentSyncedNoteCmd(root string, cfg config.SyncConfig, noteID string, sessionToken int) tea.Cmd {
+func importCurrentSyncedNoteCmd(root, remoteRootOverride string, cfg config.SyncConfig, noteID string, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		result, err := notesync.ImportRemoteNote(ctx, root, cfg, noteID, nil)
+		result, err := notesync.ImportRemoteNote(ctx, root, remoteRootOverride, cfg, noteID, nil)
 		return syncImportFinishedMsg{result: result, err: err, sessionToken: sessionToken}
 	}
 }
 
-func importSyncedNotesCmd(root string, cfg config.SyncConfig, sessionToken int) tea.Cmd {
+func importSyncedNotesCmd(root, remoteRootOverride string, cfg config.SyncConfig, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		result, err := notesync.ImportRemoteNotes(ctx, root, cfg, nil)
+		result, err := notesync.ImportRemoteNotes(ctx, root, remoteRootOverride, cfg, nil)
 		return syncImportFinishedMsg{result: result, err: err, sessionToken: sessionToken}
+	}
+}
+
+// saveNoteVersionCmd reads the note at absPath and saves its current content as a
+// history version. Failures are silently ignored so they never block the main workflow.
+func saveNoteVersionCmd(root, absPath string) tea.Cmd {
+	return func() tea.Msg {
+		content, err := notes.ReadAll(absPath)
+		if err == nil {
+			relPath, relErr := filepath.Rel(root, absPath)
+			if relErr == nil {
+				_ = notes.SaveVersion(root, filepath.ToSlash(relPath), content)
+			}
+		}
+		return noteVersionSavedMsg{}
+	}
+}
+
+// saveNoteVersionAndOpenEncryptedCmd saves the current encrypted blob as a history
+// version, then decrypts and opens the note in an external editor. Combining both
+// steps ensures the pre-edit snapshot is captured before the editor runs.
+func saveNoteVersionAndOpenEncryptedCmd(root, path, passphrase string) tea.Cmd {
+	return func() tea.Msg {
+		// Save the current encrypted content before decrypting for editing.
+		if content, err := notes.ReadAll(path); err == nil {
+			if relPath, relErr := filepath.Rel(root, path); relErr == nil {
+				_ = notes.SaveVersion(root, filepath.ToSlash(relPath), content)
+			}
+		}
+
+		raw, err := notes.ReadAll(path)
+		if err != nil {
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+		tempContent, err := notes.PrepareForEdit(raw, passphrase)
+		if err != nil {
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+		tmpFile, err := os.CreateTemp("", "noteui-*.md")
+		if err != nil {
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+		tmpFile.Close()
+		if err := os.WriteFile(tmpFile.Name(), []byte(tempContent), 0o600); err != nil {
+			os.Remove(tmpFile.Name())
+			return openEncryptedNoteReadyMsg{origPath: path, err: err}
+		}
+		return openEncryptedNoteReadyMsg{origPath: path, tempPath: tmpFile.Name()}
+	}
+}
+
+func loadNoteHistoryCmd(root, relPath string) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := notes.Versions(root, relPath)
+		return noteHistoryLoadedMsg{relPath: relPath, entries: entries, err: err}
+	}
+}
+
+func restoreNoteVersionCmd(root, absPath, relPath, versionID string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.RestoreVersion(root, absPath, relPath, versionID)
+		return noteVersionRestoredMsg{relPath: relPath, err: err}
 	}
 }

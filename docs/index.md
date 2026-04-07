@@ -14,6 +14,8 @@ It helps you browse, search, preview, organize, and edit notes without moving th
 - Learn the core workflow: [Getting started](tutorial/getting-started.md)
 - Customize appearance, preview, and keys: [Configuration reference](reference/configuration.md)
 - Set up SSH-based sync: [Sync guide](guide/sync.md)
+- Isolate multiple workspaces from each other over sync: [Per-workspace sync isolation](guide/sync.md#per-workspace-sync-isolation)
+- Browse and restore note versions: [Note version history](guide/usage.md#note-version-history)
 - Understand encrypted notes: [Encrypted notes](advanced/encryption.md)
 - Recover remote-only or missing synced notes: [Troubleshooting](reference/troubleshooting.md)
 

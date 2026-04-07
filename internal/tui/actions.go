@@ -709,5 +709,5 @@ func (m *Model) armOpenEncrypted(path string) tea.Cmd {
 		m.status = "enter passphrase to open"
 		return nil
 	}
-	return openEncryptedNoteCmd(path, m.sessionPassphrase)
+	return saveNoteVersionAndOpenEncryptedCmd(m.rootDir, path, m.sessionPassphrase)
 }

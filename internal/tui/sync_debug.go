@@ -233,7 +233,7 @@ func (m *Model) confirmCurrentConflictResolution() tea.Cmd {
 	if m.conflictResolutionChoice == conflictResolutionKeepRemote {
 		return resolveConflictKeepRemoteCmd(m.rootDir, rec)
 	}
-	return resolveConflictKeepLocalCmd(m.rootDir, m.cfg.Sync, note.Path, rec)
+	return resolveConflictKeepLocalCmd(m.rootDir, m.activeWorkspaceSyncRemoteRoot(), m.cfg.Sync, note.Path, rec)
 }
 
 func readSyncDebugFile(path string) string {
@@ -391,11 +391,11 @@ func resolveConflictKeepRemoteCmd(root string, rec notesync.NoteRecord) tea.Cmd 
 	}
 }
 
-func resolveConflictKeepLocalCmd(root string, cfg config.SyncConfig, notePath string, rec notesync.NoteRecord) tea.Cmd {
+func resolveConflictKeepLocalCmd(root, remoteRootOverride string, cfg config.SyncConfig, notePath string, rec notesync.NoteRecord) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		err := notesync.ResolveConflictKeepLocal(ctx, root, notePath, cfg, rec, nil)
+		err := notesync.ResolveConflictKeepLocal(ctx, root, notePath, remoteRootOverride, cfg, rec, nil)
 		return conflictResolvedMsg{keepRemote: false, err: err}
 	}
 }

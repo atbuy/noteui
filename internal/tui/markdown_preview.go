@@ -63,7 +63,8 @@ func (r markdownPreviewRenderer) renderBlocks(parent ast.Node, indent int) strin
 		}
 		parts = append(parts, rendered)
 	}
-	return strings.Join(parts, "\n\n")
+	blankLine := lipgloss.NewStyle().Background(bgSoftColor).Width(r.width).Render("")
+	return strings.Join(parts, "\n"+blankLine+"\n")
 }
 
 func (r markdownPreviewRenderer) renderBlock(node ast.Node, indent int) string {
@@ -113,7 +114,11 @@ func (r markdownPreviewRenderer) renderBlock(node ast.Node, indent int) string {
 		return r.renderListItem(n, 0, false, indent)
 
 	case *ast.ThematicBreak:
-		line := strings.Repeat("─", max(8, r.width-indent))
+		line := lipgloss.NewStyle().
+			Foreground(borderColor).
+			Background(bgSoftColor).
+			Width(max(8, r.width-indent)).
+			Render(strings.Repeat("─", max(8, r.width-indent)))
 		return prefixLines(line, strings.Repeat(" ", indent))
 
 	case *ast.HTMLBlock:
@@ -635,10 +640,6 @@ func (r markdownPreviewRenderer) wrap(text string, indent int) string {
 }
 
 func prefixLines(text, prefix string) string {
-	if prefix == "" {
-		return text
-	}
-
 	prefixStyled := lipgloss.NewStyle().Background(bgSoftColor).Render(prefix)
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {

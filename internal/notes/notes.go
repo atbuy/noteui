@@ -268,6 +268,32 @@ func IsNoteFile(path string) bool {
 	}
 }
 
+// atomicWriteFile writes data to path by first writing to a sibling temp file
+// in the same directory and then renaming it into place. This ensures the
+// target is never left in a partially-written state if the process is
+// interrupted or the disk runs out of space mid-write.
+func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".noteui-tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	// Always remove the temp file if we never reach the rename.
+	defer os.Remove(tmpPath)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpPath, perm); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
+}
+
 func CreateNote(root, relDir string) (string, error) {
 	relDir = strings.TrimSpace(relDir)
 	if relDir == "." {

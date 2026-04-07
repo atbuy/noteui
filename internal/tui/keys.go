@@ -71,6 +71,7 @@ type keyMap struct {
 	ScrollPageDown   key.Binding
 	ScrollPageUp     key.Binding
 	ToggleEncryption key.Binding
+	NoteHistory      key.Binding
 }
 
 var keys = keyMap{
@@ -319,6 +320,10 @@ var keys = keyMap{
 		key.WithKeys("E"),
 		key.WithHelp("E", "Toggle encryption"),
 	),
+	NoteHistory: key.NewBinding(
+		key.WithKeys("H"),
+		key.WithHelp("H", "Note history"),
+	),
 }
 
 // ApplyConfigKeys overwrites key bindings with user-provided overrides from config.
@@ -394,4 +399,5 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.ScrollPageDown, cfg.ScrollPageDown)
 	apply(&keys.ScrollPageUp, cfg.ScrollPageUp)
 	apply(&keys.ToggleEncryption, cfg.ToggleEncryption)
+	apply(&keys.NoteHistory, cfg.NoteHistory)
 }

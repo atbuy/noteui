@@ -53,7 +53,7 @@ func ResolveConflictKeepRemote(root string, rec NoteRecord) error {
 	return nil
 }
 
-func ResolveConflictKeepLocal(ctx context.Context, root, notePath string, cfg config.SyncConfig, rec NoteRecord, client Client) error {
+func ResolveConflictKeepLocal(ctx context.Context, root, notePath, remoteRootOverride string, cfg config.SyncConfig, rec NoteRecord, client Client) error {
 	if rec.Conflict == nil {
 		return errors.New("note does not have an active conflict")
 	}
@@ -63,6 +63,9 @@ func ResolveConflictKeepLocal(ctx context.Context, root, notePath string, cfg co
 	profile, profileName, err := ActiveProfile(cfg, root)
 	if err != nil {
 		return err
+	}
+	if remoteRootOverride != "" {
+		profile.RemoteRoot = remoteRootOverride
 	}
 	rootCfg, err := EnsureRootConfig(root, cfg)
 	if err != nil {

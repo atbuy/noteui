@@ -973,7 +973,7 @@ func (m *Model) deleteRemoteCopyCurrent() tea.Cmd {
 	}
 	m.status = "deleting remote copy..."
 	return batchCmds(
-		deleteRemoteNoteKeepLocalCmd(m.rootDir, item.Note.Path, m.cfg.Sync, m.sessionToken),
+		deleteRemoteNoteKeepLocalCmd(m.rootDir, item.Note.Path, m.activeWorkspaceSyncRemoteRoot(), m.cfg.Sync, m.sessionToken),
 		m.startSyncVisual(item.Note.RelPath),
 	)
 }
@@ -986,14 +986,14 @@ func (m *Model) importCurrentRemoteNote() tea.Cmd {
 	}
 	m.status = "importing remote note..."
 	return batchCmds(
-		importCurrentSyncedNoteCmd(m.rootDir, m.cfg.Sync, item.RemoteNote.ID, m.sessionToken),
+		importCurrentSyncedNoteCmd(m.rootDir, m.activeWorkspaceSyncRemoteRoot(), m.cfg.Sync, item.RemoteNote.ID, m.sessionToken),
 		m.startSyncVisual(remoteOnlySyncVisualKey(item.RemoteNote.ID)),
 	)
 }
 
 func (m *Model) importAllRemoteNotes() tea.Cmd {
 	m.status = "importing synced notes..."
-	return importSyncedNotesCmd(m.rootDir, m.cfg.Sync, m.sessionToken)
+	return importSyncedNotesCmd(m.rootDir, m.activeWorkspaceSyncRemoteRoot(), m.cfg.Sync, m.sessionToken)
 }
 
 func (m *Model) startImmediateSync() tea.Cmd {

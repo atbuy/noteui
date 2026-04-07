@@ -16,6 +16,22 @@ Each workspace has its own:
 
 If `NOTES_ROOT` is set in the environment, that override wins for the current session and workspace switching is disabled.
 
+### Per-workspace sync isolation
+
+If you use sync with multiple workspaces, set `sync_remote_root` on each workspace to give it a dedicated remote directory. Without this, every workspace syncs to the same remote path, which causes notes from one workspace to appear as remote-only placeholders in another.
+
+```toml
+[workspaces.work]
+root = "/home/alice/notes/work"
+sync_remote_root = "/srv/noteui/work"
+
+[workspaces.personal]
+root = "/home/alice/notes/personal"
+sync_remote_root = "/srv/noteui/personal"
+```
+
+The workspace picker shows the `sync_remote_root` value under each workspace entry so you can confirm the mapping before switching.
+
 ## Notes tree and preview
 
 The main interface is split into two panes:
@@ -168,6 +184,27 @@ See the [Sync guide](sync.md) for setup and recovery details.
 noteui supports encrypted note bodies for workflows that want encrypted content on disk with preview/edit support inside the app.
 
 See [Encrypted notes](../advanced/encryption.md) for details.
+
+## Note version history
+
+noteui keeps an automatic version history for every local note.
+
+Versions are saved at these moments: before opening an encrypted note, after any re-encryption, after encrypting or decrypting, after the editor closes for a non-encrypted note, and after any todo edit.
+
+To browse and restore versions:
+
+1. Select a local note in the tree.
+2. Press `H`.
+3. The history modal opens, listing versions newest-first with a timestamp and the first line of each version.
+4. Use `j` / `k` to move through the list.
+5. Press `enter` to restore the highlighted version.
+6. Press `esc` to close without restoring.
+
+Restoring a version saves the current file content as a new history entry first, so the restore itself is undoable: press `H` again and you will see the pre-restore state at the top of the list.
+
+Encrypted notes show `encrypted` as the first-line preview in the history list rather than the raw blob.
+
+noteui keeps at most 50 versions per note and prunes older ones automatically. Versions are stored in `.noteui-history/` inside the notes root, a hidden directory that the notes tree never shows. See [Storage and state](../reference/storage-and-state.md) for the exact layout.
 
 ## Where to go next
 

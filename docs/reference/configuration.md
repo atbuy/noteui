@@ -51,10 +51,12 @@ default_workspace = "work"
 [workspaces.work]
 root = "/home/alice/notes"
 label = "Work"
+sync_remote_root = "/srv/noteui/work"
 
 [workspaces.demo]
 root = "/home/alice/demo-notes"
 label = "Demo"
+sync_remote_root = "/srv/noteui/demo"
 
 [theme]
 name = "default"
@@ -162,6 +164,25 @@ Supported keys per workspace:
 
 - `root`: required notes root for that workspace
 - `label`: optional UI label used in the footer, title bar, and picker
+- `sync_remote_root`: optional path override that directs sync traffic for this workspace to a specific remote directory, instead of using the active sync profile's `remote_root`
+
+`sync_remote_root` is the key to preventing cross-workspace note contamination when multiple workspaces share the same sync profile. Without it, all workspaces upload to and download from the same remote directory, which means workspace A's notes appear as remote-only placeholders in workspace B.
+
+Example with per-workspace remote roots:
+
+```toml
+[workspaces.work]
+root = "/home/alice/notes/work"
+label = "Work"
+sync_remote_root = "/srv/noteui/work"
+
+[workspaces.personal]
+root = "/home/alice/notes/personal"
+label = "Personal"
+sync_remote_root = "/srv/noteui/personal"
+```
+
+When `sync_remote_root` is set, the workspace picker shows it as a third line under the root path so you can confirm the mapping before switching.
 
 Workspace switching is available from the command palette when multiple workspaces are configured. Local UI state such as pins, collapsed folders, recent commands, and sort preference is stored separately per workspace.
 
@@ -473,6 +494,7 @@ open = ["enter", "o"]
 toggle_sync = ["S"]
 open_conflict_copy = ["O"]
 sync_import = ["I"]
+note_history = ["H"]
 ```
 
 ### Everyday navigation and panes
@@ -579,6 +601,12 @@ sync_import = ["I"]
   Default: `["i"]`
 - `sync_import`
   Default: `["I"]`
+
+### History and extra motions
+
+- `note_history`
+  Default: `["H"]`
+  Opens the version history modal for the selected local note.
 
 ### Todo and extra motions
 

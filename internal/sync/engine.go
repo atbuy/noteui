@@ -17,7 +17,7 @@ func isSyncedClass(syncClass string) bool {
 	return syncClass == notes.SyncClassSynced || syncClass == notes.SyncClassShared
 }
 
-func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinnedNotes []string, localPinnedCats []string, client Client) (SyncResult, error) {
+func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.SyncConfig, localPinnedNotes []string, localPinnedCats []string, client Client) (SyncResult, error) {
 	var result SyncResult
 	if !HasSyncProfile(cfg) {
 		return result, nil
@@ -28,6 +28,9 @@ func SyncRoot(ctx context.Context, root string, cfg config.SyncConfig, localPinn
 	profile, profileName, err := ActiveProfile(cfg, root)
 	if err != nil {
 		return result, err
+	}
+	if remoteRootOverride != "" {
+		profile.RemoteRoot = remoteRootOverride
 	}
 	rootCfg, err := EnsureRootConfig(root, cfg)
 	if err != nil {

@@ -35,6 +35,16 @@ When you open an encrypted note through noteui:
 
 Outside noteui, encrypted notes remain ordinary files that contain encrypted bodies. You can move, rename, or sync them with normal file tools, but editing the encrypted payload directly in another editor is usually not useful.
 
+### Atomic writes
+
+Noteui writes the encrypted file back using an atomic rename — the new content is written to a sibling temporary file first, then the original path is replaced in a single filesystem operation. This means the original file remains intact if the process is interrupted mid-write. You will never end up with a half-written, unreadable encrypted blob from a crash or a full disk.
+
+### Encrypted note history
+
+noteui saves a version of the encrypted blob to `.noteui-history/` before and after every encrypted edit cycle. If re-encryption ever produces content you cannot decrypt, press `H` on the note to open the version history modal and restore an earlier working version.
+
+The history list shows `encrypted` as the preview text for each version, since the raw blob is not decrypted for display. Restoring a version saves the current (broken) blob as a new history entry first, so the restore is itself undoable.
+
 ## Frontmatter signal
 
 Encrypted notes use the `encrypted` frontmatter field.

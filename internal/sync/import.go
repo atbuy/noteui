@@ -11,15 +11,15 @@ import (
 	"atbuy/noteui/internal/config"
 )
 
-func ImportRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, client Client) (SyncResult, error) {
-	return importRemoteNotes(ctx, root, cfg, client, "")
+func ImportRemoteNotes(ctx context.Context, root, remoteRootOverride string, cfg config.SyncConfig, client Client) (SyncResult, error) {
+	return importRemoteNotes(ctx, root, remoteRootOverride, cfg, client, "")
 }
 
-func ImportRemoteNote(ctx context.Context, root string, cfg config.SyncConfig, noteID string, client Client) (SyncResult, error) {
-	return importRemoteNotes(ctx, root, cfg, client, strings.TrimSpace(noteID))
+func ImportRemoteNote(ctx context.Context, root, remoteRootOverride string, cfg config.SyncConfig, noteID string, client Client) (SyncResult, error) {
+	return importRemoteNotes(ctx, root, remoteRootOverride, cfg, client, strings.TrimSpace(noteID))
 }
 
-func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, client Client, onlyNoteID string) (SyncResult, error) {
+func importRemoteNotes(ctx context.Context, root, remoteRootOverride string, cfg config.SyncConfig, client Client, onlyNoteID string) (SyncResult, error) {
 	var result SyncResult
 	if client == nil {
 		client = SSHClient{}
@@ -27,6 +27,9 @@ func importRemoteNotes(ctx context.Context, root string, cfg config.SyncConfig, 
 	profile, profileName, err := ActiveProfile(cfg, root)
 	if err != nil {
 		return result, err
+	}
+	if remoteRootOverride != "" {
+		profile.RemoteRoot = remoteRootOverride
 	}
 	rootCfg, err := EnsureRootConfig(root, cfg)
 	if err != nil {

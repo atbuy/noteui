@@ -10,13 +10,16 @@ import (
 	"atbuy/noteui/internal/notes"
 )
 
-func DeleteRemoteNoteAndKeepLocal(ctx context.Context, root, path string, cfg config.SyncConfig, client Client) error {
+func DeleteRemoteNoteAndKeepLocal(ctx context.Context, root, path, remoteRootOverride string, cfg config.SyncConfig, client Client) error {
 	if client == nil {
 		client = SSHClient{}
 	}
 	profile, profileName, err := ActiveProfile(cfg, root)
 	if err != nil {
 		return err
+	}
+	if remoteRootOverride != "" {
+		profile.RemoteRoot = remoteRootOverride
 	}
 	rootCfg, err := EnsureRootConfig(root, cfg)
 	if err != nil {

@@ -138,7 +138,7 @@ func EncryptNoteFile(path, passphrase string) error {
 	withFlag := addEncryptedFlag(raw)
 	final := swapNoteBody(withFlag, encrypted+"\n")
 
-	return os.WriteFile(path, []byte(final), 0o644)
+	return atomicWriteFile(path, []byte(final), 0o644)
 }
 
 // DecryptNoteFile reads the note at path, decrypts its body, removes the encrypted flag,
@@ -158,7 +158,7 @@ func DecryptNoteFile(path, passphrase string) error {
 	withoutFlag := removeEncryptedFlag(raw)
 	final := swapNoteBody(withoutFlag, plaintext)
 
-	return os.WriteFile(path, []byte(final), 0o644)
+	return atomicWriteFile(path, []byte(final), 0o644)
 }
 
 // ReencryptFromTemp re-encrypts content from a temp file back to the original path.
@@ -198,7 +198,9 @@ func ReencryptFromTemp(origPath, tempPath, passphrase string) (string, error) {
 		}
 	}
 
-	if err := os.WriteFile(newPath, []byte(final), 0o644); err != nil {
+	// Atomic write: the original file is not touched until the new content is
+	// fully flushed to disk, so a crash or disk-full cannot corrupt origPath.
+	if err := atomicWriteFile(newPath, []byte(final), 0o644); err != nil {
 		return origPath, fmt.Errorf("writing encrypted file: %w", err)
 	}
 

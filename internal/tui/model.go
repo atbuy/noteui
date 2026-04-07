@@ -389,6 +389,12 @@ type Model struct {
 	pendingSyncedPinRelPaths []string
 	pendingSyncedCategories  []string
 	applyPendingSyncedPins   bool
+
+	showNoteHistory     bool
+	noteHistoryEntries  []notes.HistoryEntry
+	noteHistoryCursor   int
+	noteHistoryRelPath  string
+	noteHistoryAbsPath  string
 }
 
 type dataLoadedMsg struct {
@@ -618,6 +624,33 @@ func (m Model) pendingSyncRelPaths() map[string]bool {
 	return out
 }
 
+// activeWorkspaceSyncRemoteRoot returns the per-workspace sync_remote_root override
+// for the currently active workspace, or an empty string if none is configured.
+func (m Model) activeWorkspaceSyncRemoteRoot() string {
+	if strings.TrimSpace(m.workspaceName) == "" {
+		return ""
+	}
+	ws, ok := m.cfg.Workspaces[m.workspaceName]
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(ws.SyncRemoteRoot)
+}
+
+func (m *Model) openNoteHistory() tea.Cmd {
+	note := m.currentLocalNote()
+	if note == nil {
+		m.status = "select a local note to view its history"
+		return nil
+	}
+	relPath := strings.TrimSpace(note.RelPath)
+	if relPath == "" {
+		m.status = "could not determine note path"
+		return nil
+	}
+	return loadNoteHistoryCmd(m.rootDir, relPath)
+}
+
 func (m *Model) startSyncRun() tea.Cmd {
 	if m.syncRunning || !notesync.HasSyncProfile(m.cfg.Sync) {
 		return nil
@@ -626,7 +659,7 @@ func (m *Model) startSyncRun() tea.Cmd {
 	m.syncSpinnerFrame = 0
 	m.syncInFlight = m.pendingSyncRelPaths()
 	return batchCmds(
-		syncNowCmd(m.rootDir, m.cfg.Sync, m.localPinnedNoteKeys(), m.localPinnedCategories(), m.sessionToken),
+		syncNowCmd(m.rootDir, m.activeWorkspaceSyncRemoteRoot(), m.cfg.Sync, m.localPinnedNoteKeys(), m.localPinnedCategories(), m.sessionToken),
 		syncSpinnerCmd(),
 	)
 }
@@ -1133,7 +1166,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.pendingPreviewYOffset = m.preview.YOffset
 		m.previewPath = ""
 		m.status = "todo updated"
-		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+		return m, batchCmds(saveNoteVersionCmd(m.rootDir, msg.path), refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case helpMouseResumeMsg:
 		if !m.helpMouseSuppressed {
@@ -1268,6 +1301,40 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.deferredStatus = "conflict resolved: kept local version"
 		}
 		return m, refreshAllCmd(m.rootDir, m.sessionToken)
+
+	case noteVersionSavedMsg:
+		// History saves are fire-and-forget; no status update needed.
+		return m, nil
+
+	case noteHistoryLoadedMsg:
+		if msg.err != nil {
+			m.status = "history load failed: " + msg.err.Error()
+			return m, nil
+		}
+		if len(msg.entries) == 0 {
+			m.status = "no history for this note yet"
+			return m, nil
+		}
+		m.noteHistoryRelPath = msg.relPath
+		m.noteHistoryAbsPath = filepath.Join(m.rootDir, filepath.FromSlash(msg.relPath))
+		m.noteHistoryEntries = msg.entries
+		m.noteHistoryCursor = 0
+		m.showNoteHistory = true
+		m.status = "note history"
+		return m, nil
+
+	case noteVersionRestoredMsg:
+		if msg.err != nil {
+			m.status = "restore failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showNoteHistory = false
+		m.noteHistoryEntries = nil
+		m.noteHistoryRelPath = ""
+		m.noteHistoryAbsPath = ""
+		m.previewPath = ""
+		m.deferredStatus = "version restored"
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case noteSyncClassToggledMsg:
 		if msg.err != nil {
@@ -1558,7 +1625,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.status = "note encrypted"
 		m.previewPath = ""
-		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+		return m, batchCmds(saveNoteVersionCmd(m.rootDir, msg.path), refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case decryptNoteMsg:
 		if msg.err != nil {
@@ -1567,7 +1634,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.status = "note decrypted"
 		m.previewPath = ""
-		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+		return m, batchCmds(saveNoteVersionCmd(m.rootDir, msg.path), refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case openEncryptedNoteReadyMsg:
 		if msg.err != nil {
@@ -1586,7 +1653,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, refreshAllCmd(m.rootDir, m.sessionToken)
 		}
 		m.status = "note saved and re-encrypted"
-		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+		return m, batchCmds(saveNoteVersionCmd(m.rootDir, msg.newPath), refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case editor.FinishedMsg:
 		if msg.Err != nil {
@@ -1618,7 +1685,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			m.status = "editor closed"
 		}
 
-		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+		return m, batchCmds(saveNoteVersionCmd(m.rootDir, newPath), refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case watchStartedMsg:
 		if msg.sessionToken != m.sessionToken {
@@ -1665,6 +1732,35 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.showNoteHistory {
+			switch {
+			case msg.String() == "esc":
+				m.showNoteHistory = false
+				m.noteHistoryEntries = nil
+				m.noteHistoryRelPath = ""
+				m.noteHistoryAbsPath = ""
+				m.status = "history closed"
+				return m, nil
+			case msg.String() == "enter":
+				if len(m.noteHistoryEntries) == 0 {
+					return m, nil
+				}
+				entry := m.noteHistoryEntries[m.noteHistoryCursor]
+				return m, restoreNoteVersionCmd(m.rootDir, m.noteHistoryAbsPath, m.noteHistoryRelPath, entry.ID)
+			case key.Matches(msg, keys.MoveUp):
+				if m.noteHistoryCursor > 0 {
+					m.noteHistoryCursor--
+				}
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				if m.noteHistoryCursor < len(m.noteHistoryEntries)-1 {
+					m.noteHistoryCursor++
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.showWorkspacePicker {
 			switch {
 			case msg.String() == "enter":
@@ -1806,7 +1902,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.passphraseInput.Blur()
 					m.passphraseInput.SetValue("")
 					if m.passphraseModalCtx == "unlock_edit" {
-						return m, openEncryptedNoteCmd(m.pendingEncryptPath, m.sessionPassphrase)
+						return m, saveNoteVersionAndOpenEncryptedCmd(m.rootDir, m.pendingEncryptPath, m.sessionPassphrase)
 					}
 					if m.passphraseModalCtx == "decrypt" {
 						m.showEncryptConfirm = true
@@ -3028,6 +3124,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if key.Matches(msg, keys.ToggleEncryption) {
 			m.armToggleEncryption()
 			return m, nil
+		}
+
+		if key.Matches(msg, keys.NoteHistory) {
+			return m, m.openNoteHistory()
 		}
 
 		if key.Matches(msg, keys.Open) || key.Matches(msg, keys.ToggleCategory) {

@@ -21,9 +21,10 @@ type WorkspaceSession struct {
 }
 
 type workspaceOption struct {
-	Name  string
-	Label string
-	Root  string
+	Name           string
+	Label          string
+	Root           string
+	SyncRemoteRoot string
 }
 
 func sortedWorkspaceOptions(cfg config.Config) []workspaceOption {
@@ -35,9 +36,10 @@ func sortedWorkspaceOptions(cfg config.Config) []workspaceOption {
 	for _, name := range names {
 		workspace := cfg.Workspaces[name]
 		out = append(out, workspaceOption{
-			Name:  name,
-			Label: strings.TrimSpace(workspace.Label),
-			Root:  filepath.Clean(strings.TrimSpace(workspace.Root)),
+			Name:           name,
+			Label:          strings.TrimSpace(workspace.Label),
+			Root:           filepath.Clean(strings.TrimSpace(workspace.Root)),
+			SyncRemoteRoot: strings.TrimSpace(workspace.SyncRemoteRoot),
 		})
 	}
 	return out
@@ -231,6 +233,11 @@ func (m *Model) resetWorkspaceTransientState() {
 	m.pendingSyncedCategories = nil
 	m.applyPendingSyncedPins = false
 	m.showDashboard = false
+	m.showNoteHistory = false
+	m.noteHistoryEntries = nil
+	m.noteHistoryCursor = 0
+	m.noteHistoryRelPath = ""
+	m.noteHistoryAbsPath = ""
 	m.status = "switching workspace..."
 }
 
@@ -366,10 +373,14 @@ func (m Model) renderWorkspacePickerModal() string {
 			fg = selectedFgColor
 			bg = selectedBgColor
 		}
-		lines = append(lines,
-			lipgloss.NewStyle().Width(innerWidth).Padding(0, 1).Foreground(fg).Background(bg).Render(prefix+name),
+		row := []string{
+			lipgloss.NewStyle().Width(innerWidth).Padding(0, 1).Foreground(fg).Background(bg).Render(prefix + name),
 			lipgloss.NewStyle().Width(innerWidth).Padding(0, 3).Foreground(mutedColor).Background(bg).Render(trimOrPad(opt.Root, innerWidth-3)),
-		)
+		}
+		if opt.SyncRemoteRoot != "" {
+			row = append(row, lipgloss.NewStyle().Width(innerWidth).Padding(0, 3).Foreground(mutedColor).Background(bg).Render("sync → "+trimOrPad(opt.SyncRemoteRoot, innerWidth-9)))
+		}
+		lines = append(lines, row...)
 	}
 	if len(lines) == 0 {
 		lines = append(lines, lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Foreground(mutedColor).Render("No workspaces configured"))

@@ -33,7 +33,10 @@ Recommended entry points:
 - create and manage todo notes, with a global open-tasks view
 - promote, archive, and batch-process temporary notes
 - pin important notes and categories
+- automatic version history for every note, with an in-app rollback modal (`H`)
 - optional SSH-based sync for `sync: synced` notes with tree sync markers
+- per-workspace `sync_remote_root` keeps multiple workspaces isolated on the remote
+- encrypted note bodies, with atomic writes and history-based recovery
 - customize theme, preview behavior, icons, and keybindings
 - keep your notes as regular files on disk
 - switch between named workspaces with isolated local UI state
@@ -113,6 +116,8 @@ Notes without that field, or with `sync: local`, stay local-only. Sync status in
 When noteui starts, synced notes are treated as unconfirmed until the first remote check completes. That avoids showing stale green markers from old local metadata before the current remote state has been verified.
 
 Press `S` on a selected local note to toggle `sync: local` and `sync: synced`. Press `U` on a synced local note to delete only its remote copy and keep the local file, switching it back to `sync: local`.
+
+If you use multiple workspaces, add `sync_remote_root` to each workspace config to give it a dedicated remote directory. Without this, every workspace syncs to the same remote path and notes cross-contaminate across workspaces.
 
 On another machine, noteui refreshes remote note metadata automatically but does not auto-download missing note bodies. Synced notes that exist on the server but not locally appear in the tree as muted `x` placeholder rows, show an import message in the preview, and cannot be edited until imported. Press `i` to import the selected remote-only note, or `I` to import all missing synced notes. This also works as recovery inside an existing notes root: if you delete a synced note locally, `I` will restore it from the server as long as the target path is free. noteui skips collisions instead of overwriting existing local files.
 

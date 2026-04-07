@@ -26,8 +26,9 @@ type Config struct {
 }
 
 type WorkspaceConfig struct {
-	Root  string `toml:"root"`
-	Label string `toml:"label"`
+	Root           string `toml:"root"`
+	Label          string `toml:"label"`
+	SyncRemoteRoot string `toml:"sync_remote_root"`
 }
 
 type StartupWorkspace struct {
@@ -182,6 +183,7 @@ type KeysConfig struct {
 	ScrollPageDown           []string `toml:"scroll_page_down"`
 	ScrollPageUp             []string `toml:"scroll_page_up"`
 	ToggleEncryption         []string `toml:"toggle_encryption"`
+	NoteHistory              []string `toml:"note_history"`
 }
 
 func Default() Config {
@@ -228,6 +230,7 @@ func Default() Config {
 			DeleteRemoteKeepLocal: []string{"U"},
 			SyncImportCurrent:     []string{"i"},
 			SyncImport:            []string{"I"},
+			NoteHistory:           []string{"H"},
 		},
 	}
 }
@@ -330,6 +333,9 @@ func Validate(cfg Config) error {
 		}
 		if strings.TrimSpace(workspace.Root) == "" {
 			return fmt.Errorf("workspace %q is missing root", name)
+		}
+		if workspace.SyncRemoteRoot != "" && strings.TrimSpace(workspace.SyncRemoteRoot) == "" {
+			return fmt.Errorf("workspace %q has a blank sync_remote_root; remove the field or provide a non-empty path", name)
 		}
 	}
 

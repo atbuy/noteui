@@ -276,6 +276,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showNoteHistory {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderNoteHistoryModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	return fullScreen
 }
 
@@ -1114,6 +1125,8 @@ func (m Model) renderModeSegment() string {
 		return "PASSPHRASE"
 	case m.showEncryptConfirm:
 		return "CONFIRM"
+	case m.showNoteHistory:
+		return "HISTORY"
 	case m.searchMode:
 		switch m.listMode {
 		case listModeTemporary:
@@ -2214,6 +2227,64 @@ func (m Model) temporaryEmptyStateMessage() string {
 		return fmt.Sprintf("No temporary notes match %q. Press esc to clear search.", query)
 	}
 	return "No temporary notes. Press N to create one or t to return to notes."
+}
+
+func (m Model) renderNoteHistoryModal() string {
+	modalWidth, innerWidth := m.modalDimensions(62, 96)
+	maxVisible := max(4, min(20, m.height-14))
+
+	title := m.noteHistoryRelPath
+	if title == "" {
+		title = "note"
+	}
+	subtitle := fmt.Sprintf("%d version", len(m.noteHistoryEntries))
+	if len(m.noteHistoryEntries) != 1 {
+		subtitle += "s"
+	}
+
+	start := 0
+	if m.noteHistoryCursor >= maxVisible {
+		start = m.noteHistoryCursor - maxVisible + 1
+	}
+	end := min(start+maxVisible, len(m.noteHistoryEntries))
+
+	rows := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		entry := m.noteHistoryEntries[i]
+		prefix := "  "
+		if i == m.noteHistoryCursor {
+			prefix = "› "
+		}
+		ts := entry.Timestamp.Local().Format("2006-01-02 15:04:05")
+		label := entry.FirstLine
+		if label == "" {
+			label = entry.ID
+		}
+		line := prefix + ts + "  " + label
+		bg := modalBgColor
+		fg := textColor
+		if i == m.noteHistoryCursor {
+			bg = selectedBgColor
+			fg = selectedFgColor
+		}
+		rows = append(rows, lipgloss.NewStyle().Width(innerWidth).Padding(0, 1).Foreground(fg).Background(bg).Render(line))
+	}
+	if len(rows) == 0 {
+		rows = append(rows, lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Foreground(mutedColor).Render("  No versions found"))
+	}
+
+	content := lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.renderModalTitle("Note Version History", innerWidth),
+			m.renderModalHint(title+" • "+subtitle, innerWidth),
+			m.renderModalBlank(innerWidth),
+			lipgloss.JoinVertical(lipgloss.Left, rows...),
+			m.renderModalBlank(innerWidth),
+			m.renderModalFooter("up/down navigate • enter restore • esc close", innerWidth),
+		),
+	)
+	return modalCardStyle(modalWidth).Render(content)
 }
 
 func (m Model) pinsEmptyStateMessage() string {
