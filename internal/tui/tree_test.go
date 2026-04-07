@@ -207,3 +207,97 @@ func TestDirectChildRemoteNotesFiltersParent(t *testing.T) {
 	children = m.directChildRemoteNotes("")
 	require.Len(t, children, 0)
 }
+
+func TestFuzzySequenceMatch(t *testing.T) {
+	cases := []struct {
+		pattern, target string
+		want            bool
+	}{
+		{"ntui", "noteui", true},
+		{"cfg", "config", true},
+		{"abc", "a-b-c", true},
+		{"abc", "acb", false},  // wrong order
+		{"xyz", "noteui", false},
+		{"", "anything", true}, // empty pattern always matches
+		{"a", "", false},
+	}
+	for _, tc := range cases {
+		got := fuzzySequenceMatch(tc.pattern, tc.target)
+		if got != tc.want {
+			t.Errorf("fuzzySequenceMatch(%q, %q) = %v, want %v", tc.pattern, tc.target, got, tc.want)
+		}
+	}
+}
+
+func TestNoteMatchesFuzzyTitle(t *testing.T) {
+	n := notes.Note{
+		TitleText: "project configuration",
+		Name:      "config.md",
+		RelPath:   "work/config.md",
+		Preview:   "some body text",
+	}
+	m := modelWithNotes(nil)
+
+	// fuzzy subsequence on title
+	if !m.noteMatches(n, "pjcfg") {
+		t.Fatal("expected fuzzy match on title via subsequence")
+	}
+	// exact substring still works
+	if !m.noteMatches(n, "config") {
+		t.Fatal("expected exact match on title")
+	}
+	// term with no possible match
+	if m.noteMatches(n, "zzzzz") {
+		t.Fatal("expected no match for absent term")
+	}
+}
+
+func TestNoteMatchesFuzzyPath(t *testing.T) {
+	n := notes.Note{
+		TitleText: "untitled",
+		Name:      "note.md",
+		RelPath:   "work/projects/alpha.md",
+		Preview:   "",
+	}
+	m := modelWithNotes(nil)
+
+	// fuzzy subsequence on path
+	if !m.noteMatches(n, "wkpalpha") {
+		t.Fatal("expected fuzzy match on path")
+	}
+}
+
+func TestFilterAndScoreNotesOrdering(t *testing.T) {
+	// title-exact match should rank above body-only match
+	titleMatch := notes.Note{
+		TitleText: "configuration guide",
+		Name:      "config-guide.md",
+		RelPath:   "config-guide.md",
+		Preview:   "body text",
+	}
+	bodyMatch := notes.Note{
+		TitleText: "unrelated document",
+		Name:      "unrelated.md",
+		RelPath:   "unrelated.md",
+		Preview:   "this note covers configuration settings",
+	}
+
+	result := filterAndScoreNotes([]notes.Note{bodyMatch, titleMatch}, "configuration")
+	require.Len(t, result, 2)
+	if result[0].RelPath != "config-guide.md" {
+		t.Errorf("expected title-exact match first, got %q", result[0].RelPath)
+	}
+}
+
+func TestFilterAndScoreNotesEmptyQuery(t *testing.T) {
+	ns := []notes.Note{
+		{RelPath: "a.md", TitleText: "A"},
+		{RelPath: "b.md", TitleText: "B"},
+	}
+	result := filterAndScoreNotes(ns, "")
+	require.Len(t, result, 2)
+	// order preserved when no query
+	if result[0].RelPath != "a.md" {
+		t.Errorf("expected original order preserved for empty query")
+	}
+}

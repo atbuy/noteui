@@ -248,7 +248,7 @@ func (m Model) notePreviewCmd(notePath, relPath string, tags []string) tea.Cmd {
 			if err != nil {
 				return previewRenderedMsg{
 					forPath:     notePath,
-					baseContent: "[decryption failed — wrong passphrase?]",
+					baseContent: "[decryption failed: wrong passphrase?]",
 				}
 			}
 			raw = decrypted

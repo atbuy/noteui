@@ -63,12 +63,13 @@ sync: local
 Inside noteui:
 
 - `S` toggles the selected local note between `sync: local` and `sync: synced`
+- `ctrl+s` toggles the selected note between `sync: shared` and `sync: local`
 - synced notes are checked against the remote state after startup
 - `F` opens the in-app default sync profile picker
 
 ## Shared notes
 
-A shared note uses `sync: shared` in its frontmatter and is permanently synced to the remote. Unlike `sync: synced`, a shared note cannot be toggled to local-only with `S` — the sync class must be changed by editing the frontmatter directly.
+A shared note uses `sync: shared` in its frontmatter and is permanently synced to the remote. Unlike `sync: synced`, a shared note cannot be toggled with `S`; use `ctrl+s` instead, which toggles between `sync: shared` and `sync: local`.
 
 ```yaml
 ---
@@ -160,7 +161,7 @@ label = "Personal"
 sync_remote_root = "/srv/noteui/personal"
 ```
 
-`sync_remote_root` overrides the profile's `remote_root` for all sync operations originating from that workspace: push, pull, import, conflict resolution, and remote delete. The remote directories do not need to exist in advance — they are created on first sync.
+`sync_remote_root` overrides the profile's `remote_root` for all sync operations originating from that workspace: push, pull, import, conflict resolution, and remote delete. The remote directories do not need to exist in advance; they are created on first sync.
 
 The workspace picker displays the effective remote path under each workspace entry so you can confirm the isolation before switching.
 

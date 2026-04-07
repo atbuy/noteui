@@ -1036,7 +1036,7 @@ func TestSyncRootSharedNoteAlwaysPullsRemoteOnDivergence(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Also modify local content — this would normally be a conflict
+	// Also modify local content; this would normally be a conflict
 	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: shared\n---\nlocal edit\n"), 0o644))
 
 	// Sync should apply remote without creating a conflict

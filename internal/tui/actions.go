@@ -463,19 +463,13 @@ func (m Model) filteredTempNotes() []notes.Note {
 	if query == "" {
 		out = make([]notes.Note, len(m.tempNotes))
 		copy(out, m.tempNotes)
-	} else {
-		out = make([]notes.Note, 0, len(m.tempNotes))
-		for _, n := range m.tempNotes {
-			if m.noteMatches(n, query) {
-				out = append(out, n)
-			}
+		if m.sortByModTime {
+			sort.SliceStable(out, func(i, j int) bool {
+				return out[i].ModTime.After(out[j].ModTime)
+			})
 		}
-	}
-
-	if m.sortByModTime {
-		sort.SliceStable(out, func(i, j int) bool {
-			return out[i].ModTime.After(out[j].ModTime)
-		})
+	} else {
+		out = filterAndScoreNotes(m.tempNotes, query)
 	}
 
 	return out

@@ -590,6 +590,10 @@ note_history = ["H"]
 
 - `toggle_sync`
   Default: `["S"]`
+  Toggles the selected local note between `sync: local` and `sync: synced`.
+- `make_shared`
+  Default: `["ctrl+s"]`
+  Toggles the selected note between `sync: shared` and `sync: local`.
 - `select_sync_profile`
   Default: `["F"]`
 - `open_conflict_copy`
@@ -645,6 +649,7 @@ The `[keys]` section overrides default bindings.
 Sync-related key defaults:
 
 - `toggle_sync = ["S"]`
+- `make_shared = ["ctrl+s"]`
 - `select_workspace = ["W"]`
 - `select_sync_profile = ["F"]`
 - `open_conflict_copy = ["O"]`

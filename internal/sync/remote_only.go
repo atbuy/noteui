@@ -37,7 +37,7 @@ func remoteOnlyNotesForRoot(root string, remote []RemoteNoteMeta, records map[st
 		// Defensive: skip if a local note exists at this path AND no other record
 		// already owns that path. This prevents phantom "remote only" entries when
 		// sync records are missing (e.g. .noteui-sync deleted) but the local file is
-		// present — the note will be reconciled on the next full sync via adopt logic.
+		// present; the note will be reconciled on the next full sync via adopt logic.
 		// We do NOT skip when another record owns the path, because in that case the
 		// remote note is a genuine path collision and the user needs to handle it.
 		metaRelPath := filepath.ToSlash(strings.TrimSpace(meta.RelPath))

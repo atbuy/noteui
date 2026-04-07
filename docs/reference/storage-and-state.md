@@ -118,7 +118,7 @@ Versions are saved automatically at these moments:
 
 noteui keeps at most 50 versions per note. Older versions are pruned automatically after each save.
 
-`.noteui-history/` is hidden from the notes tree — noteui's file discovery skips directories that start with `.`.
+`.noteui-history/` is hidden from the notes tree; noteui's file discovery skips directories that start with `.`.
 
 ## Why this matters
 

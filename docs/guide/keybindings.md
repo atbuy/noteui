@@ -78,7 +78,8 @@ This page documents the default keybindings that most users care about first.
 
 - `E`: toggle encryption
 - `H`: open the version history modal for the selected local note
-- `S`: toggle sync for the selected local note
+- `S`: toggle sync for the selected local note (`sync: local` ↔ `sync: synced`)
+- `ctrl+s`: toggle shared status of the selected note (`sync: shared` ↔ `sync: local`)
 - `O`: open the generated conflict copy for the selected conflicted synced note
 - `ctrl+e`: open full sync debug details for the selected unhealthy synced note
 - `U`: delete only the remote copy of a synced local note

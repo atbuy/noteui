@@ -26,7 +26,7 @@ func (m Model) helpEntries() []helpEntry {
 	bf := keys.BracketForward.Help().Key
 	bb := keys.BracketBackward.Help().Key
 	return []helpEntry{
-		{section: "Tree", key: keys.CommandPalette.Help().Key, desc: "Command palette — notes, actions, and workspace switch"},
+		{section: "Tree", key: keys.CommandPalette.Help().Key, desc: "Command palette: notes, actions, and workspace switch"},
 		{section: "Tree", key: keys.MoveDown.Help().Key + " / " + keys.MoveUp.Help().Key, desc: "Move up and down"},
 		{section: "Tree", key: keys.ScrollHalfPageUp.Help().Key + " / " + keys.ScrollHalfPageDown.Help().Key, desc: "Scroll half page up / down"},
 		{section: "Tree", key: keys.CollapseCategory.Help().Key + "/" + keys.ExpandCategory.Help().Key, desc: "Collapse/Expand category"},
@@ -38,7 +38,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Tree", key: keys.AddTag.Help().Key, desc: "Add tags to selected note or marked notes"},
 		{section: "Tree", key: keys.Pin.Help().Key, desc: "Pin or unpin current item or marked notes"},
 		{section: "Tree", key: keys.ToggleSync.Help().Key, desc: "Toggle selected note sync"},
-		{section: "Tree", key: keys.MakeShared.Help().Key, desc: "Make selected note shared"},
+		{section: "Tree", key: keys.MakeShared.Help().Key, desc: "Toggle shared status of selected note"},
 		{section: "Tree", key: keys.SelectWorkspace.Help().Key, desc: "Open the workspace picker"},
 		{section: "Tree", key: keys.SelectSyncProfile.Help().Key, desc: "Select default sync profile"},
 		{section: "Tree", key: keys.OpenConflictCopy.Help().Key, desc: "Resolve selected conflict"},

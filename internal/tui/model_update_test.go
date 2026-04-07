@@ -998,13 +998,32 @@ func TestMakeSharedKeyOnNoteWritesSharedClass(t *testing.T) {
 	require.Contains(t, string(content), "sync: shared")
 }
 
-func TestMakeSharedKeyOnAlreadySharedNoteShowsStatus(t *testing.T) {
+func TestMakeSharedKeyOnAlreadySharedNoteUnsharesIt(t *testing.T) {
 	m := newTestModel(t)
-	n := &notes.Note{RelPath: "shared.md", Path: m.rootDir + "/shared.md", Name: "shared.md", SyncClass: notes.SyncClassShared}
+	notePath := filepath.Join(m.rootDir, "shared.md")
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: shared\n---\n# Note\n"), 0o644))
+	n := &notes.Note{RelPath: "shared.md", Path: notePath, Name: "shared.md", SyncClass: notes.SyncClassShared}
 	m.treeItems = []treeItem{{Kind: treeNote, RelPath: "shared.md", Note: n}}
 	m.treeCursor = 0
-	m = updateModel(m, keyMsg("ctrl+s"))
-	require.Equal(t, "note is already shared", m.status)
+	next, cmd := m.Update(keyMsg("ctrl+s"))
+	m = next.(Model)
+	require.NotNil(t, cmd, "expected a command to be dispatched")
+	_ = cmd()
+	content, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "sync: local")
+}
+
+func TestNoteMadeSharedMsgSetsCorrectStatus(t *testing.T) {
+	m := newTestModel(t)
+
+	next, _ := m.Update(noteMadeSharedMsg{path: filepath.Join(m.rootDir, "note.md"), syncClass: notes.SyncClassShared})
+	m = next.(Model)
+	require.Equal(t, "note is now shared", m.status)
+
+	next, _ = m.Update(noteMadeSharedMsg{path: filepath.Join(m.rootDir, "note.md"), syncClass: notes.SyncClassLocal})
+	m = next.(Model)
+	require.Equal(t, "note is no longer shared", m.status)
 }
 
 func TestToggleSyncKeyOnSharedNoteShowsStatus(t *testing.T) {

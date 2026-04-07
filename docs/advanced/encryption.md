@@ -37,7 +37,7 @@ Outside noteui, encrypted notes remain ordinary files that contain encrypted bod
 
 ### Atomic writes
 
-Noteui writes the encrypted file back using an atomic rename — the new content is written to a sibling temporary file first, then the original path is replaced in a single filesystem operation. This means the original file remains intact if the process is interrupted mid-write. You will never end up with a half-written, unreadable encrypted blob from a crash or a full disk.
+Noteui writes the encrypted file back using an atomic rename: the new content is written to a sibling temporary file first, then the original path is replaced in a single filesystem operation. This means the original file remains intact if the process is interrupted mid-write. You will never end up with a half-written, unreadable encrypted blob from a crash or a full disk.
 
 ### Encrypted note history
 

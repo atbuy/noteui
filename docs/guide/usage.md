@@ -64,10 +64,14 @@ Search matches against:
 - note title
 - file name
 - relative path
-- preview text
+- full note body
 - tags
 
-Tag-style search also works through the tag-aware behavior in the notes layer.
+Search supports both exact substring and fuzzy matching. For each term, noteui first tries an exact substring match across title, filename, path, and body. If no exact match is found, it falls back to a fuzzy subsequence match on the title and path, meaning the characters of your query must appear in order, but not necessarily consecutively. Results are sorted by relevance: title matches rank above body matches, which rank above fuzzy path matches.
+
+Prefix a term with `#` to search by tag only: `#urgent` matches only notes whose tags contain "urgent".
+
+Multi-term search requires all terms to match. For example, `config deploy` only shows notes that match both "config" and "deploy".
 
 ## Creating notes and categories
 

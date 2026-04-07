@@ -513,7 +513,7 @@ func TestApplyConfigKeysEmptyNoOp(t *testing.T) {
 
 	before := keys.Quit.Keys()
 
-	// Empty config override — all slices nil, should be no-op
+	// Empty config override: all slices nil, should be no-op
 	ApplyConfigKeys(emptyConfig())
 
 	after := keys.Quit.Keys()

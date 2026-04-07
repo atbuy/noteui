@@ -190,7 +190,7 @@ func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.S
 					return result, err
 				}
 				recordsByRelPath[filepath.ToSlash(note.RelPath)] = rec
-				// Fall through to the push/pull logic below — do not continue.
+				// Fall through to the push/pull logic below; do not continue.
 			} else {
 				resp, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{RemoteRoot: profile.RemoteRoot, RelPath: filepath.ToSlash(note.RelPath), Content: raw, Encrypted: note.Encrypted})
 				if err != nil {

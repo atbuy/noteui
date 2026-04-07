@@ -1139,7 +1139,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		case msg.result.ImportedNotes > 0:
 			status = fmt.Sprintf("sync import complete: %d notes", msg.result.ImportedNotes)
 		case msg.result.SkippedImports > 0:
-			status = fmt.Sprintf("sync import: %d skipped (note already exists locally — run sync to reconcile)", msg.result.SkippedImports)
+			status = fmt.Sprintf("sync import: %d skipped (note already exists locally, run sync to reconcile)", msg.result.SkippedImports)
 		case msg.result.PinsChanged:
 			status = "sync import updated pins"
 		}
@@ -1343,7 +1343,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.previewPath = ""
 		if msg.syncClass == notes.SyncClassLocal {
-			m.status = "note unsynced locally — remote copy still exists. Press U to delete it from remote"
+			m.status = "note unsynced locally; remote copy still exists. Press U to delete it from remote"
 		} else {
 			m.status = "note sync: " + msg.syncClass
 		}
@@ -1361,11 +1361,15 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 	case noteMadeSharedMsg:
 		if msg.err != nil {
-			m.status = "make shared failed: " + msg.err.Error()
+			m.status = "toggle shared failed: " + msg.err.Error()
 			return m, nil
 		}
 		m.previewPath = ""
-		m.status = "note is now shared"
+		if msg.syncClass == notes.SyncClassShared {
+			m.status = "note is now shared"
+		} else {
+			m.status = "note is no longer shared"
+		}
 		relPath, err := filepath.Rel(m.rootDir, msg.path)
 		if err == nil {
 			return m, batchCmds(

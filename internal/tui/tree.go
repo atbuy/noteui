@@ -107,10 +107,11 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 		}
 	}
 
-	for _, n := range m.directChildNotes(parent) {
-		if query != "" && !m.noteMatches(n, query) {
-			continue
-		}
+	childNotes := m.directChildNotes(parent)
+	if query != "" {
+		childNotes = filterAndScoreNotes(childNotes, query)
+	}
+	for _, n := range childNotes {
 		noteCopy := n
 		hint := ""
 		if query != "" {
@@ -232,6 +233,117 @@ func (m Model) directChildCategories(parent string) []notes.Category {
 	return out
 }
 
+// fuzzySequenceMatch reports whether every rune of pattern appears in target
+// in order (subsequence match). Both strings must already be lower-cased by
+// the caller.
+func fuzzySequenceMatch(pattern, target string) bool {
+	if pattern == "" {
+		return true
+	}
+	pi := 0
+	pr := []rune(pattern)
+	for _, r := range target {
+		if r == pr[pi] {
+			pi++
+			if pi == len(pr) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// termScore returns a relevance score (≥ 0) for a single lower-cased search
+// term against a note, or -1 when the term does not match at all.
+// Higher scores indicate a better match.
+func termScore(term string, n notes.Note) int {
+	title := strings.ToLower(n.Title())
+	name := strings.ToLower(n.Name)
+	rel := strings.ToLower(n.RelPath)
+
+	// Exact matches on metadata (highest priority).
+	if strings.Contains(title, term) {
+		return 1000
+	}
+	if strings.Contains(name, term) {
+		return 800
+	}
+	if strings.Contains(rel, term) {
+		return 600
+	}
+
+	// Tag exact match.
+	if matchesAnyTag(n.Tags, term) {
+		return 500
+	}
+
+	// Body search: preserve the "<encrypted>" placeholder so that the
+	// literal word "encrypted" still matches encrypted notes.
+	if n.Encrypted {
+		if strings.Contains("<encrypted>", term) {
+			return 400
+		}
+	} else {
+		body := strings.ToLower(notes.StripFrontMatter(n.Preview))
+		if strings.Contains(body, term) {
+			return 400
+		}
+	}
+
+	// Fuzzy subsequence match on title and path.
+	if fuzzySequenceMatch(term, title) {
+		return 200
+	}
+	if fuzzySequenceMatch(term, rel) {
+		return 100
+	}
+
+	return -1
+}
+
+// noteScore returns the total relevance score for a note against a query.
+// Returns -1 if any term does not match.
+func noteScore(n notes.Note, query string) int {
+	total := 0
+	for term := range strings.FieldsSeq(query) {
+		s := termScore(term, n)
+		if s < 0 {
+			return -1
+		}
+		total += s
+	}
+	return total
+}
+
+// filterAndScoreNotes returns the subset of ns that match query, sorted by
+// descending relevance score. When query is empty the original slice is
+// returned unchanged.
+func filterAndScoreNotes(ns []notes.Note, query string) []notes.Note {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return ns
+	}
+	type scored struct {
+		note  notes.Note
+		score int
+	}
+	matched := make([]scored, 0, len(ns))
+	for _, n := range ns {
+		s := noteScore(n, q)
+		if s >= 0 {
+			matched = append(matched, scored{n, s})
+		}
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return matched[i].score > matched[j].score
+	})
+	out := make([]notes.Note, len(matched))
+	for i, sm := range matched {
+		out[i] = sm.note
+	}
+	return out
+}
+
 func (m Model) noteMatches(n notes.Note, query string) bool {
 	q := strings.ToLower(strings.TrimSpace(query))
 	if q == "" {
@@ -251,23 +363,7 @@ func (m Model) noteMatches(n notes.Note, query string) bool {
 		return false
 	}
 
-	previewText := n.Preview
-	if n.Encrypted {
-		previewText = "<encrypted>"
-	}
-
-	terms := strings.FieldsSeq(q)
-	for term := range terms {
-		termFound := strings.Contains(strings.ToLower(n.Title()), term) ||
-			strings.Contains(strings.ToLower(n.Name), term) ||
-			strings.Contains(strings.ToLower(n.RelPath), term) ||
-			strings.Contains(strings.ToLower(previewText), term) ||
-			matchesAnyTag(n.Tags, term)
-		if !termFound {
-			return false
-		}
-	}
-	return true
+	return noteScore(n, q) >= 0
 }
 
 func matchesAnyTag(tags []string, term string) bool {

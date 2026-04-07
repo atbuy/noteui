@@ -181,7 +181,7 @@ var keys = keyMap{
 	),
 	MakeShared: key.NewBinding(
 		key.WithKeys("ctrl+s"),
-		key.WithHelp("ctrl+s", "Make note shared"),
+		key.WithHelp("ctrl+s", "Toggle note shared"),
 	),
 	ToggleTemporary: key.NewBinding(
 		key.WithKeys("t"),

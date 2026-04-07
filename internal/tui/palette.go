@@ -226,8 +226,8 @@ func paletteCommands(m Model) []paletteCommand {
 		paletteCommand{name: "Move Notes to Temporary", desc: "Move the selected note or marked batch into temporary notes", category: "selection", action: cmdMoveToTemporary})
 	cmds = appendPaletteCommand(cmds, m.canToggleSyncCurrent(),
 		paletteCommand{name: "Toggle Note Sync", desc: "Toggle sync for the selected note", category: "sync", action: cmdToggleSync})
-	cmds = appendPaletteCommand(cmds, m.canMakeSharedCurrent(),
-		paletteCommand{name: "Make Note Shared", desc: "Make the selected note shared", category: "sync", action: cmdMakeShared})
+	cmds = appendPaletteCommand(cmds, m.canToggleSharedCurrent(),
+		paletteCommand{name: "Toggle Note Shared", desc: "Toggle shared status of the selected note", category: "sync", action: cmdMakeShared})
 	cmds = appendPaletteCommand(cmds, m.canSelectSyncProfile(),
 		paletteCommand{name: "Select Sync Profile", desc: "Choose the default sync profile", category: "sync", action: cmdSelectSyncProfile})
 	cmds = appendPaletteCommand(cmds, m.canShowSyncDetailsCurrent(),
@@ -364,15 +364,12 @@ func (m Model) canToggleSyncCurrent() bool {
 	return item.Note.SyncClass != notes.SyncClassShared
 }
 
-func (m Model) canMakeSharedCurrent() bool {
+func (m Model) canToggleSharedCurrent() bool {
 	if m.listMode != listModeNotes {
 		return false
 	}
 	item := m.currentTreeItem()
-	if item == nil || item.Kind != treeNote || item.Note == nil {
-		return false
-	}
-	return item.Note.SyncClass != notes.SyncClassShared
+	return item != nil && item.Kind == treeNote && item.Note != nil
 }
 
 func (m Model) canSelectSyncProfile() bool {
@@ -947,14 +944,14 @@ func (m *Model) toggleNoteSyncCurrent() tea.Cmd {
 func (m *Model) makeCurrentNoteShared() tea.Cmd {
 	item := m.currentTreeItem()
 	if item == nil || item.Kind != treeNote || item.Note == nil {
-		m.status = "make shared only works on notes"
+		m.status = "toggle shared only works on notes"
 		return nil
 	}
+	target := notes.SyncClassShared
 	if item.Note.SyncClass == notes.SyncClassShared {
-		m.status = "note is already shared"
-		return nil
+		target = notes.SyncClassLocal
 	}
-	return makeNoteSharedCmd(item.Note.Path)
+	return toggleNoteSharedCmd(item.Note.Path, target)
 }
 
 func (m *Model) deleteRemoteCopyCurrent() tea.Cmd {
