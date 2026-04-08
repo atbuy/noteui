@@ -203,6 +203,25 @@ func TestTodoPreviewDueHintsPreserveRenderedInlineMarkdown(t *testing.T) {
 	require.Contains(t, gapRendered, prioritySpan+gapSpan+dueSpan)
 }
 
+func TestCheckboxListItemHasNoExtraSpaceBetweenMarkerAndText(t *testing.T) {
+	ApplyTheme(config.Default())
+	rendered := renderMarkdownTerminal("- [ ] unchecked\n- [x] checked\n", markdownRenderOptions{Width: 80})
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "[ ] unchecked")
+	require.Contains(t, plain, "[X] checked")
+	// Marker and text must be separated by exactly one space: no gap like "[ ]    text".
+	require.NotContains(t, plain, "[ ]  ")
+	require.NotContains(t, plain, "[X]  ")
+}
+
+func TestBulletListItemHasNoExtraSpaceBetweenMarkerAndText(t *testing.T) {
+	ApplyTheme(config.Default())
+	rendered := renderMarkdownTerminal("- hello world\n", markdownRenderOptions{Width: 80})
+	plain := stripANSI(rendered)
+	require.Contains(t, plain, "• hello world")
+	require.NotContains(t, plain, "•  ")
+}
+
 func TestThemeAndColorHelpers(t *testing.T) {
 	if got := normalizeThemeName(" mocha "); got != "catppuccin" {
 		require.Failf(t, "assertion failed", "expected mocha alias to normalize to catppuccin, got %q", got)

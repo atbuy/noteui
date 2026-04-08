@@ -255,6 +255,10 @@ func (r markdownPreviewRenderer) renderListItem(
 	itemIndent := indent + markerWidth
 	var blocks []string
 
+	// Render all blocks at itemIndent so every line (including wrapped
+	// continuation lines) gets the correct width and background colour from
+	// prefixLines / wrap. We then replace the ANSI-encoded indent prefix on
+	// the very first line with the actual marker.
 	for child := item.FirstChild(); child != nil; child = child.NextSibling() {
 		rendered := strings.TrimRight(r.renderBlock(child, itemIndent), "\n")
 		if strings.TrimSpace(rendered) == "" {
@@ -270,8 +274,13 @@ func (r markdownPreviewRenderer) renderListItem(
 	first := blocks[0]
 	rest := blocks[1:]
 
+	// prefixLines produces `lipgloss.NewStyle().Background(bgSoftColor).Render(prefix)`
+	// at the start of every line. Reconstruct that exact styled prefix and
+	// replace it once on the first line with indent+marker.
+	styledItemPrefix := lipgloss.NewStyle().Background(bgSoftColor).Render(strings.Repeat(" ", itemIndent))
+	styledIndentPrefix := lipgloss.NewStyle().Background(bgSoftColor).Render(strings.Repeat(" ", indent))
 	firstLines := strings.Split(first, "\n")
-	firstLines[0] = strings.Repeat(" ", indent) + marker + strings.TrimLeft(firstLines[0], " ")
+	firstLines[0] = strings.Replace(firstLines[0], styledItemPrefix, styledIndentPrefix+marker, 1)
 	first = strings.Join(firstLines, "\n")
 
 	if len(rest) == 0 {
