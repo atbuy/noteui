@@ -40,6 +40,16 @@ func main() {
 	tui.ApplyTheme(cfg)
 	tui.ApplyConfigKeys(cfg.Keys)
 
+	if collisions := tui.ValidateKeyCollisions(); len(collisions) > 0 {
+		msg := "keybinding conflicts: " + strings.Join(collisions, "; ")
+		fmt.Fprintf(os.Stderr, "warning: %s\n", msg)
+		if startupError == "" {
+			startupError = msg
+		} else {
+			startupError = startupError + "; " + msg
+		}
+	}
+
 	m := tui.NewWithSession(
 		startup.Root,
 		startupError,

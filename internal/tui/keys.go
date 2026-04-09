@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -412,4 +414,89 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.NoteHistory, cfg.NoteHistory)
 	apply(&keys.NewTemplate, cfg.NewTemplate)
 	apply(&keys.EditTemplates, cfg.EditTemplates)
+}
+
+// ValidateKeyCollisions checks for duplicate key assignments among primary bindings
+// (those active simultaneously in the main view). Context-specific bindings that
+// intentionally reuse keys in sub-modes (search, todo-action, delete-confirm,
+// bracket-pending) are excluded to avoid false positives.
+// Returns one description string per collision; nil when there are no conflicts.
+func ValidateKeyCollisions() []string {
+	type named struct {
+		name    string
+		binding *key.Binding
+	}
+	primary := []named{
+		{"open", &keys.Open},
+		{"refresh", &keys.Refresh},
+		{"quit", &keys.Quit},
+		{"focus", &keys.Focus},
+		{"new_note", &keys.NewNote},
+		{"new_temporary_note", &keys.NewTemporaryNote},
+		{"new_todo_list", &keys.NewTodoList},
+		{"search", &keys.Search},
+		{"show_help", &keys.ShowHelp},
+		{"show_pins", &keys.ShowPins},
+		{"show_todos", &keys.ShowTodos},
+		{"create_category", &keys.CreateCategory},
+		{"toggle_category", &keys.ToggleCategory},
+		{"delete", &keys.Delete},
+		{"move", &keys.Move},
+		{"rename", &keys.Rename},
+		{"add_tag", &keys.AddTag},
+		{"toggle_select", &keys.ToggleSelect},
+		{"clear_marks", &keys.ClearMarks},
+		{"pin", &keys.Pin},
+		{"promote_temporary", &keys.PromoteTemporary},
+		{"archive_temporary", &keys.ArchiveTemporary},
+		{"move_to_temporary", &keys.MoveToTemporary},
+		{"toggle_sync", &keys.ToggleSync},
+		{"make_shared", &keys.MakeShared},
+		{"toggle_temporary", &keys.ToggleTemporary},
+		{"command_palette", &keys.CommandPalette},
+		{"select_workspace", &keys.SelectWorkspace},
+		{"select_sync_profile", &keys.SelectSyncProfile},
+		{"open_conflict_copy", &keys.OpenConflictCopy},
+		{"show_sync_debug", &keys.ShowSyncDebug},
+		{"delete_remote_keep_local", &keys.DeleteRemoteKeepLocal},
+		{"sync_import_current", &keys.SyncImportCurrent},
+		{"sync_import", &keys.SyncImport},
+		{"toggle_preview_privacy", &keys.TogglePreviewPrivacy},
+		{"toggle_preview_line_numbers", &keys.TogglePreviewLineNumbers},
+		{"sort_toggle", &keys.SortToggle},
+		{"scroll_half_page_up", &keys.ScrollHalfPageUp},
+		{"scroll_half_page_down", &keys.ScrollHalfPageDown},
+		{"move_up", &keys.MoveUp},
+		{"move_down", &keys.MoveDown},
+		{"collapse_category", &keys.CollapseCategory},
+		{"expand_category", &keys.ExpandCategory},
+		{"jump_bottom", &keys.JumpBottom},
+		{"pending_g", &keys.PendingG},
+		{"bracket_forward", &keys.BracketForward},
+		{"bracket_backward", &keys.BracketBackward},
+		{"pending_z", &keys.PendingZ},
+		{"scroll_page_down", &keys.ScrollPageDown},
+		{"scroll_page_up", &keys.ScrollPageUp},
+		{"toggle_encryption", &keys.ToggleEncryption},
+		{"note_history", &keys.NoteHistory},
+		{"new_template", &keys.NewTemplate},
+		{"edit_templates", &keys.EditTemplates},
+	}
+
+	seen := make(map[string][]string) // key string -> action names
+	for _, nb := range primary {
+		for _, k := range nb.binding.Keys() {
+			seen[k] = append(seen[k], nb.name)
+		}
+	}
+
+	var collisions []string
+	for k, names := range seen {
+		if len(names) > 1 {
+			collisions = append(collisions,
+				fmt.Sprintf("key %q is bound to multiple actions: %s", k, strings.Join(names, ", ")))
+		}
+	}
+	sort.Strings(collisions)
+	return collisions
 }
