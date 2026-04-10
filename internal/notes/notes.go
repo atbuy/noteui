@@ -453,7 +453,7 @@ func CreateNote(root, relDir string) (string, error) {
 	return path, nil
 }
 
-func DeleteNote(path string) error {
+func DeleteNote(path string) (TrashResult, error) {
 	return TrashPath(path)
 }
 

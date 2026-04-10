@@ -78,13 +78,13 @@ func CreateCategory(root, relPath string) error {
 	return os.MkdirAll(filepath.Join(root, relPath), 0o755)
 }
 
-func DeleteCategory(root, relPath string) error {
+func DeleteCategory(root, relPath string) (TrashResult, error) {
 	relPath = filepath.Clean(strings.TrimSpace(relPath))
 	if relPath == "" || relPath == "." {
-		return errors.New("cannot delete root category")
+		return TrashResult{}, errors.New("cannot delete root category")
 	}
 	if strings.HasPrefix(relPath, "..") {
-		return errors.New("category must stay inside notes root")
+		return TrashResult{}, errors.New("category must stay inside notes root")
 	}
 
 	return TrashPath(filepath.Join(root, relPath))

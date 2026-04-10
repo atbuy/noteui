@@ -1424,3 +1424,101 @@ func TestTemplatePickerCursorClampsEditMode(t *testing.T) {
 	}
 	require.Equal(t, 0, m.templatePickerCursor)
 }
+
+// --- Safer deletion UX / undo tests ---
+
+func makeTrashResult(t *testing.T) notes.TrashResult {
+	t.Helper()
+	dir := t.TempDir()
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+
+	f := filepath.Join(dir, "note.md")
+	if err := os.WriteFile(f, []byte("body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := notes.TrashPath(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return result
+}
+
+func TestNoteDeletedMsgSetsLastDeletion(t *testing.T) {
+	m := newTestModel(t)
+	result := makeTrashResult(t)
+	m = updateModel(m, noteDeletedMsg{path: "/notes/note.md", result: result})
+	if m.lastDeletion == nil {
+		require.FailNow(t, "expected lastDeletion to be set after noteDeletedMsg")
+	}
+	require.Equal(t, "note.md", m.lastDeletion.label)
+	require.Len(t, m.lastDeletion.results, 1)
+	require.Contains(t, m.status, "Z to undo")
+}
+
+func TestNoteDeletedMsgErrorDoesNotChangeLastDeletion(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, noteDeletedMsg{err: errorf("delete error")})
+	require.Nil(t, m.lastDeletion)
+	require.Contains(t, m.status, "delete failed")
+}
+
+func TestCategoryDeletedMsgSetsLastDeletion(t *testing.T) {
+	m := newTestModel(t)
+	result := makeTrashResult(t)
+	m = updateModel(m, categoryDeletedMsg{relPath: "work", result: result})
+	if m.lastDeletion == nil {
+		require.FailNow(t, "expected lastDeletion to be set after categoryDeletedMsg")
+	}
+	require.Contains(t, m.lastDeletion.label, "work")
+	require.Contains(t, m.status, "Z to undo")
+}
+
+func TestBulkDeleteSetsLastDeletion(t *testing.T) {
+	m := newTestModel(t)
+	r1 := makeTrashResult(t)
+	r2 := makeTrashResult(t)
+	m = updateModel(m, notesDeletedMsg{
+		paths:   []string{"/notes/a.md", "/notes/b.md"},
+		results: []notes.TrashResult{r1, r2},
+	})
+	if m.lastDeletion == nil {
+		require.FailNow(t, "expected lastDeletion to be set after notesDeletedMsg")
+	}
+	require.Len(t, m.lastDeletion.results, 2)
+	require.Contains(t, m.status, "Z to undo")
+}
+
+func TestUndoDeleteKeyDispatchesRestoreCmd(t *testing.T) {
+	m := newTestModel(t)
+	result := makeTrashResult(t)
+	m.lastDeletion = &undoableDelete{label: "note.md", results: []notes.TrashResult{result}}
+	next, cmd := m.Update(keyMsg("Z"))
+	m = next.(Model)
+	require.Nil(t, m.lastDeletion)
+	require.NotNil(t, cmd)
+}
+
+func TestUndoDeleteKeyNoOpWhenNoLastDeletion(t *testing.T) {
+	m := newTestModel(t)
+	m.lastDeletion = nil
+	next, cmd := m.Update(keyMsg("Z"))
+	m = next.(Model)
+	require.Nil(t, m.lastDeletion)
+	require.Nil(t, cmd)
+}
+
+func TestRestoreFinishedMsgSuccess(t *testing.T) {
+	m := newTestModel(t)
+	m.lastDeletion = &undoableDelete{label: "note.md"}
+	m = updateModel(m, restoreFinishedMsg{label: "note.md"})
+	require.Nil(t, m.lastDeletion)
+	require.Contains(t, m.status, "restored:")
+}
+
+func TestRestoreFinishedMsgError(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, restoreFinishedMsg{label: "note.md", err: errorf("rename failed")})
+	require.Nil(t, m.lastDeletion)
+	require.Contains(t, m.status, "restore failed:")
+}

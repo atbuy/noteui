@@ -46,6 +46,7 @@ type keyMap struct {
 	DeleteRemoteKeepLocal    key.Binding
 	SyncImportCurrent        key.Binding
 	SyncImport               key.Binding
+	UndoDelete               key.Binding
 	TogglePreviewPrivacy     key.Binding
 	TogglePreviewLineNumbers key.Binding
 	SortToggle               key.Binding
@@ -213,8 +214,8 @@ var keys = keyMap{
 		key.WithHelp("ctrl+e", "Sync details"),
 	),
 	ShowSyncTimeline: key.NewBinding(
-		key.WithKeys("ctrl+l"),
-		key.WithHelp("ctrl+l", "Sync timeline"),
+		key.WithKeys("Y"),
+		key.WithHelp("Y", "Sync timeline"),
 	),
 	DeleteRemoteKeepLocal: key.NewBinding(
 		key.WithKeys("U"),
@@ -227,6 +228,10 @@ var keys = keyMap{
 	SyncImport: key.NewBinding(
 		key.WithKeys("I"),
 		key.WithHelp("I", "Import all missing synced notes"),
+	),
+	UndoDelete: key.NewBinding(
+		key.WithKeys("Z"),
+		key.WithHelp("Z", "Undo last trash operation"),
 	),
 	SortToggle: key.NewBinding(
 		key.WithKeys("s"),
@@ -390,6 +395,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.DeleteRemoteKeepLocal, cfg.DeleteRemoteKeepLocal)
 	apply(&keys.SyncImportCurrent, cfg.SyncImportCurrent)
 	apply(&keys.SyncImport, cfg.SyncImport)
+	apply(&keys.UndoDelete, cfg.UndoDelete)
 	apply(&keys.TogglePreviewPrivacy, cfg.TogglePreviewPrivacy)
 	apply(&keys.TogglePreviewLineNumbers, cfg.TogglePreviewLineNumbers)
 	apply(&keys.SortToggle, cfg.SortToggle)
@@ -468,6 +474,7 @@ func ValidateKeyCollisions() []string {
 		{"delete_remote_keep_local", &keys.DeleteRemoteKeepLocal},
 		{"sync_import_current", &keys.SyncImportCurrent},
 		{"sync_import", &keys.SyncImport},
+		{"undo_delete", &keys.UndoDelete},
 		{"toggle_preview_privacy", &keys.TogglePreviewPrivacy},
 		{"toggle_preview_line_numbers", &keys.TogglePreviewLineNumbers},
 		{"sort_toggle", &keys.SortToggle},

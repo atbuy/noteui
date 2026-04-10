@@ -76,15 +76,27 @@ func createTemporaryNoteCmd(root string) tea.Cmd {
 
 func deleteNoteCmd(path string) tea.Cmd {
 	return func() tea.Msg {
-		err := notes.DeleteNote(path)
-		return noteDeletedMsg{path: path, err: err}
+		result, err := notes.DeleteNote(path)
+		return noteDeletedMsg{path: path, result: result, err: err}
 	}
 }
 
 func deleteCategoryCmd(root, relPath string) tea.Cmd {
 	return func() tea.Msg {
-		err := notes.DeleteCategory(root, relPath)
-		return categoryDeletedMsg{relPath: relPath, err: err}
+		result, err := notes.DeleteCategory(root, relPath)
+		return categoryDeletedMsg{relPath: relPath, result: result, err: err}
+	}
+}
+
+func restoreFromTrashCmd(label string, results []notes.TrashResult) tea.Cmd {
+	copyResults := append([]notes.TrashResult(nil), results...)
+	return func() tea.Msg {
+		for _, r := range copyResults {
+			if err := notes.RestoreFromTrash(r); err != nil {
+				return restoreFinishedMsg{label: label, err: err}
+			}
+		}
+		return restoreFinishedMsg{label: label}
 	}
 }
 

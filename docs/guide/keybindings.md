@@ -84,10 +84,11 @@ This page documents the default keybindings that most users care about first.
 - `ctrl+s`: toggle shared status of the selected note (`sync: shared` ↔ `sync: local`)
 - `O`: open the generated conflict copy for the selected conflicted synced note
 - `ctrl+e`: open sync details for the selected unhealthy synced note; shows the issue, how long ago it occurred, and recovery options (`r` to retry sync, `u` to unlink a note whose remote copy is missing)
-- `ctrl+l`: open the sync timeline — a scrollable log of recent sync runs with status, timestamps, and counts
+- `Y`: open the sync timeline, a scrollable log of recent sync runs with status, timestamps, and counts
 - `U`: delete only the remote copy of a synced local note
 - `i`: import the selected remote-only note
 - `I`: import all missing synced notes
+- `Z`: undo the last trash operation; restores the trashed note or category to its original path (available until the next deletion or workspace switch)
 
 ## Customizing keybindings
 

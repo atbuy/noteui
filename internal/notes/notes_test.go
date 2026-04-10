@@ -238,7 +238,7 @@ func TestCreateTemporaryNoteAndDeleteNote(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected temporary note under temp root, got %q", path)
 	}
 
-	if err := DeleteNote(path); err != nil {
+	if _, err := DeleteNote(path); err != nil {
 		require.Failf(t, "assertion failed", "DeleteNote returned error: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -497,7 +497,7 @@ func TestDeleteCategoryMovesDirectoryToTrash(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", xdgData)
 
 	writeFile(t, filepath.Join(root, "projects", "note.md"), "body")
-	if err := DeleteCategory(root, "projects"); err != nil {
+	if _, err := DeleteCategory(root, "projects"); err != nil {
 		require.Failf(t, "assertion failed", "DeleteCategory returned error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "projects")); !os.IsNotExist(err) {
@@ -506,7 +506,7 @@ func TestDeleteCategoryMovesDirectoryToTrash(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(xdgData, "Trash", "files", "projects")); err != nil {
 		require.Failf(t, "assertion failed", "expected category to be moved to trash: %v", err)
 	}
-	if err := DeleteCategory(root, "."); err == nil {
+	if _, err := DeleteCategory(root, "."); err == nil {
 		require.FailNow(t, "expected root delete to be rejected")
 	}
 }

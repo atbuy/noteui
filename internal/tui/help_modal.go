@@ -47,6 +47,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Tree", key: keys.DeleteRemoteKeepLocal.Help().Key, desc: "Delete remote copy, keep local note"},
 		{section: "Tree", key: keys.SyncImportCurrent.Help().Key, desc: "Import current remote note"},
 		{section: "Tree", key: keys.SyncImport.Help().Key, desc: "Import all missing synced notes"},
+		{section: "Tree", key: keys.UndoDelete.Help().Key, desc: "Undo last trash operation (restore from trash)"},
 		{section: "Tree", key: keys.CreateCategory.Help().Key, desc: "Create category"},
 		{section: "Tree", key: keys.NewTodoList.Help().Key, desc: "New todo list (tree focus)"},
 		{section: "Notes", key: keys.NewNote.Help().Key, desc: "New note in current view"},

@@ -44,8 +44,9 @@ type notesRelocatedMsg struct {
 }
 
 type notesDeletedMsg struct {
-	paths []string
-	err   error
+	paths   []string
+	results []notes.TrashResult
+	err     error
 }
 
 type notesTaggedMsg struct {
@@ -247,12 +248,15 @@ func batchRelocateNotesCmd(items []noteRelocationItem, status string) tea.Cmd {
 func deleteNotesCmd(paths []string) tea.Cmd {
 	copyPaths := append([]string(nil), paths...)
 	return func() tea.Msg {
+		var results []notes.TrashResult
 		for _, path := range copyPaths {
-			if err := notes.DeleteNote(path); err != nil {
-				return notesDeletedMsg{paths: copyPaths, err: err}
+			result, err := notes.DeleteNote(path)
+			if err != nil {
+				return notesDeletedMsg{paths: copyPaths, results: results, err: err}
 			}
+			results = append(results, result)
 		}
-		return notesDeletedMsg{paths: copyPaths}
+		return notesDeletedMsg{paths: copyPaths, results: results}
 	}
 }
 

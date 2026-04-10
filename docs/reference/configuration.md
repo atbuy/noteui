@@ -106,7 +106,7 @@ select_workspace = ["W"]
 select_sync_profile = ["F"]
 open_conflict_copy = ["O"]
 show_sync_debug = ["ctrl+e"]
-show_sync_timeline = ["ctrl+l"]
+show_sync_timeline = ["Y"]
 delete_remote_keep_local = ["U"]
 sync_import_current = ["i"]
 sync_import = ["I"]
@@ -604,7 +604,7 @@ note_history = ["H"]
   Default: `["ctrl+e"]`
   Opens the sync details modal for the selected unhealthy synced note.
 - `show_sync_timeline`
-  Default: `["ctrl+l"]`
+  Default: `["Y"]`
   Opens the sync timeline showing recent sync run history for the current workspace.
 - `delete_remote_keep_local`
   Default: `["U"]`
@@ -612,6 +612,9 @@ note_history = ["H"]
   Default: `["i"]`
 - `sync_import`
   Default: `["I"]`
+- `undo_delete`
+  Default: `["Z"]`
+  Restores the most recently trashed note or category to its original path. Available until the next deletion or workspace switch.
 
 ### History and extra motions
 
@@ -670,7 +673,7 @@ Sync-related key defaults:
 - `select_sync_profile = ["F"]`
 - `open_conflict_copy = ["O"]`
 - `show_sync_debug = ["ctrl+e"]`
-- `show_sync_timeline = ["ctrl+l"]`
+- `show_sync_timeline = ["Y"]`
 - `delete_remote_keep_local = ["U"]`
 - `sync_import_current = ["i"]`
 - `sync_import = ["I"]`

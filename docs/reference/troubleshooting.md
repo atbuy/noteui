@@ -87,7 +87,7 @@ Previously healthy synced notes start green from their saved local sync record. 
 
 Press `ctrl+e` on the affected note to open the sync details modal. It shows the exact issue category, how long ago the note was last successfully synced, and a suggested recovery step. From the modal you can press `r` to retry the sync immediately, or `u` to unlink the note locally if its remote copy is gone.
 
-To see a history of recent sync runs and when the problem first appeared, press `ctrl+l` to open the sync timeline.
+To see a history of recent sync runs and when the problem first appeared, press `Y` to open the sync timeline.
 
 Also check:
 

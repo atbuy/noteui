@@ -123,11 +123,11 @@ When a synced note turns red, press `ctrl+e` to open the sync details modal. It 
 From the sync details modal you can also take recovery actions directly:
 
 - press `r` to retry the sync without closing the modal first
-- press `u` (only for "Remote copy missing") to unlink the note locally — this removes the sync record and resets the note to `sync: local` without making a network call
+- press `u` (only for "Remote copy missing") to unlink the note locally; this removes the sync record and resets the note to `sync: local` without making a network call
 
 ## Viewing sync history
 
-Press `ctrl+l` to open the sync timeline, which shows a scrollable history of recent sync runs for the current workspace. Each entry displays:
+Press `Y` to open the sync timeline, which shows a scrollable history of recent sync runs for the current workspace. Each entry displays:
 
 - a status icon: `✓` for success, `⚡` for a run that completed with conflicts, `✗` for a run that failed
 - the timestamp and sync profile used

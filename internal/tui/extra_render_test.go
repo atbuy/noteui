@@ -808,3 +808,11 @@ func TestRenderTodoPriorityModal(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected 'Set todo priority' in modal, got %q", plain[:min(len(plain), 200)])
 	}
 }
+
+func TestStatusIncludesUndoHintAfterNoteDeletion(t *testing.T) {
+	m := newTestModel(t)
+	m.lastDeletion = &undoableDelete{label: "note.md"}
+	m.status = "trashed note: note.md  •  Z to undo"
+	plain := stripANSI(m.renderStatus())
+	require.Contains(t, plain, "Z to undo")
+}

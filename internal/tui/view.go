@@ -1106,7 +1106,8 @@ func (m Model) renderStatus() string {
 		strings.HasPrefix(m.status, "error opening note:"),
 		strings.HasPrefix(m.status, "sync profile save failed:"),
 		strings.HasPrefix(m.status, "sync root rebind failed:"),
-		strings.HasPrefix(m.status, "sync debug copy failed:"):
+		strings.HasPrefix(m.status, "sync debug copy failed:"),
+		strings.HasPrefix(m.status, "restore failed:"):
 		return statusErrStyle.Render(line)
 	default:
 		return statusOKStyle.Render(line)

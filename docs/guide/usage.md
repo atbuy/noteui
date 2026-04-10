@@ -133,6 +133,8 @@ Move operations stay inside the notes root.
 
     noteui deletes into the user trash instead of immediately removing content permanently.
 
+After a successful trash operation the status bar shows `Z to undo`. Press `Z` to restore the trashed item back to its original path. The undo affordance is available until the next deletion or workspace switch. Trashing a second note replaces it; only the most recent deletion can be undone.
+
 Marked notes let the existing note actions work on a batch:
 
 - `p`: pin or unpin marked notes

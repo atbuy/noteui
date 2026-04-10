@@ -137,13 +137,25 @@ type deletePending struct {
 }
 
 type noteDeletedMsg struct {
-	path string
-	err  error
+	path   string
+	result notes.TrashResult
+	err    error
 }
 
 type categoryDeletedMsg struct {
 	relPath string
+	result  notes.TrashResult
 	err     error
+}
+
+type restoreFinishedMsg struct {
+	label string
+	err   error
+}
+
+type undoableDelete struct {
+	label   string
+	results []notes.TrashResult
 }
 
 type previewRenderedMsg struct {
@@ -356,6 +368,7 @@ type Model struct {
 	searchMode  bool
 
 	deletePending  *deletePending
+	lastDeletion   *undoableDelete
 	preserveCursor int
 
 	previewTodos       []previewTodoItem
@@ -1518,7 +1531,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.deletePending = nil
 		m.removePinnedForAbsolutePath(msg.path)
 		m.preserveCursor = m.treeCursor
-		m.status = "deleted note: " + msg.path
+		label := filepath.Base(msg.path)
+		m.lastDeletion = &undoableDelete{label: label, results: []notes.TrashResult{msg.result}}
+		m.status = "trashed note: " + label + "  •  Z to undo"
 		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case notesDeletedMsg:
@@ -1530,7 +1545,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.removePinnedForPaths(msg.paths)
 		m.clearMarkedTreeItems()
 		m.preserveCursor = m.treeCursor
-		m.status = countStatus(len(msg.paths), "deleted 1 note", "deleted %d notes")
+		label := countStatus(len(msg.paths), "1 note", "%d notes")
+		m.lastDeletion = &undoableDelete{label: label, results: msg.results}
+		m.status = "trashed " + label + "  •  Z to undo"
 		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
 	case categoryDeletedMsg:
@@ -1542,8 +1559,19 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.preserveCursor = m.treeCursor
 		m.removeCategoryStateSubtree(msg.relPath)
 		_ = m.saveTreeState()
-		m.status = "deleted category: " + msg.relPath
+		m.lastDeletion = &undoableDelete{label: msg.relPath + "/", results: []notes.TrashResult{msg.result}}
+		m.status = "trashed category: " + msg.relPath + "  •  Z to undo"
 		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+
+	case restoreFinishedMsg:
+		if msg.err != nil {
+			m.lastDeletion = nil
+			m.status = "restore failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.lastDeletion = nil
+		m.status = "restored: " + msg.label
+		return m, refreshAllCmd(m.rootDir, m.sessionToken)
 
 	case dataLoadedMsg:
 		if msg.sessionToken != m.sessionToken {
@@ -2120,7 +2148,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				return m, nil
 			case key.Matches(msg, keys.MoveDown):
-				if m.syncTimelineOffset < len(m.syncTimelineEvents)-1 {
+				maxVisible := max(4, min(20, m.height-14))
+				maxOffset := max(0, len(m.syncTimelineEvents)-maxVisible)
+				if m.syncTimelineOffset < maxOffset {
 					m.syncTimelineOffset++
 				}
 				return m, nil
@@ -3104,6 +3134,15 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.SyncImport) {
 			return m, m.importAllRemoteNotes()
+		}
+
+		if key.Matches(msg, keys.UndoDelete) {
+			if m.lastDeletion != nil {
+				d := m.lastDeletion
+				m.lastDeletion = nil
+				return m, restoreFromTrashCmd(d.label, d.results)
+			}
+			return m, nil
 		}
 
 		if key.Matches(msg, keys.CreateCategory) {

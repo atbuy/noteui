@@ -10,30 +10,37 @@ import (
 	"time"
 )
 
-func TrashPath(path string) error {
+// TrashResult records where a trashed item ended up, enabling in-app restore.
+type TrashResult struct {
+	OriginalPath  string // absolute path before trashing
+	TrashFilePath string // path inside Trash/files/
+	TrashInfoPath string // path of the .trashinfo metadata file
+}
+
+func TrashPath(path string) (TrashResult, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return errors.New("path cannot be empty")
+		return TrashResult{}, errors.New("path cannot be empty")
 	}
 
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return err
+		return TrashResult{}, err
 	}
 
 	trashRoot, err := userTrashRoot()
 	if err != nil {
-		return err
+		return TrashResult{}, err
 	}
 
 	filesDir := filepath.Join(trashRoot, "files")
 	infoDir := filepath.Join(trashRoot, "info")
 
 	if err := os.MkdirAll(filesDir, 0o700); err != nil {
-		return err
+		return TrashResult{}, err
 	}
 	if err := os.MkdirAll(infoDir, 0o700); err != nil {
-		return err
+		return TrashResult{}, err
 	}
 
 	base := filepath.Base(absPath)
@@ -45,14 +52,39 @@ func TrashPath(path string) error {
 	infoContent := buildTrashInfo(absPath)
 
 	if err := os.WriteFile(infoPath, []byte(infoContent), 0o600); err != nil {
-		return err
+		return TrashResult{}, err
 	}
 
 	if err := os.Rename(absPath, targetPath); err != nil {
 		_ = os.Remove(infoPath)
-		return err
+		return TrashResult{}, err
 	}
 
+	return TrashResult{
+		OriginalPath:  absPath,
+		TrashFilePath: targetPath,
+		TrashInfoPath: infoPath,
+	}, nil
+}
+
+// RestoreFromTrash moves a previously trashed item back to its original path.
+// It returns an error if the original path is already occupied.
+func RestoreFromTrash(result TrashResult) error {
+	if strings.TrimSpace(result.OriginalPath) == "" || strings.TrimSpace(result.TrashFilePath) == "" {
+		return errors.New("restore failed: missing path information")
+	}
+	if pathExists(result.OriginalPath) {
+		return fmt.Errorf("restore failed: %q already exists", result.OriginalPath)
+	}
+	if err := os.MkdirAll(filepath.Dir(result.OriginalPath), 0o755); err != nil {
+		return err
+	}
+	if err := os.Rename(result.TrashFilePath, result.OriginalPath); err != nil {
+		return err
+	}
+	if result.TrashInfoPath != "" {
+		_ = os.Remove(result.TrashInfoPath)
+	}
 	return nil
 }
 

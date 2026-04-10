@@ -158,6 +158,7 @@ type KeysConfig struct {
 	DeleteRemoteKeepLocal    []string `toml:"delete_remote_keep_local"`
 	SyncImportCurrent        []string `toml:"sync_import_current"`
 	SyncImport               []string `toml:"sync_import"`
+	UndoDelete               []string `toml:"undo_delete"`
 	TogglePreviewPrivacy     []string `toml:"toggle_preview_privacy"`
 	TogglePreviewLineNumbers []string `toml:"toggle_preview_line_numbers"`
 	SortToggle               []string `toml:"sort_toggle"`

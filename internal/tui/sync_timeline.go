@@ -47,7 +47,7 @@ func (m Model) renderSyncTimelineModal() string {
 			m.renderModalBlank(innerWidth),
 			lipgloss.JoinVertical(lipgloss.Left, rows...),
 			m.renderModalBlank(innerWidth),
-			m.renderModalFooter("j/k scroll • Esc close", innerWidth),
+			m.renderModalFooter("j/k scroll  Esc close", innerWidth),
 		),
 	)
 	return modalCardStyle(modalWidth).Render(content)
@@ -55,47 +55,44 @@ func (m Model) renderSyncTimelineModal() string {
 
 func (m Model) renderSyncTimelineRow(event notesync.SyncEvent, width int) string {
 	icon, iconColor := syncTimelineIcon(event.Type)
-	iconStr := lipgloss.NewStyle().Foreground(iconColor).Background(modalBgColor).Render(icon)
 
 	ts := ""
 	if !event.Timestamp.IsZero() {
 		ts = event.Timestamp.Local().Format("2006-01-02 15:04")
 	}
-	tsStr := lipgloss.NewStyle().Foreground(mutedColor).Background(modalBgColor).Render(ts)
-
-	profile := ""
-	if event.ProfileName != "" {
-		profile = event.ProfileName
-	}
-
 	summary := syncTimelineSummary(event)
-	summaryStr := lipgloss.NewStyle().Foreground(textColor).Background(modalBgColor).Render(summary)
 
-	profileStr := ""
-	if profile != "" {
-		profileStr = lipgloss.NewStyle().Foreground(mutedColor).Background(modalBgColor).Render("[" + profile + "]")
+	// base style: background only; inner pieces use foreground on top of this
+	base := lipgloss.NewStyle().Background(modalBgColor)
+	// styled space/indent used as separators so no unstyled gaps appear between pieces
+	spc := base.Render("  ")
+	indent := base.Render("    ")
+
+	iconStr := base.Foreground(iconColor).Render(icon)
+	tsStr := base.Foreground(mutedColor).Render(ts)
+
+	// Top line: icon  timestamp  [profile]
+	top := iconStr + spc + tsStr
+	if event.ProfileName != "" {
+		top += spc + base.Foreground(mutedColor).Render("["+event.ProfileName+"]")
 	}
 
-	durationStr := ""
+	// Bottom line: indent summary  duration
+	summaryStr := base.Foreground(textColor).Render(summary)
+	bottom := indent + summaryStr
 	if event.DurationMs > 0 {
-		durationStr = lipgloss.NewStyle().Foreground(mutedColor).Background(modalBgColor).
-			Render(fmt.Sprintf("%dms", event.DurationMs))
+		bottom += spc + base.Foreground(mutedColor).Render(fmt.Sprintf("%dms", event.DurationMs))
 	}
 
-	top := strings.TrimSpace(iconStr + " " + tsStr)
-	if profileStr != "" {
-		top += " " + profileStr
-	}
-	bottom := "    " + summaryStr
-	if durationStr != "" {
-		bottom += "  " + durationStr
-	}
-	cell := lipgloss.JoinVertical(lipgloss.Left, top, bottom)
-	return lipgloss.NewStyle().
-		Width(width).
-		Padding(0, 1).
-		Background(modalBgColor).
-		Render(cell)
+	// innerWidth accounts for the 1-space padding we add manually on each side
+	innerWidth := width - 2
+	topLine := lipgloss.PlaceHorizontal(innerWidth, lipgloss.Left, top,
+		lipgloss.WithWhitespaceBackground(modalBgColor))
+	bottomLine := lipgloss.PlaceHorizontal(innerWidth, lipgloss.Left, bottom,
+		lipgloss.WithWhitespaceBackground(modalBgColor))
+
+	pad := base.Render(" ")
+	return pad + topLine + pad + "\n" + pad + bottomLine + pad
 }
 
 func syncTimelineIcon(t notesync.SyncEventType) (string, lipgloss.Color) {
@@ -146,7 +143,7 @@ func buildSyncCounts(event notesync.SyncEvent) []string {
 func truncateLine(s string, max int) string {
 	s = strings.SplitN(s, "\n", 2)[0]
 	if len(s) > max {
-		return s[:max-1] + "…"
+		return s[:max-1] + "..."
 	}
 	return s
 }

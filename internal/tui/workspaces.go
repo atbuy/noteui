@@ -199,6 +199,7 @@ func (m *Model) resetWorkspaceTransientState() {
 	m.showSyncProfileMigration = false
 	m.pendingSyncProfileChange = nil
 	m.showSyncDebugModal = false
+	m.lastDeletion = nil
 	m.showTodoAdd = false
 	m.showTodoEdit = false
 	m.showTodoDueDate = false
