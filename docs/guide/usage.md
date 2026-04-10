@@ -2,6 +2,37 @@
 
 This guide explains how noteui behaves in day-to-day use.
 
+## Demo mode
+
+Run `noteui --demo` to launch noteui with a set of built-in sample notes
+copied into a temporary directory. The session is fully interactive: every
+keybinding works, including create, rename, move, delete, and search. Nothing
+is ever written to your real notes root, and the temporary directory is
+removed automatically when you quit.
+
+The demo workspace ships with:
+
+- two root-level notes (`inbox.md`, `journal.md`)
+- three categories (`personal/`, `reference/`, `work/`) with a total of five
+  nested notes covering meeting notes, project status, reading lists, ideas,
+  and a command reference
+- one temporary note under `.tmp/` (reachable with `t`)
+- a tag set that includes `project`, `meeting`, `books`, `reference`, `inbox`
+
+Demo mode also:
+
+- forces the dashboard off so the tree and preview are visible immediately
+- clears any sync configuration for the session, so no SSH connection is
+  attempted and nothing is uploaded anywhere
+- labels the active workspace as `Demo` in the title bar
+
+Use demo mode when you want to:
+
+- try noteui before deciding to set up a personal notes directory
+- record a screencast or GIF without exposing any real notes
+- reproduce a layout or rendering bug against a known set of fixtures
+- run the TUI in CI to verify that it starts up and renders a frame
+
 ## Workspace profiles
 
 If you configure multiple workspaces in `config.toml`, noteui can switch between them from the command palette or directly with `W`.

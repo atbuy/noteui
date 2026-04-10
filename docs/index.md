@@ -8,6 +8,12 @@ It helps you browse, search, preview, organize, and edit notes without moving th
 
     Start with the tutorial pages. They are written for first-time users and walk through installation, first launch, and the most common workflows.
 
+!!! example "Try it in one command"
+
+    Already installed noteui? Run `noteui --demo` to launch the UI against a
+    throwaway set of sample notes. Nothing touches your real notes directory.
+    See [Demo mode](guide/usage.md#demo-mode) for details.
+
 ## Common tasks
 
 - Install noteui and the sync helper: [Installation](tutorial/installation.md)

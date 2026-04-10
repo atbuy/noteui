@@ -1,4 +1,4 @@
-.PHONY: build run install install-sync fmt test coverage coverage-html docs-build docs-serve clean version
+.PHONY: build run install install-sync fmt test coverage coverage-html docs-build docs-serve clean version demo-gif
 
 GO := $(shell command -v go 2>/dev/null || echo /usr/local/go/bin/go)
 GO_BIN_DIR := $(patsubst %/,%,$(dir $(GO)))
@@ -48,6 +48,9 @@ docs-serve:
 
 clean:
 	rm -rf ./bin/$(OUTBIN) ./bin/$(SYNCBIN)
+
+demo-gif: build
+	cp ./bin/$(OUTBIN) /tmp/noteui-demo && PATH="/tmp:$$PATH" TERM=xterm-256color vhs demo/demo.tape
 
 version:
 	@echo $(VERSION)

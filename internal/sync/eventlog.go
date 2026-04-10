@@ -15,8 +15,8 @@ type SyncEventType string
 
 const (
 	SyncEventSuccess  SyncEventType = "success"  // clean run, no conflicts
-	SyncEventConflict SyncEventType = "conflict"  // succeeded but had ≥1 conflict
-	SyncEventError    SyncEventType = "error"     // run failed with an error
+	SyncEventConflict SyncEventType = "conflict" // succeeded but had ≥1 conflict
+	SyncEventError    SyncEventType = "error"    // run failed with an error
 )
 
 // SyncEvent records the outcome of a single sync run.
@@ -32,8 +32,8 @@ type SyncEvent struct {
 }
 
 const (
-	eventLogFileName  = "sync-events.jsonl"
-	eventLogMaxLines  = 200
+	eventLogFileName = "sync-events.jsonl"
+	eventLogMaxLines = 200
 )
 
 func eventLogPath(root string) string {
@@ -96,7 +96,7 @@ func readEventLines(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var lines []string
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {

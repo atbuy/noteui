@@ -1,5 +1,14 @@
 # FAQ
 
+## Can I try noteui without setting anything up?
+
+Yes. Run `noteui --demo` to launch the UI against a bundle of built-in sample
+notes copied into a throwaway temporary directory. Your real notes directory
+is not touched. The demo data is removed automatically when you quit.
+
+See the [Demo mode](guide/usage.md#demo-mode) section of the usage guide for
+details about what is included.
+
 ## Where are my notes stored?
 
 By default, under `$HOME/notes`, unless you set `NOTES_ROOT`.

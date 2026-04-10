@@ -8,6 +8,18 @@
 
 It is built for people who want a keyboard-driven notes workflow without giving up normal files, directories, and external editors.
 
+![noteui demo](demo/noteui-demo.gif)
+
+## Try it in 30 seconds
+
+Already installed noteui? Run:
+
+```sh
+noteui --demo
+```
+
+This launches the UI against a bundled set of sample notes copied into a throwaway temporary directory. Your real notes root is not touched, sync is disabled for the session, and the temp directory is cleaned up automatically when you quit. See [Demo mode](https://atbuy.github.io/noteui/guide/usage/#demo-mode) for details.
+
 ## Documentation
 
 Full documentation is published at:

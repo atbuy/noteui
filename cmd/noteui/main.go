@@ -10,14 +10,19 @@ import (
 
 	"atbuy/noteui/internal/buildinfo"
 	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/demo"
 	"atbuy/noteui/internal/tui"
 )
 
 func main() {
+	demoMode := false
 	for _, arg := range os.Args[1:] {
-		if arg == "--version" || arg == "-version" || arg == "-v" {
+		switch arg {
+		case "--version", "-version", "-v":
 			fmt.Println(buildinfo.Version)
 			return
+		case "--demo":
+			demoMode = true
 		}
 	}
 
@@ -36,6 +41,18 @@ func main() {
 	}
 
 	startup := config.ResolveStartupWorkspace(cfg, os.Getenv("NOTES_ROOT"), fallbackRoot)
+
+	if demoMode {
+		demoRoot, demoCleanup, demoErr := demo.Setup()
+		if demoErr != nil {
+			fmt.Fprintf(os.Stderr, "demo setup failed: %v\n", demoErr)
+			os.Exit(1)
+		}
+		defer demoCleanup()
+		startup = config.StartupWorkspace{Root: demoRoot, Label: "Demo", Name: "demo"}
+		cfg.Sync = config.SyncConfig{}
+		cfg.Dashboard = false
+	}
 
 	tui.ApplyTheme(cfg)
 	tui.ApplyConfigKeys(cfg.Keys)

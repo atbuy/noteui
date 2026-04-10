@@ -42,6 +42,23 @@ By default, noteui uses:
 
 If the notes directory does not exist yet, noteui creates it when needed.
 
+## Try it first without a setup
+
+If you just want to see what noteui looks and feels like before touching
+anything on your machine, run:
+
+```bash
+noteui --demo
+```
+
+This launches noteui against a small bundle of sample notes copied into a
+throwaway temporary directory. Your real `$HOME/notes` folder is not touched,
+and the sample content is cleaned up automatically when you quit.
+
+Use it to try navigation, search, previews, and the temporary notes view
+without committing to a setup. When you are ready for the real thing,
+continue with the steps below.
+
 ## First launch
 
 Run:
