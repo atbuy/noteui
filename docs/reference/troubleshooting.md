@@ -85,7 +85,11 @@ If imports are skipped, check whether a local file already exists at the target 
 
 Previously healthy synced notes start green from their saved local sync record. If they turn red after startup, the background sync found a real problem.
 
-Check:
+Press `ctrl+e` on the affected note to open the sync details modal. It shows the exact issue category, how long ago the note was last successfully synced, and a suggested recovery step. From the modal you can press `r` to retry the sync immediately, or `u` to unlink the note locally if its remote copy is gone.
+
+To see a history of recent sync runs and when the problem first appeared, press `ctrl+l` to open the sync timeline.
+
+Also check:
 
 - that the sync profile is still valid
 - that SSH access still works
@@ -99,10 +103,9 @@ When noteui reports a conflict, it keeps the local note untouched and writes the
 Use this resolution flow:
 
 - select the conflicted synced note
-- press `O` to open the generated conflict copy
-- open the original note too
-- merge what you want into the original note
-- save the original note and sync again
+- press `ctrl+e` to open the sync details modal, which shows both versions side-by-side and reports how long ago the conflict occurred
+- use `h`/`l` or left/right to choose which version to keep, then press `Enter` to apply
+- alternatively, press `O` to open the conflict copy in your editor for manual merging, then save the original note and sync again
 
 If the conflict does not clear, check:
 

@@ -295,6 +295,14 @@ type noteVersionRestoredMsg struct {
 	err     error
 }
 
+type syncEventsLoadedMsg struct {
+	events []notesync.SyncEvent
+}
+
+type syncUnlinkLocalMsg struct {
+	err error
+}
+
 func startSyncCmd(sessionToken int) tea.Cmd {
 	return func() tea.Msg { return syncStartMsg{sessionToken: sessionToken} }
 }
@@ -343,6 +351,20 @@ func importCurrentSyncedNoteCmd(root, remoteRootOverride string, cfg config.Sync
 		defer cancel()
 		result, err := notesync.ImportRemoteNote(ctx, root, remoteRootOverride, cfg, noteID, nil)
 		return syncImportFinishedMsg{result: result, err: err, sessionToken: sessionToken}
+	}
+}
+
+func loadSyncEventsCmd(root string) tea.Cmd {
+	return func() tea.Msg {
+		events, _ := notesync.LoadSyncEvents(root, 50)
+		return syncEventsLoadedMsg{events: events}
+	}
+}
+
+func unlinkNoteLocallyCmd(root, notePath string) tea.Cmd {
+	return func() tea.Msg {
+		err := notesync.UnlinkNoteLocally(root, notePath)
+		return syncUnlinkLocalMsg{err: err}
 	}
 }
 

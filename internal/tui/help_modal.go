@@ -43,6 +43,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Tree", key: keys.SelectSyncProfile.Help().Key, desc: "Select default sync profile"},
 		{section: "Tree", key: keys.OpenConflictCopy.Help().Key, desc: "Resolve selected conflict"},
 		{section: "Tree", key: keys.ShowSyncDebug.Help().Key, desc: "Show sync details"},
+		{section: "Tree", key: keys.ShowSyncTimeline.Help().Key, desc: "View sync run history timeline"},
 		{section: "Tree", key: keys.DeleteRemoteKeepLocal.Help().Key, desc: "Delete remote copy, keep local note"},
 		{section: "Tree", key: keys.SyncImportCurrent.Help().Key, desc: "Import current remote note"},
 		{section: "Tree", key: keys.SyncImport.Help().Key, desc: "Import all missing synced notes"},

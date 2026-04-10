@@ -106,6 +106,7 @@ select_workspace = ["W"]
 select_sync_profile = ["F"]
 open_conflict_copy = ["O"]
 show_sync_debug = ["ctrl+e"]
+show_sync_timeline = ["ctrl+l"]
 delete_remote_keep_local = ["U"]
 sync_import_current = ["i"]
 sync_import = ["I"]
@@ -599,6 +600,12 @@ note_history = ["H"]
 - `open_conflict_copy`
   Default: `["O"]`
   Opens the generated conflict copy for the selected conflicted synced note.
+- `show_sync_debug`
+  Default: `["ctrl+e"]`
+  Opens the sync details modal for the selected unhealthy synced note.
+- `show_sync_timeline`
+  Default: `["ctrl+l"]`
+  Opens the sync timeline showing recent sync run history for the current workspace.
 - `delete_remote_keep_local`
   Default: `["U"]`
 - `sync_import_current`
@@ -663,6 +670,7 @@ Sync-related key defaults:
 - `select_sync_profile = ["F"]`
 - `open_conflict_copy = ["O"]`
 - `show_sync_debug = ["ctrl+e"]`
+- `show_sync_timeline = ["ctrl+l"]`
 - `delete_remote_keep_local = ["U"]`
 - `sync_import_current = ["i"]`
 - `sync_import = ["I"]`
@@ -675,5 +683,5 @@ noteui uses the following hidden directories inside the notes root and skips the
 |---|---|
 | `.tmp/` | Temporary notes |
 | `.noteui-history/` | Automatic per-note version history |
-| `.noteui-sync/` | Sync bookkeeping metadata |
+| `.noteui-sync/` | Sync bookkeeping metadata and event log (`sync-events.jsonl`) |
 | `.templates/` | User-defined note templates (see [Note templates](../guide/usage.md#note-templates)) |

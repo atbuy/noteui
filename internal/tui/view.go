@@ -177,6 +177,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showSyncTimeline {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderSyncTimelineModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showSyncProfilePicker {
 		return lipgloss.Place(
 			m.width,

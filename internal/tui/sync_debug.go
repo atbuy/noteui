@@ -19,6 +19,15 @@ import (
 
 var writeClipboard = clipboard.WriteAll
 
+// issueKind constants identify the category of a sync problem.
+const (
+	issueKindConflict      = "conflict"
+	issueKindRemoteMissing = "remote_missing"
+	issueKindUnreachable   = "unreachable"
+	issueKindAuth          = "auth"
+	issueKindGeneric       = "generic"
+)
+
 type syncDebugDetails struct {
 	NoteTitle         string
 	RelPath           string
@@ -30,21 +39,71 @@ type syncDebugDetails struct {
 	ConflictCopyPath  string
 	LastSyncAt        time.Time
 	LastSyncAttemptAt time.Time
+	IssueKind         string
 }
 
-func classifySyncIssue(rec notesync.NoteRecord, rawErr string) (string, string, string) {
+// classifySyncIssue returns (title, summary, suggestedAction, issueKind).
+func classifySyncIssue(rec notesync.NoteRecord, rawErr string) (string, string, string, string) {
 	rawLower := strings.ToLower(strings.TrimSpace(rawErr))
+	lastSuccessClause := ""
+	if !rec.LastSyncAt.IsZero() {
+		lastSuccessClause = " Last synced successfully " + formatRelativeTime(rec.LastSyncAt) + "."
+	}
 	switch {
 	case rec.Conflict != nil:
-		return "Sync conflict", "Both local and remote changed. Compare the two copies and keep the version you want.", "Press `" + keys.OpenConflictCopy.Help().Key + "` or `" + keys.ShowSyncDebug.Help().Key + "` to compare local and remote, then choose which version to keep."
+		conflictClause := ""
+		if !rec.Conflict.OccurredAt.IsZero() {
+			conflictClause = " Conflict recorded " + formatRelativeTime(rec.Conflict.OccurredAt) + "."
+		}
+		return "Sync conflict",
+			"Both local and remote changed. Compare the two copies and keep the version you want." + conflictClause,
+			"Press `" + keys.OpenConflictCopy.Help().Key + "` or `" + keys.ShowSyncDebug.Help().Key + "` to compare local and remote, then choose which version to keep.",
+			issueKindConflict
 	case strings.Contains(rawLower, "note missing on remote"):
-		return "Remote copy missing", "This note is still linked locally, but its remote copy no longer exists.", "Review the local note, then sync again if you want to recreate it remotely."
+		neverClause := ""
+		if rec.LastSyncAt.IsZero() {
+			neverClause = " This note was never successfully synced."
+		} else {
+			neverClause = lastSuccessClause
+		}
+		return "Remote copy missing",
+			"This note is still linked locally, but its remote copy no longer exists." + neverClause,
+			"Press `u` to unlink and keep the note locally, or sync again to recreate it remotely.",
+			issueKindRemoteMissing
 	case strings.Contains(rawLower, "dial tcp") || strings.Contains(rawLower, "connection refused") || strings.Contains(rawLower, "timeout"):
-		return "Sync host unreachable", "noteui could not reach the sync host for this note.", "Check the sync profile host, network access, and whether the remote sync service is available."
+		return "Sync host unreachable",
+			"noteui could not reach the sync host for this note." + lastSuccessClause,
+			"Check the sync profile host, network access, and whether the remote sync service is available.",
+			issueKindUnreachable
 	case strings.Contains(rawLower, "permission denied") || strings.Contains(rawLower, "publickey") || strings.Contains(rawLower, "authentication"):
-		return "Authentication failed", "noteui reached the host but could not authenticate the sync request.", "Check SSH credentials, agent forwarding, and the configured remote binary permissions."
+		return "Authentication failed",
+			"noteui reached the host but could not authenticate the sync request." + lastSuccessClause,
+			"Check SSH credentials, agent forwarding, and the configured remote binary permissions.",
+			issueKindAuth
 	default:
-		return "Sync failed", "The last sync attempt for this note failed.", "Open details to review the stored sync metadata and technical error text."
+		return "Sync failed",
+			"The last sync attempt for this note failed." + lastSuccessClause,
+			"Open details to review the stored sync metadata and technical error text.",
+			issueKindGeneric
+	}
+}
+
+// formatRelativeTime returns a human-readable relative duration, e.g. "3m ago".
+func formatRelativeTime(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		days := int(d.Hours() / 24)
+		return fmt.Sprintf("%dd ago", days)
 	}
 }
 
@@ -85,7 +144,7 @@ func buildSyncDebugDetails(noteTitle, relPath string, rec notesync.NoteRecord) (
 	if rec.Conflict == nil && rawErr == "" {
 		return nil, false
 	}
-	title, summary, action := classifySyncIssue(rec, rawErr)
+	title, summary, action, kind := classifySyncIssue(rec, rawErr)
 	details := &syncDebugDetails{
 		NoteTitle:         strings.TrimSpace(noteTitle),
 		RelPath:           strings.TrimSpace(relPath),
@@ -96,6 +155,7 @@ func buildSyncDebugDetails(noteTitle, relPath string, rec notesync.NoteRecord) (
 		RawError:          rawErr,
 		LastSyncAt:        rec.LastSyncAt,
 		LastSyncAttemptAt: rec.LastSyncAttemptAt,
+		IssueKind:         kind,
 	}
 	if rec.Conflict != nil {
 		details.ConflictCopyPath = strings.TrimSpace(rec.Conflict.CopyPath)
@@ -121,8 +181,9 @@ func (m Model) syncIssuePreviewMarkdown(relPath string) string {
 		"- State: **" + details.FriendlyTitle + "**",
 		"- Summary: " + details.FriendlySummary,
 	}
+	lines = append(lines, "- Last synced: "+formatRelativeTime(details.LastSyncAt))
 	if !details.LastSyncAttemptAt.IsZero() {
-		lines = append(lines, "- Last attempt: `"+formatSyncTimestamp(details.LastSyncAttemptAt)+"`")
+		lines = append(lines, "- Last attempt: "+formatRelativeTime(details.LastSyncAttemptAt)+" (`"+formatSyncTimestamp(details.LastSyncAttemptAt)+"`)")
 	}
 	if details.SuggestedAction != "" {
 		lines = append(lines, "- Next step: "+details.SuggestedAction)
@@ -164,6 +225,35 @@ func (m *Model) closeSyncDebugModal(status string) {
 	if strings.TrimSpace(status) != "" {
 		m.status = status
 	}
+}
+
+func (m *Model) unlinkCurrentNoteLocally() tea.Cmd {
+	details, ok := m.currentSyncDebugDetails()
+	if !ok || details.IssueKind != issueKindRemoteMissing {
+		m.status = "unlink is only available for notes whose remote copy is missing"
+		return nil
+	}
+	note := m.currentLocalNote()
+	if note == nil {
+		return nil
+	}
+	m.closeSyncDebugModal("")
+	m.status = "unlinking note..."
+	return unlinkNoteLocallyCmd(m.rootDir, note.Path)
+}
+
+func (m *Model) openSyncTimeline() tea.Cmd {
+	m.showSyncTimeline = true
+	m.syncTimelineOffset = 0
+	m.status = "sync timeline"
+	if len(m.syncTimelineEvents) == 0 {
+		return loadSyncEventsCmd(m.rootDir)
+	}
+	return nil
+}
+
+func (m *Model) closeSyncTimeline() {
+	m.showSyncTimeline = false
 }
 
 func (m *Model) copyCurrentSyncDebugRawError() {
@@ -285,8 +375,8 @@ func renderSyncDebugMetadata(details *syncDebugDetails) string {
 		lines = append(lines, "- Remote ID: `"+details.NoteID+"`")
 	}
 	lines = append(lines,
-		"- Last attempt: `"+formatSyncTimestamp(details.LastSyncAttemptAt)+"`",
-		"- Last success: `"+formatSyncTimestamp(details.LastSyncAt)+"`",
+		"- Last attempt: "+formatRelativeTime(details.LastSyncAttemptAt)+" (`"+formatSyncTimestamp(details.LastSyncAttemptAt)+"`) ",
+		"- Last success: "+formatRelativeTime(details.LastSyncAt)+" (`"+formatSyncTimestamp(details.LastSyncAt)+"`)",
 	)
 	return strings.Join(lines, "\n")
 }
@@ -342,6 +432,12 @@ func (m Model) renderGenericSyncDebugModal(details *syncDebugDetails) string {
 		bodyLines = append(bodyLines, "", "### Technical detail", "", details.RawError)
 	}
 	body := lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Foreground(textColor).Render(strings.Join(bodyLines, "\n"))
+	footerParts := []string{"y copy detail"}
+	footerParts = append(footerParts, "r retry sync")
+	if details.IssueKind == issueKindRemoteMissing {
+		footerParts = append(footerParts, "u unlink (keep local)")
+	}
+	footerParts = append(footerParts, "Esc close")
 	content := lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
@@ -354,7 +450,7 @@ func (m Model) renderGenericSyncDebugModal(details *syncDebugDetails) string {
 				m.renderModalBlank(innerWidth),
 				body,
 				m.renderModalBlank(innerWidth),
-				m.renderModalFooter("y copy detail • Esc close", innerWidth),
+				m.renderModalFooter(strings.Join(footerParts, " • "), innerWidth),
 			),
 		)
 	return modalCardStyle(modalWidth).Render(content)

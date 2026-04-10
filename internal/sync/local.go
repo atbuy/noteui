@@ -244,6 +244,41 @@ func MigratePinsFromState(root string, currentNotes []notes.Note, pinnedNotes []
 	return SavePinsFromRelPaths(root, currentNotes, pinnedNotes, pinnedCats)
 }
 
+// UnlinkNoteLocally removes the local sync record and resets the note's sync
+// class to "local" without making any remote SSH call. Use this when the
+// remote copy is already gone (e.g. "note missing on remote" error) and you
+// want to keep the local file as an unsynced note.
+func UnlinkNoteLocally(root, notePath string) error {
+	relPath, err := filepath.Rel(root, notePath)
+	if err != nil {
+		return err
+	}
+	relPath = filepath.ToSlash(strings.TrimSpace(relPath))
+	records, err := LoadNoteRecords(root)
+	if err != nil {
+		return err
+	}
+	var noteID string
+	for _, rec := range records {
+		if filepath.ToSlash(strings.TrimSpace(rec.RelPath)) == relPath {
+			noteID = rec.ID
+			break
+		}
+	}
+	if err := notes.SetNoteSyncClass(notePath, notes.SyncClassLocal); err != nil {
+		return err
+	}
+	if noteID != "" {
+		if err := DeleteNoteRecord(root, noteID); err != nil {
+			return err
+		}
+		if err := RemovePinnedNoteID(root, noteID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func HashContent(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return "sha256:" + hex.EncodeToString(sum[:])

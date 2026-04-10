@@ -154,6 +154,7 @@ type KeysConfig struct {
 	SelectSyncProfile        []string `toml:"select_sync_profile"`
 	OpenConflictCopy         []string `toml:"open_conflict_copy"`
 	ShowSyncDebug            []string `toml:"show_sync_debug"`
+	ShowSyncTimeline         []string `toml:"show_sync_timeline"`
 	DeleteRemoteKeepLocal    []string `toml:"delete_remote_keep_local"`
 	SyncImportCurrent        []string `toml:"sync_import_current"`
 	SyncImport               []string `toml:"sync_import"`

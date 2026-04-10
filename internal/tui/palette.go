@@ -64,6 +64,7 @@ const (
 	cmdImportCurrent         = "import_current"
 	cmdImportAll             = "import_all"
 	cmdSyncNow               = "sync_now"
+	cmdShowSyncTimeline      = "show_sync_timeline"
 	cmdToggleEncryption      = "toggle_encryption"
 	cmdToggleTodo            = "toggle_todo"
 	cmdAddTodo               = "add_todo"
@@ -252,6 +253,8 @@ func paletteCommands(m Model) []paletteCommand {
 		paletteCommand{name: "Import All Remote Notes", desc: "Import all remote-only synced notes", category: "sync", action: cmdImportAll})
 	cmds = appendPaletteCommand(cmds, notesync.HasSyncProfile(m.cfg.Sync),
 		paletteCommand{name: "Sync Now", desc: "Run sync immediately", category: "sync", action: cmdSyncNow})
+	cmds = appendPaletteCommand(cmds, notesync.HasSyncProfile(m.cfg.Sync),
+		paletteCommand{name: "View Sync Timeline", desc: "Show history of sync runs for this workspace", category: "sync", action: cmdShowSyncTimeline})
 	cmds = appendPaletteCommand(cmds, m.canToggleEncryptionCurrent(),
 		paletteCommand{name: "Toggle Note Encryption", desc: "Encrypt or decrypt the selected note", category: "notes", action: cmdToggleEncryption})
 	cmds = appendPaletteCommand(cmds, m.canAddTodoItem(),
@@ -1230,6 +1233,8 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 		return m.importAllRemoteNotes()
 	case cmdSyncNow:
 		return m.startImmediateSync()
+	case cmdShowSyncTimeline:
+		return m.openSyncTimeline()
 	case cmdToggleEncryption:
 		m.armToggleEncryption()
 		return nil

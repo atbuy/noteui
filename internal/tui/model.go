@@ -342,6 +342,9 @@ type Model struct {
 	showWorkspacePicker        bool
 	showSyncProfilePicker      bool
 	showSyncDebugModal         bool
+	showSyncTimeline           bool
+	syncTimelineOffset         int
+	syncTimelineEvents         []notesync.SyncEvent
 	conflictResolutionChoice   int
 	syncProfileNames           []string
 	syncProfileCursor          int
@@ -1072,6 +1075,18 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, syncSpinnerCmd()
 
+	case syncEventsLoadedMsg:
+		m.syncTimelineEvents = msg.events
+		return m, nil
+
+	case syncUnlinkLocalMsg:
+		if msg.err != nil {
+			m.status = "unlink failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.status = "note unlinked (kept local)"
+		return m, refreshAllCmd(m.rootDir, m.sessionToken)
+
 	case syncFinishedMsg:
 		if msg.sessionToken != m.sessionToken {
 			return m, nil
@@ -1082,7 +1097,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			if notesync.HasSyncProfile(m.cfg.Sync) {
 				m.status = "sync failed: " + msg.err.Error()
 			}
-			return m, nil
+			return m, loadSyncEventsCmd(m.rootDir)
 		}
 		placeholdersChanged := m.setRemoteOnlyNotes(msg.result.RemoteOnlyNotes)
 		if msg.result.PinnedNoteRelPaths != nil || msg.result.PinnedCategories != nil {
@@ -1090,23 +1105,23 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		if msg.result.NotesChanged {
 			m.deferredStatus = "sync updated local notes"
-			return m, refreshAllCmd(m.rootDir, m.sessionToken)
+			return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), loadSyncEventsCmd(m.rootDir))
 		}
 		if msg.result.PinsChanged {
 			m.status = "sync updated pins"
-			return m, nil
+			return m, loadSyncEventsCmd(m.rootDir)
 		}
 		if msg.result.RegisteredNotes > 0 || msg.result.UpdatedNotes > 0 || msg.result.Conflicts > 0 {
 			m.status = fmt.Sprintf("sync complete: %d registered, %d updated, %d conflicts", msg.result.RegisteredNotes, msg.result.UpdatedNotes, msg.result.Conflicts)
 			if placeholdersChanged {
 				m.rebuildTree()
 			}
-			return m, nil
+			return m, loadSyncEventsCmd(m.rootDir)
 		}
 		if placeholdersChanged {
 			m.rebuildTree()
 		}
-		return m, nil
+		return m, loadSyncEventsCmd(m.rootDir)
 
 	case syncProfileSavedMsg:
 		if msg.err != nil {
@@ -2094,6 +2109,25 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.showSyncTimeline {
+			switch {
+			case msg.String() == "esc", msg.String() == "q":
+				m.closeSyncTimeline()
+				return m, nil
+			case key.Matches(msg, keys.MoveUp):
+				if m.syncTimelineOffset > 0 {
+					m.syncTimelineOffset--
+				}
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				if m.syncTimelineOffset < len(m.syncTimelineEvents)-1 {
+					m.syncTimelineOffset++
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
 		if m.showSyncDebugModal {
 			switch {
 			case msg.String() == "esc":
@@ -2110,6 +2144,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case msg.String() == "y":
 				m.copyCurrentSyncDebugRawError()
 				return m, nil
+			case !m.hasConflictCopyForCurrentSelection() && msg.String() == "r":
+				m.closeSyncDebugModal("")
+				return m, m.startSyncRun()
+			case !m.hasConflictCopyForCurrentSelection() && msg.String() == "u":
+				return m, m.unlinkCurrentNoteLocally()
 			}
 			return m, nil
 		}
@@ -3049,6 +3088,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if key.Matches(msg, keys.ShowSyncDebug) {
 			m.openCurrentSyncDebugModal()
 			return m, nil
+		}
+
+		if key.Matches(msg, keys.ShowSyncTimeline) {
+			return m, m.openSyncTimeline()
 		}
 
 		if key.Matches(msg, keys.DeleteRemoteKeepLocal) {

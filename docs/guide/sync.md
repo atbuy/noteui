@@ -98,10 +98,9 @@ A sync conflict means noteui kept your local note unchanged and wrote the remote
 Use this workflow:
 
 1. Select the conflicted synced note.
-2. Press `O` to open the generated conflict copy in your editor.
-3. Open the original local note as well.
-4. Merge the content you want to keep into the original local note.
-5. Save the original local note and sync again.
+2. Press `ctrl+e` to open the sync details modal, which shows both copies side-by-side and displays when the conflict occurred.
+3. Use `h`/`l` or left/right to choose which version to keep, then press `Enter` to apply.
+4. Alternatively, press `O` to open the conflict copy in your editor for manual merging.
 
 Important details:
 
@@ -111,6 +110,30 @@ Important details:
 - the conflict copy is left on disk intentionally as a safety file
 
 If you prefer to inspect the file directly, the conflict copy is written beside the original note with a timestamped name such as `note.conflict-YYYYMMDD-HHMMSS.md`.
+
+## Diagnosing unhealthy sync states
+
+When a synced note turns red, press `ctrl+e` to open the sync details modal. It shows:
+
+- a plain-English description of the issue
+- how long ago the note was last successfully synced
+- for conflicts: how long ago the conflict occurred
+- a suggested next step
+
+From the sync details modal you can also take recovery actions directly:
+
+- press `r` to retry the sync without closing the modal first
+- press `u` (only for "Remote copy missing") to unlink the note locally — this removes the sync record and resets the note to `sync: local` without making a network call
+
+## Viewing sync history
+
+Press `ctrl+l` to open the sync timeline, which shows a scrollable history of recent sync runs for the current workspace. Each entry displays:
+
+- a status icon: `✓` for success, `⚡` for a run that completed with conflicts, `✗` for a run that failed
+- the timestamp and sync profile used
+- a summary of what changed (notes registered, updated, conflicts) or the error message
+
+The timeline is also available from the command palette as **View Sync Timeline**. Sync history is persisted in `.noteui-sync/sync-events.jsonl` and kept up to the last 200 runs.
 
 ## Remote-only notes and import flows
 
@@ -181,5 +204,6 @@ For the encryption workflow itself, see [Encrypted notes](../advanced/encryption
 - If the remote command fails, verify `remote_bin` points to a real `noteui-sync` path on the remote host.
 - If SSH works manually but sync still fails, confirm the remote user can write to `remote_root`.
 - If notes appear as remote-only placeholders, import them with `i` or `I`.
+- If a note shows "Remote copy missing", press `ctrl+e` and then `u` to unlink it locally, or sync again to recreate the remote copy.
 
 For more debugging steps, see [Troubleshooting](../reference/troubleshooting.md).

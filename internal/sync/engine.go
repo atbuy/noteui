@@ -23,6 +23,7 @@ func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.S
 	if !HasSyncProfile(cfg) {
 		return result, nil
 	}
+	startTime := time.Now()
 	if client == nil {
 		client = SSHClient{}
 	}
@@ -280,7 +281,29 @@ func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.S
 		return result, err
 	}
 	result.RemoteOnlyNotes, err = remoteOnlyNotesForRoot(root, remoteIndex.Notes, records)
+	_ = appendSyncResultEvent(root, profileName, startTime, result, err)
 	return result, err
+}
+
+func appendSyncResultEvent(root, profileName string, startTime time.Time, result SyncResult, syncErr error) error {
+	event := SyncEvent{
+		Timestamp:       time.Now().UTC(),
+		ProfileName:     profileName,
+		RegisteredNotes: result.RegisteredNotes,
+		UpdatedNotes:    result.UpdatedNotes,
+		Conflicts:       result.Conflicts,
+		DurationMs:      time.Since(startTime).Milliseconds(),
+	}
+	switch {
+	case syncErr != nil:
+		event.Type = SyncEventError
+		event.ErrorMsg = syncErr.Error()
+	case result.Conflicts > 0:
+		event.Type = SyncEventConflict
+	default:
+		event.Type = SyncEventSuccess
+	}
+	return AppendSyncEvent(root, event)
 }
 
 func applyRemoteNote(ctx context.Context, client Client, profile config.SyncProfile, root string, rec NoteRecord, meta RemoteNoteMeta, result *SyncResult) error {

@@ -42,6 +42,7 @@ type keyMap struct {
 	SelectSyncProfile        key.Binding
 	OpenConflictCopy         key.Binding
 	ShowSyncDebug            key.Binding
+	ShowSyncTimeline         key.Binding
 	DeleteRemoteKeepLocal    key.Binding
 	SyncImportCurrent        key.Binding
 	SyncImport               key.Binding
@@ -210,6 +211,10 @@ var keys = keyMap{
 	ShowSyncDebug: key.NewBinding(
 		key.WithKeys("ctrl+e"),
 		key.WithHelp("ctrl+e", "Sync details"),
+	),
+	ShowSyncTimeline: key.NewBinding(
+		key.WithKeys("ctrl+l"),
+		key.WithHelp("ctrl+l", "Sync timeline"),
 	),
 	DeleteRemoteKeepLocal: key.NewBinding(
 		key.WithKeys("U"),
@@ -381,6 +386,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.SelectSyncProfile, cfg.SelectSyncProfile)
 	apply(&keys.OpenConflictCopy, cfg.OpenConflictCopy)
 	apply(&keys.ShowSyncDebug, cfg.ShowSyncDebug)
+	apply(&keys.ShowSyncTimeline, cfg.ShowSyncTimeline)
 	apply(&keys.DeleteRemoteKeepLocal, cfg.DeleteRemoteKeepLocal)
 	apply(&keys.SyncImportCurrent, cfg.SyncImportCurrent)
 	apply(&keys.SyncImport, cfg.SyncImport)
@@ -458,6 +464,7 @@ func ValidateKeyCollisions() []string {
 		{"select_sync_profile", &keys.SelectSyncProfile},
 		{"open_conflict_copy", &keys.OpenConflictCopy},
 		{"show_sync_debug", &keys.ShowSyncDebug},
+		{"show_sync_timeline", &keys.ShowSyncTimeline},
 		{"delete_remote_keep_local", &keys.DeleteRemoteKeepLocal},
 		{"sync_import_current", &keys.SyncImportCurrent},
 		{"sync_import", &keys.SyncImport},
