@@ -33,6 +33,7 @@ nav = [
 
 [project.theme]
 variant = "modern"
+logo = "assets/logo_simple.svg"
 features = [
   "content.code.copy",
   "content.tabs.link",

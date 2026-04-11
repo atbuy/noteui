@@ -1,3 +1,8 @@
+
+<div style="width: 100%; display: flex; justify-content: center;">
+    <img src="assets/logo_full.svg" alt="noteui logo" width="460" />
+</div>
+
 # noteui
 
 `noteui` is a terminal notes application for people who want the speed of a TUI while keeping their notes as normal files and directories.

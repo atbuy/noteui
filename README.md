@@ -2,6 +2,8 @@
 [![codecov](https://codecov.io/gh/atbuy/noteui/branch/main/graph/badge.svg)](https://codecov.io/gh/atbuy/noteui)
 [![Documentation](https://img.shields.io/badge/docs-online-blue)](https://atbuy.github.io/noteui/)
 
+<img src="docs/assets/logo_full.svg" alt="noteui logo" width="380" />
+
 # noteui
 
 `noteui` is a terminal note-taking application for browsing, searching, previewing, and organizing plain-text notes stored as regular files.
