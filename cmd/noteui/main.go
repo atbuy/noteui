@@ -18,6 +18,9 @@ func main() {
 	demoMode := false
 	for _, arg := range os.Args[1:] {
 		switch arg {
+		case "--help", "-h":
+			printHelp(os.Stdout)
+			return
 		case "--version", "-version", "-v":
 			fmt.Println(buildinfo.Version)
 			return
