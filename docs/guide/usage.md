@@ -33,6 +33,37 @@ Use demo mode when you want to:
 - reproduce a layout or rendering bug against a known set of fixtures
 - run the TUI in CI to verify that it starts up and renders a frame
 
+## Quick capture
+
+Run `noteui --capture "text"` (or `-w` for short) to append a timestamped
+entry to `inbox.md` in the active notes root without opening the TUI:
+
+```
+noteui --capture "follow up with Alice about the proposal"
+noteui -w "follow up with Alice about the proposal"
+```
+
+If you omit the text argument, noteui reads from stdin instead:
+
+```
+echo "remember to update the config" | noteui --capture
+git log --oneline -5 | noteui --capture
+```
+
+The active notes root follows the same resolution order as normal startup:
+`NOTES_ROOT` environment variable, then `default_workspace` in config, then
+the first configured workspace, then `~/notes`.
+
+The capture note (`inbox.md`) is created automatically if it does not exist.
+Each entry is prefixed with a timestamp:
+
+```
+- [2026-04-11 19:30] follow up with Alice about the proposal
+```
+
+This is designed for shell aliases and scripts where opening the full TUI
+would be disruptive.
+
 ## Workspace profiles
 
 If you configure multiple workspaces in `config.toml`, noteui can switch between them from the command palette or directly with `W`.

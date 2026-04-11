@@ -403,6 +403,35 @@ func IsNoteFile(path string) bool {
 	}
 }
 
+// AppendCapture appends a timestamped bullet entry to the note at relPath
+// inside root. If the file does not exist it is created with a heading derived
+// from the filename. The write is atomic so the file is never left partially
+// written.
+func AppendCapture(root, relPath, text string) error {
+	path := filepath.Join(root, relPath)
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	var raw string
+	existing, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		title := strings.TrimSuffix(filepath.Base(relPath), filepath.Ext(relPath))
+		raw = "# " + title + "\n"
+	} else if err != nil {
+		return err
+	} else {
+		raw = string(existing)
+	}
+
+	if !strings.HasSuffix(raw, "\n") {
+		raw += "\n"
+	}
+	raw += "- [" + time.Now().Format("2006-01-02 15:04") + "] " + text + "\n"
+	return atomicWriteFile(path, []byte(raw), 0o644)
+}
+
 // atomicWriteFile writes data to path by first writing to a sibling temp file
 // in the same directory and then renaming it into place. This ensures the
 // target is never left in a partially-written state if the process is

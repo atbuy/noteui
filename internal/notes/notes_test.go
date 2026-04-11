@@ -547,3 +547,49 @@ func TestMoveNoteBetweenRootsMovesAcrossRoots(t *testing.T) {
 	_, err = os.Stat(filepath.Join(dstRoot, "tmp", "draft.md"))
 	require.NoError(t, err)
 }
+
+func TestAppendCapture(t *testing.T) {
+	dir := t.TempDir()
+
+	if err := AppendCapture(dir, "inbox.md", "first entry"); err != nil {
+		t.Fatalf("unexpected error on create: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "inbox.md"))
+	require.NoError(t, err)
+	raw := string(content)
+	if !strings.Contains(raw, "# inbox") {
+		t.Errorf("expected heading, got %q", raw)
+	}
+	if !strings.Contains(raw, "first entry") {
+		t.Errorf("expected captured text, got %q", raw)
+	}
+	if !strings.Contains(raw, "- [") {
+		t.Errorf("expected timestamped bullet, got %q", raw)
+	}
+
+	if err := AppendCapture(dir, "inbox.md", "second entry"); err != nil {
+		t.Fatalf("unexpected error on append: %v", err)
+	}
+	content, err = os.ReadFile(filepath.Join(dir, "inbox.md"))
+	require.NoError(t, err)
+	raw = string(content)
+	if !strings.Contains(raw, "first entry") || !strings.Contains(raw, "second entry") {
+		t.Errorf("expected both entries, got %q", raw)
+	}
+}
+
+func TestAppendCaptureNoTrailingNewline(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "notes.md")
+	require.NoError(t, os.WriteFile(path, []byte("existing content"), 0o644))
+
+	require.NoError(t, AppendCapture(dir, "notes.md", "appended"))
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	if !strings.Contains(string(raw), "existing content") {
+		t.Error("original content was lost")
+	}
+	if !strings.Contains(string(raw), "appended") {
+		t.Error("appended content not found")
+	}
+}

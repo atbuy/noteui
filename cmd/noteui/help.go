@@ -32,6 +32,7 @@ var helpFlags = []flagDef{
 	{"-h, --help", "Show this help message"},
 	{"-v, --version", "Print version and exit"},
 	{"    --demo", "Launch in demo mode with sample notes"},
+	{"-w, --capture", "Append text to inbox.md without opening the TUI"},
 }
 
 var helpEnvs = []envDef{
@@ -71,6 +72,7 @@ func printHelp(w io.Writer) {
 	p("  %s  %s\n", green.Render(fmt.Sprintf("%-26s", "noteui")), muted.Render("Start noteui"))
 	p("  %s  %s\n", green.Render(fmt.Sprintf("%-26s", "noteui --demo")), muted.Render("Try noteui with sample notes"))
 	p("  %s  %s\n", green.Render(fmt.Sprintf("%-26s", "NOTES_ROOT=~/work noteui")), muted.Render("Use a custom notes directory"))
+	p("  %s  %s\n", green.Render(fmt.Sprintf("%-26s", `noteui --capture "buy milk"`)), muted.Render("Append a quick note to inbox.md"))
 	p("\n")
 
 	_, _ = io.WriteString(w, sb.String())

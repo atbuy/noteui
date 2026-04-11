@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,22 +12,65 @@ import (
 	"atbuy/noteui/internal/buildinfo"
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/demo"
+	"atbuy/noteui/internal/notes"
 	"atbuy/noteui/internal/tui"
 )
 
 func main() {
+	args := os.Args[1:]
+	captureMode := false
+	captureText := ""
 	demoMode := false
-	for _, arg := range os.Args[1:] {
-		switch arg {
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
 		case "--help", "-h":
 			printHelp(os.Stdout)
 			return
 		case "--version", "-version", "-v":
 			fmt.Println(buildinfo.Version)
 			return
+		case "--capture", "-w":
+			captureMode = true
+			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+				captureText = args[i+1]
+				i++
+			}
 		case "--demo":
 			demoMode = true
 		}
+	}
+
+	if captureMode {
+		if captureText == "" {
+			stat, _ := os.Stdin.Stat()
+			if stat.Mode()&os.ModeCharDevice != 0 {
+				fmt.Fprintln(os.Stderr, "error: provide text as argument or pipe via stdin")
+				os.Exit(1)
+			}
+			b, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error reading stdin: %v\n", err)
+				os.Exit(1)
+			}
+			captureText = strings.TrimRight(string(b), "\n")
+		}
+		if strings.TrimSpace(captureText) == "" {
+			fmt.Fprintln(os.Stderr, "error: capture text is empty")
+			os.Exit(1)
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		cfg, _ := config.Load()
+		startup := config.ResolveStartupWorkspace(cfg, os.Getenv("NOTES_ROOT"), filepath.Join(home, "notes"))
+		if err := notes.AppendCapture(startup.Root, "inbox.md", captureText); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	home, err := os.UserHomeDir()
