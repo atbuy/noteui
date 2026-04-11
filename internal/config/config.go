@@ -429,6 +429,8 @@ func ValidThemeNames() []string {
 		"github-light",
 		"github-dark",
 		"carbonfox",
+		"crimson",
+		"dusk",
 	}
 }
 

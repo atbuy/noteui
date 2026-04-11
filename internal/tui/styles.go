@@ -403,8 +403,8 @@ func builtinTheme(name string) themePalette {
 
 	case "onedark":
 		return themePalette{
-			BgColor:           "#1E2127",
-			PanelBgColor:      "#282C34",
+			BgColor:           "#282C34",
+			PanelBgColor:      "#21252B",
 			BorderColor:       "#3A404C",
 			FocusBorderColor:  "#61AFEF",
 			AccentColor:       "#61AFEF",
@@ -413,11 +413,12 @@ func builtinTheme(name string) themePalette {
 			MutedColor:        "#828997",
 			SubtleColor:       "#3A404C",
 			ChipBgColor:       "#2C313A",
-			InlineCodeBgColor: "#1B1F26",
+			InlineCodeBgColor: "#21252B",
 			MarkedItemColor:   "#E5C07B",
 			ErrorColor:        "#E06C75",
 			SuccessColor:      "#98C379",
-			SelectedBgColor:   "#353B45",
+			SyncedNoteColor:   "#56B6C2",
+			SelectedBgColor:   "#2C3A50",
 			SelectedFgColor:   "#E6EAF2",
 			HighlightBgColor:  "#2B4A63",
 		}
@@ -562,14 +563,54 @@ func builtinTheme(name string) themePalette {
 			HighlightBgColor: "#1E3A5C",
 		}
 
+	case "crimson":
+		return themePalette{
+			BgColor:          "#1C1212",
+			PanelBgColor:     "#251818",
+			BorderColor:      "#4A2828",
+			FocusBorderColor: "#D05050",
+			AccentColor:      "#D05050",
+			AccentSoftColor:  "#C07060",
+			TextColor:        "#F0E4E4",
+			MutedColor:       "#B09090",
+			SubtleColor:      "#3A2424",
+			ChipBgColor:      "#301E1E",
+			MarkedItemColor:  "#D4A850",
+			ErrorColor:       "#FF6060",
+			SuccessColor:     "#6AAF6A",
+			SelectedBgColor:  "#5A2A2A",
+			SelectedFgColor:  "#F0E4E4",
+			HighlightBgColor: "#4A1E1E",
+		}
+
+	case "dusk":
+		return themePalette{
+			BgColor:          "#13101A",
+			PanelBgColor:     "#1C1528",
+			BorderColor:      "#352848",
+			FocusBorderColor: "#9B6DFF",
+			AccentColor:      "#9B6DFF",
+			AccentSoftColor:  "#B57EF0",
+			TextColor:        "#E4DDF5",
+			MutedColor:       "#9A8AAF",
+			SubtleColor:      "#2C2040",
+			ChipBgColor:      "#231840",
+			MarkedItemColor:  "#D4AF50",
+			ErrorColor:       "#E05575",
+			SuccessColor:     "#6AAF6A",
+			SelectedBgColor:  "#4A2880",
+			SelectedFgColor:  "#E4DDF5",
+			HighlightBgColor: "#3A1F60",
+		}
+
 	default:
 		return themePalette{
 			BgColor:          "#1E1E1E",
 			PanelBgColor:     "#2A2A2A",
 			BorderColor:      "#5F5F5F",
-			FocusBorderColor: "#5F87D7",
-			AccentColor:      "#5F87D7",
-			AccentSoftColor:  "#87AFDF",
+			FocusBorderColor: "#8866CC",
+			AccentColor:      "#8866CC",
+			AccentSoftColor:  "#9E7CC0",
 			TextColor:        "#E5E5E5",
 			MutedColor:       "#A8A8A8",
 			SubtleColor:      "#444444",
@@ -577,9 +618,9 @@ func builtinTheme(name string) themePalette {
 			MarkedItemColor:  "#D7AF5F",
 			ErrorColor:       "#D75F5F",
 			SuccessColor:     "#87AF87",
-			SelectedBgColor:  "#3F5F9F",
+			SelectedBgColor:  "#3D2272",
 			SelectedFgColor:  "#FFFFFF",
-			HighlightBgColor: "#3A3A6A",
+			HighlightBgColor: "#2D1850",
 		}
 	}
 }

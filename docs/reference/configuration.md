@@ -224,6 +224,8 @@ Valid built-in theme names:
 - `github-light`
 - `github-dark`
 - `carbonfox`
+- `crimson`
+- `dusk`
 
 ### Theme color overrides
 

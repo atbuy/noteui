@@ -222,12 +222,29 @@ func TestBulletListItemHasNoExtraSpaceBetweenMarkerAndText(t *testing.T) {
 	require.NotContains(t, plain, "•  ")
 }
 
+func TestNewThemesLoadWithoutPanic(t *testing.T) {
+	for _, name := range []string{"crimson", "dusk"} {
+		cfg := config.Default()
+		cfg.Theme.Name = name
+		ApplyTheme(cfg)
+		if string(accentColor) == "" {
+			require.Failf(t, "assertion failed", "theme %q produced empty accent color", name)
+		}
+	}
+}
+
 func TestThemeAndColorHelpers(t *testing.T) {
 	if got := normalizeThemeName(" mocha "); got != "catppuccin" {
 		require.Failf(t, "assertion failed", "expected mocha alias to normalize to catppuccin, got %q", got)
 	}
 	if got := normalizeThemeName("Catppuccin-Latte"); got != "latte" {
 		require.Failf(t, "assertion failed", "expected latte alias to normalize to latte, got %q", got)
+	}
+	if got := normalizeThemeName("crimson"); got != "crimson" {
+		require.Failf(t, "assertion failed", "expected 'crimson' to pass through unchanged, got %q", got)
+	}
+	if got := normalizeThemeName("dusk"); got != "dusk" {
+		require.Failf(t, "assertion failed", "expected 'dusk' to pass through unchanged, got %q", got)
 	}
 
 	if _, ok := parseHexColor("#AABBCC"); !ok {
