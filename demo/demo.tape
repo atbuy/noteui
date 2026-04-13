@@ -52,14 +52,17 @@ Sleep 2s
 
 # Next note: project-alpha.md. Preview re-renders.
 Down
-Sleep 2200ms
+Sleep 900ms
 
 # Root-level notes follow the expanded work/ children.
 Down
-Sleep 1800ms
+Sleep 800ms
 
 Down
-Sleep 1800ms
+Sleep 800ms
+
+Down
+Sleep 1500ms
 
 # Switch focus to the preview pane with Tab. In preview focus, j/k and
 # the arrow keys scroll the preview instead of moving the tree cursor.
@@ -83,21 +86,44 @@ Sleep 800ms
 # in real time.
 Type "/"
 Sleep 500ms
-Type "project"
+Type "that"
 Sleep 1800ms
 
 # First Escape exits the search input but keeps the filter applied.
 Escape
 Sleep 1200ms
 
+# Go to first note
+Down
+Sleep 300ms
+Down
+Sleep 300ms
+
+# Go to preview and check view matches
+Tab
+Sleep 400ms
+Type "n"
+Sleep 1000ms
+Type "n"
+Sleep 1200ms
+Type "n"
+Sleep 1200ms
+Type "n"
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Tab
+
 # Second Escape clears the filter and restores the full tree.
 Escape
-Sleep 1200ms
+Sleep 500ms
+Escape
+Sleep 200ms
 
 # Toggle into the temporary notes view with "t". The .tmp/scratch.md
 # fixture appears in its dedicated pane.
 Type "t"
-Sleep 2s
+Sleep 1500ms
 
 # Toggle back to the main notes tree.
 Type "t"
@@ -106,7 +132,10 @@ Sleep 900ms
 # Open the help modal with "?". This overlays the full keybinding
 # reference organised by action group.
 Type "?"
-Sleep 2500ms
+Sleep 2000ms
+
+Type "add"
+Sleep 2000ms
 
 # Escape closes the help modal.
 Escape
