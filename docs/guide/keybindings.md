@@ -24,6 +24,7 @@ This page documents the default keybindings that most users care about first.
 ## Create and organize
 
 - `n`: new note (shows a template picker if `.templates/` contains any template files; press `e` on a template entry to edit it)
+- `D`: open or create today's daily note (defaults to `daily/YYYY-MM-DD.md`; see `[daily_notes]` in the configuration reference)
 - `ctrl+n`: new template in `.templates/`
 - `ctrl+k`: edit templates (opens template picker in edit mode)
 - `N`: new temporary note

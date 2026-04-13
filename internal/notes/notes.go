@@ -168,6 +168,42 @@ func CreateNoteFromTemplate(root, relDir, templatePath string) (string, error) {
 	return path, nil
 }
 
+// OpenOrCreateDailyNote returns the path to today's daily note inside
+// filepath.Join(root, relDir). If the file does not yet exist it is created:
+// with the content of templatePath (after variable substitution) when a
+// template is provided, or with a default heading otherwise. The returned
+// created flag is true only when a new file was written.
+func OpenOrCreateDailyNote(root, relDir, templatePath string, now time.Time) (path string, created bool, err error) {
+	filename := now.Format("2006-01-02") + ".md"
+	dir := filepath.Join(root, relDir)
+	path = filepath.Join(dir, filename)
+
+	if _, statErr := os.Stat(path); statErr == nil {
+		return path, false, nil
+	}
+
+	if err = os.MkdirAll(dir, 0o755); err != nil {
+		return "", false, err
+	}
+
+	var content string
+	if templatePath != "" {
+		raw, readErr := os.ReadFile(templatePath)
+		if readErr != nil {
+			return "", false, readErr
+		}
+		content = ApplyTemplateVars(string(raw), now)
+	} else {
+		content = "# " + now.Format("2006-01-02") + "\n\n"
+	}
+
+	if err = os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", false, err
+	}
+
+	return path, true, nil
+}
+
 func DiscoverTemporary(root string) ([]Note, error) {
 	tempRoot := TempRoot(root)
 

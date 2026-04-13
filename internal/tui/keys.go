@@ -78,6 +78,7 @@ type keyMap struct {
 	NoteHistory      key.Binding
 	NewTemplate      key.Binding
 	EditTemplates    key.Binding
+	OpenDailyNote    key.Binding
 }
 
 var keys = keyMap{
@@ -346,6 +347,10 @@ var keys = keyMap{
 		key.WithKeys("ctrl+k"),
 		key.WithHelp("ctrl+k", "Edit templates"),
 	),
+	OpenDailyNote: key.NewBinding(
+		key.WithKeys("D"),
+		key.WithHelp("D", "Open today's note"),
+	),
 }
 
 // ApplyConfigKeys overwrites key bindings with user-provided overrides from config.
@@ -426,6 +431,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.NoteHistory, cfg.NoteHistory)
 	apply(&keys.NewTemplate, cfg.NewTemplate)
 	apply(&keys.EditTemplates, cfg.EditTemplates)
+	apply(&keys.OpenDailyNote, cfg.OpenDailyNote)
 }
 
 // ValidateKeyCollisions checks for duplicate key assignments among primary bindings
@@ -495,6 +501,7 @@ func ValidateKeyCollisions() []string {
 		{"note_history", &keys.NoteHistory},
 		{"new_template", &keys.NewTemplate},
 		{"edit_templates", &keys.EditTemplates},
+		{"open_daily_note", &keys.OpenDailyNote},
 	}
 
 	seen := make(map[string][]string) // key string -> action names

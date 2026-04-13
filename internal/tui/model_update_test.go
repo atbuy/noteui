@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/editor"
 	"atbuy/noteui/internal/notes"
 	"atbuy/noteui/internal/state"
 	notesync "atbuy/noteui/internal/sync"
@@ -1521,4 +1522,60 @@ func TestRestoreFinishedMsgError(t *testing.T) {
 	m = updateModel(m, restoreFinishedMsg{label: "note.md", err: errorf("rename failed")})
 	require.Nil(t, m.lastDeletion)
 	require.Contains(t, m.status, "restore failed:")
+}
+
+func TestOpenDailyNoteKeyCreatesNoteAndSetsFlag(t *testing.T) {
+	m := newTestModel(t)
+	root := m.rootDir
+
+	next, cmd := m.Update(keyMsg("D"))
+	m = next.(Model)
+
+	require.True(t, m.dailyNoteOpen, "expected dailyNoteOpen to be true after pressing D")
+	require.NotNil(t, cmd, "expected a command to be returned")
+	require.Contains(t, m.status, "created daily note")
+
+	today := time.Now().Format("2006-01-02")
+	expectedPath := filepath.Join(root, "daily", today+".md")
+	if _, err := os.Stat(expectedPath); err != nil {
+		t.Errorf("expected daily note to exist at %q: %v", expectedPath, err)
+	}
+}
+
+func TestOpenDailyNoteKeyOpensExistingNote(t *testing.T) {
+	m := newTestModel(t)
+	root := m.rootDir
+
+	today := time.Now().Format("2006-01-02")
+	dailyDir := filepath.Join(root, "daily")
+	require.NoError(t, os.MkdirAll(dailyDir, 0o755))
+	notePath := filepath.Join(dailyDir, today+".md")
+	require.NoError(t, os.WriteFile(notePath, []byte("# existing\n"), 0o644))
+
+	next, cmd := m.Update(keyMsg("D"))
+	m = next.(Model)
+
+	require.True(t, m.dailyNoteOpen, "expected dailyNoteOpen to be true")
+	require.NotNil(t, cmd)
+	require.Contains(t, m.status, "opening daily note")
+}
+
+func TestEditorFinishedMsgSkipsRenameForDailyNote(t *testing.T) {
+	m := newTestModel(t)
+	root := m.rootDir
+
+	today := time.Now().Format("2006-01-02")
+	notePath := filepath.Join(root, "daily", today+".md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte("# 2026-04-13\n\nbody"), 0o644))
+
+	m.dailyNoteOpen = true
+	m = updateModel(m, editor.FinishedMsg{Path: notePath})
+
+	require.False(t, m.dailyNoteOpen, "expected dailyNoteOpen to be reset after editor closes")
+	require.Equal(t, "editor closed", m.status)
+
+	if _, err := os.Stat(notePath); err != nil {
+		t.Errorf("expected daily note to still exist at original path: %v", err)
+	}
 }

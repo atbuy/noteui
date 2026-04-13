@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -900,6 +901,25 @@ func (m *Model) startNewNote() tea.Cmd {
 	}
 	m.openTemplatePicker(templates)
 	return nil
+}
+
+func (m *Model) openDailyNote() tea.Cmd {
+	templatePath := ""
+	if m.cfg.DailyNotes.Template != "" {
+		templatePath = filepath.Join(notes.TemplatesRoot(m.rootDir), m.cfg.DailyNotes.Template)
+	}
+	path, created, err := notes.OpenOrCreateDailyNote(m.rootDir, m.cfg.DailyNotes.Dir, templatePath, time.Now())
+	if err != nil {
+		m.status = "daily note error: " + err.Error()
+		return nil
+	}
+	m.dailyNoteOpen = true
+	if created {
+		m.status = "created daily note"
+		return batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), editor.Open(path))
+	}
+	m.status = "opening daily note"
+	return editor.Open(path)
 }
 
 func (m *Model) openTemplatePicker(templates []notes.Template) {

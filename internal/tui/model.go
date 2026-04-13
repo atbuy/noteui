@@ -392,6 +392,7 @@ type Model struct {
 	encryptConfirmYes    bool
 	pendingEncryptPath   string
 	pendingEncryptedEdit *encryptedEdit
+	dailyNoteOpen        bool
 
 	startupError string
 
@@ -1721,6 +1722,12 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			edit := m.pendingEncryptedEdit
 			m.pendingEncryptedEdit = nil
 			return m, reencryptFromTempCmd(edit.origPath, edit.tempPath, m.sessionPassphrase)
+		}
+
+		if m.dailyNoteOpen {
+			m.dailyNoteOpen = false
+			m.status = "editor closed"
+			return m, batchCmds(saveNoteVersionCmd(m.rootDir, msg.Path), refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 		}
 
 		newPath, renamed, err := notes.RenameFromTitle(msg.Path)
@@ -3164,6 +3171,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.NewNote) {
 			return m, m.startNewNote()
+		}
+
+		if key.Matches(msg, keys.OpenDailyNote) {
+			return m, m.openDailyNote()
 		}
 
 		if key.Matches(msg, keys.TogglePreviewPrivacy) {

@@ -24,6 +24,12 @@ type Config struct {
 	Preview          PreviewConfig              `toml:"preview"`
 	Keys             KeysConfig                 `toml:"keys"`
 	Sync             SyncConfig                 `toml:"sync"`
+	DailyNotes       DailyNotesConfig           `toml:"daily_notes"`
+}
+
+type DailyNotesConfig struct {
+	Dir      string `toml:"dir"`
+	Template string `toml:"template"`
 }
 
 type WorkspaceConfig struct {
@@ -189,6 +195,7 @@ type KeysConfig struct {
 	NoteHistory              []string `toml:"note_history"`
 	NewTemplate              []string `toml:"new_template"`
 	EditTemplates            []string `toml:"edit_templates"`
+	OpenDailyNote            []string `toml:"open_daily_note"`
 }
 
 func Default() Config {
@@ -236,6 +243,9 @@ func Default() Config {
 			SyncImportCurrent:     []string{"i"},
 			SyncImport:            []string{"I"},
 			NoteHistory:           []string{"H"},
+		},
+		DailyNotes: DailyNotesConfig{
+			Dir: "daily",
 		},
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -591,5 +592,102 @@ func TestAppendCaptureNoTrailingNewline(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), "appended") {
 		t.Error("appended content not found")
+	}
+}
+
+func TestOpenOrCreateDailyNoteCreatesWithDefaultHeading(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 4, 13, 9, 0, 0, 0, time.UTC)
+
+	path, created, err := OpenOrCreateDailyNote(root, "daily", "", now)
+	if err != nil {
+		require.Failf(t, "assertion failed", "OpenOrCreateDailyNote returned error: %v", err)
+	}
+	if !created {
+		require.FailNow(t, "expected created=true for new daily note")
+	}
+	expected := filepath.Join(root, "daily", "2026-04-13.md")
+	if path != expected {
+		require.Failf(t, "assertion failed", "expected path %q, got %q", expected, path)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		require.Failf(t, "assertion failed", "ReadFile returned error: %v", err)
+	}
+	if string(data) != "# 2026-04-13\n\n" {
+		require.Failf(t, "assertion failed", "unexpected default content: %q", string(data))
+	}
+}
+
+func TestOpenOrCreateDailyNoteExistingFileNotRecreated(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 4, 13, 9, 0, 0, 0, time.UTC)
+
+	path, created, err := OpenOrCreateDailyNote(root, "daily", "", now)
+	if err != nil || !created {
+		require.Failf(t, "assertion failed", "first call failed: err=%v created=%v", err, created)
+	}
+
+	// Write custom content so we can verify the file is not overwritten.
+	if err := os.WriteFile(path, []byte("existing content"), 0o644); err != nil {
+		require.Failf(t, "assertion failed", "WriteFile returned error: %v", err)
+	}
+
+	path2, created2, err := OpenOrCreateDailyNote(root, "daily", "", now)
+	if err != nil {
+		require.Failf(t, "assertion failed", "second call returned error: %v", err)
+	}
+	if created2 {
+		require.FailNow(t, "expected created=false when daily note already exists")
+	}
+	if path2 != path {
+		require.Failf(t, "assertion failed", "expected same path on second call, got %q", path2)
+	}
+
+	data, err := os.ReadFile(path2)
+	if err != nil {
+		require.Failf(t, "assertion failed", "ReadFile returned error: %v", err)
+	}
+	if string(data) != "existing content" {
+		require.Failf(t, "assertion failed", "expected existing content to be preserved, got %q", string(data))
+	}
+}
+
+func TestOpenOrCreateDailyNoteUsesTemplate(t *testing.T) {
+	root := t.TempDir()
+	now := time.Date(2026, 4, 13, 10, 30, 0, 0, time.UTC)
+
+	tmplDir := filepath.Join(root, TemplatesDirName)
+	require.NoError(t, os.MkdirAll(tmplDir, 0o755))
+	tmplPath := filepath.Join(tmplDir, "daily.md")
+	require.NoError(t, os.WriteFile(tmplPath, []byte("# Daily: {{date}}\n\nTime: {{time}}\n"), 0o644))
+
+	path, created, err := OpenOrCreateDailyNote(root, "journal", tmplPath, now)
+	if err != nil {
+		require.Failf(t, "assertion failed", "OpenOrCreateDailyNote returned error: %v", err)
+	}
+	if !created {
+		require.FailNow(t, "expected created=true for new daily note")
+	}
+
+	expected := filepath.Join(root, "journal", "2026-04-13.md")
+	if path != expected {
+		require.Failf(t, "assertion failed", "expected path %q, got %q", expected, path)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		require.Failf(t, "assertion failed", "ReadFile returned error: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "# Daily: 2026-04-13") {
+		require.Failf(t, "assertion failed", "expected substituted date in heading, got %q", content)
+	}
+	if !strings.Contains(content, "Time: 10:30") {
+		require.Failf(t, "assertion failed", "expected substituted time, got %q", content)
+	}
+	if strings.Contains(content, "{{") {
+		require.Failf(t, "assertion failed", "expected all template vars to be substituted, got %q", content)
 	}
 }

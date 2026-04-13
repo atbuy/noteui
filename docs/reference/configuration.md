@@ -124,6 +124,7 @@ sync_import = ["I"]
 - `preview`
 - `keys`
 - `sync`
+- `daily_notes`
 
 ## `dashboard`
 
@@ -633,6 +634,12 @@ note_history = ["H"]
   Default: `["ctrl+k"]`
   Opens the template picker in edit mode so you can select a template to edit.
 
+### Daily notes
+
+- `open_daily_note`
+  Default: `["D"]`
+  Opens today's daily note, creating it if it does not yet exist. See `[daily_notes]` for directory and template configuration.
+
 ### Todo and extra motions
 
 - `bracket_forward`
@@ -679,6 +686,36 @@ Sync-related key defaults:
 - `delete_remote_keep_local = ["U"]`
 - `sync_import_current = ["i"]`
 - `sync_import = ["I"]`
+
+## `[daily_notes]`
+
+Controls where daily notes are stored and which template is used when creating one.
+
+### `daily_notes.dir`
+
+Type: string
+
+Default: `"daily"`
+
+The subdirectory inside your notes root where daily notes are stored. The directory is created automatically on first use.
+
+### `daily_notes.template`
+
+Type: string
+
+Default: `""` (no template; a minimal heading is used instead)
+
+Path to a template file relative to `.templates/`. When set, pressing `D` creates the daily note by applying that template (with `{{date}}`, `{{time}}`, and `{{title}}` substitution). When empty, the note is created with a `# YYYY-MM-DD` heading.
+
+Example:
+
+```toml
+[daily_notes]
+dir = "journal"
+template = "daily.md"
+```
+
+With this config, pressing `D` opens or creates `journal/YYYY-MM-DD.md`, using `.templates/daily.md` as the template for new files.
 
 ## Reserved directories
 
