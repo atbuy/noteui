@@ -319,6 +319,8 @@ func (m *Model) syncSelectedTodoInPreview() bool {
 		return false
 	}
 	m.previewTodoNavMode = true
+	m.previewLinkNavMode = false
+	m.previewLinkCursor = -1
 	for i, todo := range m.previewTodos {
 		if todo.rawLine == selected.Todo.Line {
 			m.previewTodoCursor = i

@@ -204,6 +204,12 @@ type previewTodoItem struct {
 	text     string
 }
 
+type previewLinkItem struct {
+	rendLine   int
+	target     string
+	isWikilink bool
+}
+
 type treeItem struct {
 	Kind       treeItemKind
 	Name       string
@@ -376,6 +382,9 @@ type Model struct {
 	pendingTodoCursor  int
 	pendingT           bool
 	previewTodoNavMode bool
+	previewLinks       []previewLinkItem
+	previewLinkCursor  int
+	previewLinkNavMode bool
 	showTodoAdd        bool
 	showTodoEdit       bool
 	showTodoDueDate    bool
@@ -393,6 +402,7 @@ type Model struct {
 	pendingEncryptPath   string
 	pendingEncryptedEdit *encryptedEdit
 	dailyNoteOpen        bool
+	previewWikilinks     []string
 
 	startupError string
 
@@ -413,6 +423,10 @@ type Model struct {
 	noteHistoryCursor  int
 	noteHistoryRelPath string
 	noteHistoryAbsPath string
+
+	showTrashBrowser   bool
+	trashBrowserItems  []notes.TrashedItem
+	trashBrowserCursor int
 
 	showTemplatePicker     bool
 	templatePickerEditMode bool
@@ -661,6 +675,10 @@ func (m Model) activeWorkspaceSyncRemoteRoot() string {
 		return ""
 	}
 	return strings.TrimSpace(ws.SyncRemoteRoot)
+}
+
+func (m *Model) openTrashBrowser() tea.Cmd {
+	return loadTrashBrowserCmd(m.rootDir)
 }
 
 func (m *Model) openNoteHistory() tea.Cmd {
@@ -1038,7 +1056,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		highlighted := applyMatchHighlights(msg.baseContent, query, m.previewMatches, 0)
 		m.previewContent = highlighted
 		m.rebuildPreviewHeadingsFromRendered()
+		m.previewWikilinks = notes.ExtractWikilinks(msg.rawContent)
 		m.rebuildPreviewTodos(msg.rawContent, msg.baseContent, msg.todoLineOffset)
+		m.rebuildPreviewLinks()
 		if m.listMode == listModeTodos {
 			m.syncSelectedTodoInPreview()
 		} else if m.pendingTodoCursor >= 0 {
@@ -1052,6 +1072,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		if m.previewTodoNavMode {
 			m.reapplyTodoHighlight()
+		} else if m.previewLinkNavMode {
+			m.reapplyLinkHighlight()
 		} else {
 			m.setPreviewViewportContent(applyTodoDueDateHints(m.previewContent))
 		}
@@ -1091,6 +1113,14 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 	case syncEventsLoadedMsg:
 		m.syncTimelineEvents = msg.events
+		return m, nil
+
+	case openURLMsg:
+		if msg.err != nil {
+			m.status = "failed to open URL: " + msg.err.Error()
+		} else {
+			m.status = "opened: " + msg.url
+		}
 		return m, nil
 
 	case syncUnlinkLocalMsg:
@@ -1373,6 +1403,32 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.previewPath = ""
 		m.deferredStatus = "version restored"
 		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+
+	case trashBrowserLoadedMsg:
+		if msg.err != nil {
+			m.status = "trash load failed: " + msg.err.Error()
+			return m, nil
+		}
+		if len(msg.items) == 0 {
+			m.status = "trash is empty (no items from this workspace)"
+			return m, nil
+		}
+		m.trashBrowserItems = msg.items
+		m.trashBrowserCursor = 0
+		m.showTrashBrowser = true
+		m.status = "trash browser"
+		return m, nil
+
+	case trashRestoreMsg:
+		if msg.err != nil {
+			m.status = "restore failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showTrashBrowser = false
+		m.trashBrowserItems = nil
+		m.trashBrowserCursor = 0
+		m.status = "restored: " + filepath.Base(msg.item.OriginalPath)
+		return m, refreshAllCmd(m.rootDir, m.sessionToken)
 
 	case noteSyncClassToggledMsg:
 		if msg.err != nil {
@@ -1837,6 +1893,33 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case key.Matches(msg, keys.MoveDown):
 				if m.noteHistoryCursor < len(m.noteHistoryEntries)-1 {
 					m.noteHistoryCursor++
+				}
+				return m, nil
+			}
+			return m, nil
+		}
+
+		if m.showTrashBrowser {
+			switch {
+			case msg.String() == "esc":
+				m.showTrashBrowser = false
+				m.trashBrowserItems = nil
+				m.trashBrowserCursor = 0
+				m.status = "trash browser closed"
+				return m, nil
+			case msg.String() == "enter":
+				if len(m.trashBrowserItems) == 0 {
+					return m, nil
+				}
+				return m, restoreTrashItemCmd(m.trashBrowserItems[m.trashBrowserCursor])
+			case key.Matches(msg, keys.MoveUp):
+				if m.trashBrowserCursor > 0 {
+					m.trashBrowserCursor--
+				}
+				return m, nil
+			case key.Matches(msg, keys.MoveDown):
+				if m.trashBrowserCursor < len(m.trashBrowserItems)-1 {
+					m.trashBrowserCursor++
 				}
 				return m, nil
 			}
@@ -2736,6 +2819,14 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingT = false
 			}
 			switch {
+			case msg.String() == "esc" && m.previewLinkNavMode:
+				m.previewLinkNavMode = false
+				m.previewLinkCursor = -1
+				m.pendingBracketDir = ""
+				m.setPreviewViewportContent(applyTodoDueDateHints(m.previewContent))
+				m.status = "link nav off"
+				return m, nil
+
 			case msg.String() == "esc" && m.previewTodoNavMode:
 				m.previewTodoNavMode = false
 				m.previewTodoCursor = -1
@@ -2797,7 +2888,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.JumpBottom):
-				if m.previewTodoNavMode {
+				if m.previewLinkNavMode {
+					m.jumpToLastLink()
+				} else if m.previewTodoNavMode {
 					m.jumpToLastTodo()
 				} else {
 					m.preview.GotoBottom()
@@ -2810,7 +2903,9 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case key.Matches(msg, keys.PendingG):
 				m.moveBrowserError = ""
 				if m.pendingG {
-					if m.previewTodoNavMode {
+					if m.previewLinkNavMode {
+						m.jumpToFirstLink()
+					} else if m.previewTodoNavMode {
 						m.jumpToFirstTodo()
 					} else {
 						m.preview.GotoTop()
@@ -2824,6 +2919,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.BracketForward):
+				if m.previewLinkNavMode {
+					m.jumpToNextLink()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
 				if m.previewTodoNavMode {
 					m.jumpToNextTodo()
 					m.pendingBracketDir = ""
@@ -2834,6 +2934,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				return m, nil
 
 			case key.Matches(msg, keys.BracketBackward):
+				if m.previewLinkNavMode {
+					m.jumpToPrevLink()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
 				if m.previewTodoNavMode {
 					m.jumpToPrevTodo()
 					m.pendingBracketDir = ""
@@ -2858,6 +2963,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case key.Matches(msg, keys.TodoKey):
 				if m.pendingBracketDir == "]" {
 					m.previewTodoNavMode = true
+					m.previewLinkNavMode = false
+					m.previewLinkCursor = -1
 					m.jumpToNextTodo()
 					m.pendingBracketDir = ""
 					m.pendingT = false
@@ -2866,6 +2973,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				}
 				if m.pendingBracketDir == "[" {
 					m.previewTodoNavMode = true
+					m.previewLinkNavMode = false
+					m.previewLinkCursor = -1
 					m.jumpToPrevTodo()
 					m.pendingBracketDir = ""
 					m.pendingT = false
@@ -2910,6 +3019,42 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 				m.pendingT = false
 				m.armSetCurrentTodoPriority()
 				return m, nil
+
+			case key.Matches(msg, keys.LinkKey):
+				if m.pendingBracketDir == "]" {
+					m.previewLinkNavMode = true
+					m.previewTodoNavMode = false
+					m.previewTodoCursor = -1
+					m.jumpToNextLink()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
+				if m.pendingBracketDir == "[" {
+					m.previewLinkNavMode = true
+					m.previewTodoNavMode = false
+					m.previewTodoCursor = -1
+					m.jumpToPrevLink()
+					m.pendingBracketDir = ""
+					return m, nil
+				}
+				if m.previewLinkNavMode {
+					return m, m.followSelectedLink()
+				}
+				m.pendingBracketDir = ""
+				return m, nil
+
+			case key.Matches(msg, keys.FollowLink) && m.previewLinkNavMode:
+				return m, m.followSelectedLink()
+
+			case key.Matches(msg, keys.Open):
+				if m.previewLinkNavMode {
+					return m, m.followSelectedLink()
+				}
+				if !m.previewTodoNavMode {
+					if cmd := m.followWikilinkUnderCursor(); cmd != nil {
+						return m, cmd
+					}
+				}
 
 			case key.Matches(msg, keys.NextMatch):
 				m.jumpToNextMatch()
@@ -3060,6 +3205,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.pendingT = false
 		if m.focus != focusPreview {
 			m.previewTodoNavMode = false
+			m.previewLinkNavMode = false
+			m.previewLinkCursor = -1
 		}
 
 		if key.Matches(msg, keys.Move) {
@@ -3253,6 +3400,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.NoteHistory) {
 			return m, m.openNoteHistory()
+		}
+
+		if key.Matches(msg, keys.TrashBrowser) {
+			return m, m.openTrashBrowser()
 		}
 
 		if key.Matches(msg, keys.NewTemplate) {

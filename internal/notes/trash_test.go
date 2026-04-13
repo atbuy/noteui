@@ -119,3 +119,130 @@ func TestRestoreFromTrashEmptyResult(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing path information")
 }
+
+func TestListTrashedEmpty(t *testing.T) {
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+	root := t.TempDir()
+
+	items, err := ListTrashed(root)
+	require.NoError(t, err)
+	require.Nil(t, items)
+}
+
+func TestListTrashedFiltersToRoot(t *testing.T) {
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+
+	root1 := t.TempDir()
+	root2 := t.TempDir()
+
+	file1 := filepath.Join(root1, "alpha.md")
+	file2 := filepath.Join(root2, "beta.md")
+	require.NoError(t, os.WriteFile(file1, []byte("a"), 0o600))
+	require.NoError(t, os.WriteFile(file2, []byte("b"), 0o600))
+
+	_, err := TrashPath(file1)
+	require.NoError(t, err)
+	_, err = TrashPath(file2)
+	require.NoError(t, err)
+
+	items, err := ListTrashed(root1)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "alpha.md", items[0].Name)
+}
+
+func TestListTrashedSortedNewestFirst(t *testing.T) {
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+	root := t.TempDir()
+
+	// Write two .trashinfo files manually with different dates so we can control order.
+	infoDir := filepath.Join(xdgData, "Trash", "info")
+	filesDir := filepath.Join(xdgData, "Trash", "files")
+	require.NoError(t, os.MkdirAll(infoDir, 0o700))
+	require.NoError(t, os.MkdirAll(filesDir, 0o700))
+
+	older := filepath.Join(root, "older.md")
+	newer := filepath.Join(root, "newer.md")
+
+	writeInfo := func(name, origPath, date string) {
+		content := "[Trash Info]\nPath=" + origPath + "\nDeletionDate=" + date + "\n"
+		require.NoError(t, os.WriteFile(filepath.Join(infoDir, name+".trashinfo"), []byte(content), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(filesDir, name), []byte("x"), 0o600))
+	}
+
+	writeInfo("older.md", filepath.ToSlash(older), "2025-01-01T10:00:00")
+	writeInfo("newer.md", filepath.ToSlash(newer), "2025-06-01T10:00:00")
+
+	items, err := ListTrashed(root)
+	require.NoError(t, err)
+	require.Len(t, items, 2)
+	require.Equal(t, "newer.md", items[0].Name)
+	require.Equal(t, "older.md", items[1].Name)
+}
+
+func TestListTrashedURLDecodedPath(t *testing.T) {
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+
+	root := filepath.Join(t.TempDir(), "my notes")
+	require.NoError(t, os.MkdirAll(root, 0o755))
+
+	filePath := filepath.Join(root, "foo bar.md")
+	require.NoError(t, os.WriteFile(filePath, []byte("hello"), 0o600))
+
+	_, err := TrashPath(filePath)
+	require.NoError(t, err)
+
+	items, err := ListTrashed(root)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, filePath, items[0].OriginalPath)
+	require.Equal(t, "foo bar.md", items[0].Name)
+}
+
+func TestListTrashedSkipsMalformedEntries(t *testing.T) {
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+	root := t.TempDir()
+
+	infoDir := filepath.Join(xdgData, "Trash", "info")
+	filesDir := filepath.Join(xdgData, "Trash", "files")
+	require.NoError(t, os.MkdirAll(infoDir, 0o700))
+	require.NoError(t, os.MkdirAll(filesDir, 0o700))
+
+	// Valid entry.
+	validPath := filepath.Join(root, "valid.md")
+	validInfo := "[Trash Info]\nPath=" + filepath.ToSlash(validPath) + "\nDeletionDate=2025-01-01T12:00:00\n"
+	require.NoError(t, os.WriteFile(filepath.Join(infoDir, "valid.md.trashinfo"), []byte(validInfo), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(filesDir, "valid.md"), []byte("ok"), 0o600))
+
+	// Malformed entry (no Path= line).
+	require.NoError(t, os.WriteFile(filepath.Join(infoDir, "bad.md.trashinfo"), []byte("[Trash Info]\n"), 0o600))
+
+	items, err := ListTrashed(root)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "valid.md", items[0].Name)
+}
+
+func TestListTrashedName(t *testing.T) {
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+	root := t.TempDir()
+
+	filePath := filepath.Join(root, "note.md")
+	require.NoError(t, os.WriteFile(filePath, []byte("body"), 0o600))
+
+	result, err := TrashPath(filePath)
+	require.NoError(t, err)
+
+	items, err := ListTrashed(root)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "note.md", items[0].Name)
+	require.Equal(t, result.TrashFilePath, items[0].TrashFilePath)
+	require.Equal(t, result.TrashInfoPath, items[0].TrashInfoPath)
+}

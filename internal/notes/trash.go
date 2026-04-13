@@ -6,9 +6,102 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
+
+// TrashedItem describes a single entry in the system trash that came from a
+// known notes root. It carries enough information to restore the item.
+type TrashedItem struct {
+	Name          string    // base filename of the trashed file
+	OriginalPath  string    // decoded absolute path before trashing
+	TrashFilePath string    // current path inside Trash/files/
+	TrashInfoPath string    // path of the .trashinfo metadata file
+	DeletionDate  time.Time // when the item was trashed
+}
+
+// ListTrashed returns all items in the system trash that originated from
+// notesRoot, sorted by deletion date with the most recent item first.
+// If the trash directory does not exist, it returns nil, nil.
+func ListTrashed(notesRoot string) ([]TrashedItem, error) {
+	notesRoot = filepath.Clean(notesRoot)
+	trashRoot, err := userTrashRoot()
+	if err != nil {
+		return nil, err
+	}
+
+	infoDir := filepath.Join(trashRoot, "info")
+	filesDir := filepath.Join(trashRoot, "files")
+
+	entries, err := os.ReadDir(infoDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var items []TrashedItem
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".trashinfo") {
+			continue
+		}
+		item, ok := parseTrashedItem(filepath.Join(infoDir, e.Name()), filesDir)
+		if !ok {
+			continue
+		}
+		clean := filepath.Clean(item.OriginalPath)
+		if !strings.HasPrefix(clean, notesRoot+string(os.PathSeparator)) {
+			continue
+		}
+		items = append(items, item)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].DeletionDate.After(items[j].DeletionDate)
+	})
+	return items, nil
+}
+
+func parseTrashedItem(infoPath, filesDir string) (TrashedItem, bool) {
+	data, err := os.ReadFile(infoPath)
+	if err != nil {
+		return TrashedItem{}, false
+	}
+
+	var origPath string
+	var deletionDate time.Time
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "Path=") {
+			raw := strings.TrimPrefix(line, "Path=")
+			decoded, decErr := url.PathUnescape(raw)
+			if decErr != nil {
+				return TrashedItem{}, false
+			}
+			origPath = filepath.FromSlash(decoded)
+		} else if strings.HasPrefix(line, "DeletionDate=") {
+			raw := strings.TrimPrefix(line, "DeletionDate=")
+			t, parseErr := time.Parse("2006-01-02T15:04:05", strings.TrimSpace(raw))
+			if parseErr != nil {
+				return TrashedItem{}, false
+			}
+			deletionDate = t
+		}
+	}
+	if origPath == "" {
+		return TrashedItem{}, false
+	}
+
+	trashName := strings.TrimSuffix(filepath.Base(infoPath), ".trashinfo")
+	return TrashedItem{
+		Name:          filepath.Base(origPath),
+		OriginalPath:  origPath,
+		TrashFilePath: filepath.Join(filesDir, trashName),
+		TrashInfoPath: infoPath,
+		DeletionDate:  deletionDate,
+	}, true
+}
 
 // TrashResult records where a trashed item ended up, enabling in-app restore.
 type TrashResult struct {

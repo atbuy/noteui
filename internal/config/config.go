@@ -193,9 +193,12 @@ type KeysConfig struct {
 	ScrollPageUp             []string `toml:"scroll_page_up"`
 	ToggleEncryption         []string `toml:"toggle_encryption"`
 	NoteHistory              []string `toml:"note_history"`
+	TrashBrowser             []string `toml:"trash_browser"`
 	NewTemplate              []string `toml:"new_template"`
 	EditTemplates            []string `toml:"edit_templates"`
 	OpenDailyNote            []string `toml:"open_daily_note"`
+	LinkKey                  []string `toml:"link_key"`
+	FollowLink               []string `toml:"follow_link"`
 }
 
 func Default() Config {

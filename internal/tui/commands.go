@@ -3,7 +3,9 @@ package tui
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -444,9 +446,57 @@ func loadNoteHistoryCmd(root, relPath string) tea.Cmd {
 	}
 }
 
+type trashBrowserLoadedMsg struct {
+	items []notes.TrashedItem
+	err   error
+}
+
+type trashRestoreMsg struct {
+	item notes.TrashedItem
+	err  error
+}
+
+func loadTrashBrowserCmd(root string) tea.Cmd {
+	return func() tea.Msg {
+		items, err := notes.ListTrashed(root)
+		return trashBrowserLoadedMsg{items: items, err: err}
+	}
+}
+
+func restoreTrashItemCmd(item notes.TrashedItem) tea.Cmd {
+	return func() tea.Msg {
+		result := notes.TrashResult{
+			OriginalPath:  item.OriginalPath,
+			TrashFilePath: item.TrashFilePath,
+			TrashInfoPath: item.TrashInfoPath,
+		}
+		return trashRestoreMsg{item: item, err: notes.RestoreFromTrash(result)}
+	}
+}
+
 func restoreNoteVersionCmd(root, absPath, relPath, versionID string) tea.Cmd {
 	return func() tea.Msg {
 		err := notes.RestoreVersion(root, absPath, relPath, versionID)
 		return noteVersionRestoredMsg{relPath: relPath, err: err}
+	}
+}
+
+type openURLMsg struct {
+	url string
+	err error
+}
+
+func openURLCmd(url string) tea.Cmd {
+	return func() tea.Msg {
+		var cmd *exec.Cmd
+		switch runtime.GOOS {
+		case "darwin":
+			cmd = exec.Command("open", url)
+		case "windows":
+			cmd = exec.Command("cmd", "/c", "start", url)
+		default:
+			cmd = exec.Command("xdg-open", url)
+		}
+		return openURLMsg{url: url, err: cmd.Start()}
 	}
 }

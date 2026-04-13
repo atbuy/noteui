@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +26,9 @@ func (m *Model) setPreviewPlaceholder(pathKey, content string) {
 	m.pendingTodoCursor = -1
 	m.pendingT = false
 	m.previewTodoNavMode = false
+	m.previewLinks = nil
+	m.previewLinkCursor = -1
+	m.previewLinkNavMode = false
 	m.setPreviewViewportContent(content)
 	m.rebuildPreviewHeadingsFromRendered()
 	m.previewMatches = nil
@@ -43,6 +47,9 @@ func (m *Model) setStaticPreview(pathKey, rendered string) {
 	m.pendingTodoCursor = -1
 	m.pendingT = false
 	m.previewTodoNavMode = false
+	m.previewLinks = nil
+	m.previewLinkCursor = -1
+	m.previewLinkNavMode = false
 	m.setPreviewViewportContent(rendered)
 	m.rebuildPreviewHeadingsFromRendered()
 	m.previewMatches = nil
@@ -275,6 +282,8 @@ func (m Model) renderPreviewMarkdown(relPath, raw string) string {
 	if !m.cfg.Preview.RenderMarkdown || m.previewMarkdownDisabledFor(relPath) {
 		return raw
 	}
+
+	raw = notes.RewriteWikilinks(raw)
 
 	width := m.previewContentWidth()
 	opts := markdownRenderOptions{
@@ -816,6 +825,127 @@ func (m *Model) reapplyTodoHighlight() {
 	m.setPreviewViewportContent(applyTodoLineHighlight(content, todo.rendLine))
 }
 
+var (
+	renderedWikilinkRe     = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+	renderedExternalLinkRe = regexp.MustCompile(`\((https?://[^)\s]+)\)`)
+)
+
+func (m *Model) rebuildPreviewLinks() {
+	m.previewLinks = m.previewLinks[:0]
+	lines := strings.Split(stripANSI(m.previewContent), "\n")
+	for i, line := range lines {
+		if match := renderedWikilinkRe.FindStringSubmatch(line); match != nil {
+			m.previewLinks = append(m.previewLinks, previewLinkItem{
+				rendLine:   i,
+				target:     match[1],
+				isWikilink: true,
+			})
+		} else if match := renderedExternalLinkRe.FindStringSubmatch(line); match != nil {
+			m.previewLinks = append(m.previewLinks, previewLinkItem{
+				rendLine:   i,
+				target:     match[1],
+				isWikilink: false,
+			})
+		}
+	}
+	if m.previewLinkCursor >= len(m.previewLinks) {
+		m.previewLinkCursor = max(0, len(m.previewLinks)-1)
+	}
+	if !m.previewLinkNavMode {
+		m.previewLinkCursor = -1
+	}
+}
+
+func linkStatusLabel(link previewLinkItem) string {
+	if link.isWikilink {
+		return "[[" + link.target + "]]"
+	}
+	return link.target
+}
+
+func (m *Model) reapplyLinkHighlight() {
+	content := applyTodoDueDateHints(m.previewContent)
+	if !m.previewLinkNavMode || len(m.previewLinks) == 0 ||
+		m.previewLinkCursor < 0 || m.previewLinkCursor >= len(m.previewLinks) {
+		m.setPreviewViewportContent(content)
+		return
+	}
+	link := m.previewLinks[m.previewLinkCursor]
+	m.setPreviewViewportContent(applyLinkLineHighlight(content, link.rendLine))
+}
+
+func applyLinkLineHighlight(content string, rendLine int) string {
+	if rendLine < 0 {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	if rendLine >= len(lines) {
+		return content
+	}
+	if hasANSI(lines[rendLine]) {
+		lines[rendLine] = renderSelectedRenderedTodoLine(lines[rendLine])
+	} else {
+		lines[rendLine] = lipgloss.NewStyle().Background(selectedBgColor).Foreground(selectedFgColor).Render(lines[rendLine])
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) jumpToNextLink() {
+	if len(m.previewLinks) == 0 {
+		m.status = "no links"
+		return
+	}
+	if m.previewLinkCursor < 0 {
+		m.previewLinkCursor = 0
+	} else {
+		m.previewLinkCursor = (m.previewLinkCursor + 1) % len(m.previewLinks)
+	}
+	link := m.previewLinks[m.previewLinkCursor]
+	m.ensurePreviewLineVisible(link.rendLine)
+	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.reapplyLinkHighlight()
+}
+
+func (m *Model) jumpToPrevLink() {
+	if len(m.previewLinks) == 0 {
+		m.status = "no links"
+		return
+	}
+	if m.previewLinkCursor < 0 {
+		m.previewLinkCursor = len(m.previewLinks) - 1
+	} else {
+		m.previewLinkCursor = (m.previewLinkCursor - 1 + len(m.previewLinks)) % len(m.previewLinks)
+	}
+	link := m.previewLinks[m.previewLinkCursor]
+	m.ensurePreviewLineVisible(link.rendLine)
+	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.reapplyLinkHighlight()
+}
+
+func (m *Model) jumpToFirstLink() {
+	if len(m.previewLinks) == 0 {
+		m.status = "no links"
+		return
+	}
+	m.previewLinkCursor = 0
+	link := m.previewLinks[m.previewLinkCursor]
+	m.ensurePreviewLineVisible(link.rendLine)
+	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.reapplyLinkHighlight()
+}
+
+func (m *Model) jumpToLastLink() {
+	if len(m.previewLinks) == 0 {
+		m.status = "no links"
+		return
+	}
+	m.previewLinkCursor = len(m.previewLinks) - 1
+	link := m.previewLinks[m.previewLinkCursor]
+	m.ensurePreviewLineVisible(link.rendLine)
+	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.reapplyLinkHighlight()
+}
+
 func (m Model) mouseInPreview(x, y int) bool {
 	return x >= m.previewPaneX &&
 		x < m.previewPaneX+m.previewPaneW &&
@@ -1217,7 +1347,11 @@ func (m *Model) reapplyPreviewHighlights() {
 		m.previewMatchIndex,
 	)
 	m.previewContent = highlighted
-	m.reapplyTodoHighlight()
+	if m.previewLinkNavMode {
+		m.reapplyLinkHighlight()
+	} else {
+		m.reapplyTodoHighlight()
+	}
 }
 
 func (m *Model) syncTodoCursorToActiveMatch() {

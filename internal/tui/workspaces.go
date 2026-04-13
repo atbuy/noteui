@@ -158,6 +158,9 @@ func (m *Model) resetWorkspaceTransientState() {
 	m.pendingTodoCursor = -1
 	m.pendingPreviewYOffset = -1
 	m.previewTodoNavMode = false
+	m.previewLinks = nil
+	m.previewLinkCursor = -1
+	m.previewLinkNavMode = false
 	m.previewLineNumberStart = 0
 	m.preview.GotoTop()
 	m.searchMode = false
@@ -235,6 +238,9 @@ func (m *Model) resetWorkspaceTransientState() {
 	m.noteHistoryCursor = 0
 	m.noteHistoryRelPath = ""
 	m.noteHistoryAbsPath = ""
+	m.showTrashBrowser = false
+	m.trashBrowserItems = nil
+	m.trashBrowserCursor = 0
 	m.status = "switching workspace..."
 }
 

@@ -76,9 +76,12 @@ type keyMap struct {
 	ScrollPageUp     key.Binding
 	ToggleEncryption key.Binding
 	NoteHistory      key.Binding
+	TrashBrowser     key.Binding
 	NewTemplate      key.Binding
 	EditTemplates    key.Binding
 	OpenDailyNote    key.Binding
+	LinkKey          key.Binding
+	FollowLink       key.Binding
 }
 
 var keys = keyMap{
@@ -339,6 +342,10 @@ var keys = keyMap{
 		key.WithKeys("H"),
 		key.WithHelp("H", "Note history"),
 	),
+	TrashBrowser: key.NewBinding(
+		key.WithKeys("X"),
+		key.WithHelp("X", "Trash browser"),
+	),
 	NewTemplate: key.NewBinding(
 		key.WithKeys("ctrl+n"),
 		key.WithHelp("ctrl+n", "New template"),
@@ -350,6 +357,14 @@ var keys = keyMap{
 	OpenDailyNote: key.NewBinding(
 		key.WithKeys("D"),
 		key.WithHelp("D", "Open today's note"),
+	),
+	LinkKey: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "Link jump key"),
+	),
+	FollowLink: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "Follow selected link"),
 	),
 }
 
@@ -429,9 +444,12 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.ScrollPageUp, cfg.ScrollPageUp)
 	apply(&keys.ToggleEncryption, cfg.ToggleEncryption)
 	apply(&keys.NoteHistory, cfg.NoteHistory)
+	apply(&keys.TrashBrowser, cfg.TrashBrowser)
 	apply(&keys.NewTemplate, cfg.NewTemplate)
 	apply(&keys.EditTemplates, cfg.EditTemplates)
 	apply(&keys.OpenDailyNote, cfg.OpenDailyNote)
+	apply(&keys.LinkKey, cfg.LinkKey)
+	apply(&keys.FollowLink, cfg.FollowLink)
 }
 
 // ValidateKeyCollisions checks for duplicate key assignments among primary bindings
@@ -499,6 +517,7 @@ func ValidateKeyCollisions() []string {
 		{"scroll_page_up", &keys.ScrollPageUp},
 		{"toggle_encryption", &keys.ToggleEncryption},
 		{"note_history", &keys.NoteHistory},
+		{"trash_browser", &keys.TrashBrowser},
 		{"new_template", &keys.NewTemplate},
 		{"edit_templates", &keys.EditTemplates},
 		{"open_daily_note", &keys.OpenDailyNote},

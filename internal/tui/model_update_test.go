@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1578,4 +1579,381 @@ func TestEditorFinishedMsgSkipsRenameForDailyNote(t *testing.T) {
 	if _, err := os.Stat(notePath); err != nil {
 		t.Errorf("expected daily note to still exist at original path: %v", err)
 	}
+}
+
+func TestPreviewRenderedMsgExtractsWikilinks(t *testing.T) {
+	m := newTestModel(t)
+	m.previewPath = filepath.Join(m.rootDir, "work", "note.md")
+
+	m = updateModel(m, previewRenderedMsg{
+		forPath:     m.previewPath,
+		baseContent: "some content",
+		rawContent:  "See [[alpha]] and [[beta]].\nAlso [[alpha]] again.",
+	})
+
+	require.Equal(t, []string{"alpha", "beta"}, m.previewWikilinks)
+}
+
+func TestEnterInPreviewFocusFollowsWikilinkOnScreen(t *testing.T) {
+	m := newTestModel(t)
+	root := m.rootDir
+
+	notePath := filepath.Join(root, "other-note.md")
+	require.NoError(t, os.WriteFile(notePath, []byte("# Other Note\nbody\n"), 0o644))
+
+	target := notes.Note{
+		Path:      notePath,
+		RelPath:   "other-note.md",
+		Name:      "other-note.md",
+		TitleText: "Other Note",
+	}
+	m.notes = []notes.Note{target}
+
+	m.focus = focusPreview
+	m.preview.Height = 10
+	m.previewContent = "some text\n[[Other Note]]\nmore text"
+	m.previewWikilinks = []string{"Other Note"}
+
+	next, cmd := m.Update(keyMsg("enter"))
+	m = next.(Model)
+
+	require.NotNil(t, cmd, "expected a command to open the wikilinked note")
+	require.Equal(t, focusTree, m.focus)
+	require.Contains(t, m.status, "Other Note")
+}
+
+func TestEnterInPreviewFocusNoWikilinkDoesNothing(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.preview.Height = 10
+	m.previewContent = "just plain text, no wikilinks here"
+	m.previewWikilinks = nil
+
+	next, cmd := m.Update(keyMsg("enter"))
+	m = next.(Model)
+
+	// No command should be emitted and focus stays on preview
+	require.Equal(t, focusPreview, m.focus)
+	_ = cmd
+}
+
+// --- Link nav mode tests ---
+
+func makeLinkNavModel(t *testing.T) (Model, notes.Note) {
+	t.Helper()
+	m := newTestModel(t)
+	notePath := filepath.Join(m.rootDir, "linked.md")
+	require.NoError(t, os.WriteFile(notePath, []byte("# Linked\nbody\n"), 0o644))
+	n := notes.Note{
+		Path:      notePath,
+		RelPath:   "linked.md",
+		Name:      "linked.md",
+		TitleText: "Linked",
+	}
+	m.notes = []notes.Note{n}
+	m.focus = focusPreview
+	m.preview.Height = 20
+	m.previewContent = "intro\n[[Linked]]\ntrailing"
+	m.previewLinks = []previewLinkItem{{rendLine: 1, target: "Linked", isWikilink: true}}
+	m.previewLinkCursor = -1
+	return m, n
+}
+
+func TestRebuildPreviewLinksFindsWikilinkLines(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "intro line\n[[Note A]]\nmiddle\n[[Note B]]\nend"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 2)
+	require.Equal(t, 1, m.previewLinks[0].rendLine)
+	require.Equal(t, "Note A", m.previewLinks[0].target)
+	require.True(t, m.previewLinks[0].isWikilink)
+	require.Equal(t, 3, m.previewLinks[1].rendLine)
+	require.Equal(t, "Note B", m.previewLinks[1].target)
+}
+
+func TestRebuildPreviewLinksFindsExternalLinks(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "some text\nhyperlink (https://example.com)\nmore text"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, 1, m.previewLinks[0].rendLine)
+	require.Equal(t, "https://example.com", m.previewLinks[0].target)
+	require.False(t, m.previewLinks[0].isWikilink)
+}
+
+func TestFollowSelectedLinkExternalOpensBrowser(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.previewContent = "text (https://example.com)"
+	m.previewLinks = []previewLinkItem{{rendLine: 0, target: "https://example.com", isWikilink: false}}
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	next, cmd := m.Update(keyMsg("f"))
+	m = next.(Model)
+
+	require.NotNil(t, cmd, "external link should issue openURLCmd")
+	require.Equal(t, "opening: https://example.com", m.status)
+}
+
+func TestPreviewRenderedMsgCallsRebuildLinks(t *testing.T) {
+	m := newTestModel(t)
+	m.previewPath = filepath.Join(m.rootDir, "note.md")
+	m.preview.Width = 80
+	m.preview.Height = 20
+	m.previewContent = "[[foo]]"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, "foo", m.previewLinks[0].target)
+}
+
+func TestBracketFEntersLinkNavModeAndJumpsToFirstLink(t *testing.T) {
+	m, _ := makeLinkNavModel(t)
+
+	m = updateModel(m, keyMsg("]"))
+	m = updateModel(m, keyMsg("f"))
+
+	require.True(t, m.previewLinkNavMode)
+	require.Equal(t, 0, m.previewLinkCursor)
+	require.Contains(t, m.status, "[[Linked]]")
+}
+
+func TestBracketBackFEntersLinkNavModeAndJumpsToLastLink(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.preview.Height = 20
+	m.previewContent = "[[Alpha]]\nmiddle\n[[Beta]]"
+	m.previewLinks = []previewLinkItem{
+		{rendLine: 0, target: "Alpha", isWikilink: true},
+		{rendLine: 2, target: "Beta", isWikilink: true},
+	}
+
+	m = updateModel(m, keyMsg("["))
+	m = updateModel(m, keyMsg("f"))
+
+	require.True(t, m.previewLinkNavMode)
+	require.Equal(t, 1, m.previewLinkCursor)
+}
+
+func TestJumpToNextLinkWrapsAround(t *testing.T) {
+	m, _ := makeLinkNavModel(t)
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	m.jumpToNextLink()
+
+	require.Equal(t, 0, m.previewLinkCursor, "should wrap back to 0 with only one link")
+}
+
+func TestJumpToPrevLinkWrapsAround(t *testing.T) {
+	m, _ := makeLinkNavModel(t)
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	m.jumpToPrevLink()
+
+	require.Equal(t, 0, m.previewLinkCursor, "should wrap back to last (0) with only one link")
+}
+
+func TestEscExitsLinkNavMode(t *testing.T) {
+	m, _ := makeLinkNavModel(t)
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	m = updateModel(m, keyMsg("esc"))
+
+	require.False(t, m.previewLinkNavMode)
+	require.Equal(t, -1, m.previewLinkCursor)
+	require.Equal(t, "link nav off", m.status)
+}
+
+func TestFollowLinkKeyFollowsSelectedLink(t *testing.T) {
+	m, n := makeLinkNavModel(t)
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	next, cmd := m.Update(keyMsg("f"))
+	m = next.(Model)
+
+	require.NotNil(t, cmd, "expected open command")
+	require.False(t, m.previewLinkNavMode)
+	require.Equal(t, focusTree, m.focus)
+	require.Contains(t, m.status, n.TitleText)
+}
+
+func TestEnterInLinkNavModeFollowsSelectedLink(t *testing.T) {
+	m, n := makeLinkNavModel(t)
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	next, cmd := m.Update(keyMsg("enter"))
+	m = next.(Model)
+
+	require.NotNil(t, cmd, "expected open command")
+	require.False(t, m.previewLinkNavMode)
+	require.Equal(t, focusTree, m.focus)
+	require.Contains(t, m.status, n.TitleText)
+}
+
+func TestBracketFInLinkNavModeNavigatesToNextLink(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.preview.Height = 20
+	m.previewContent = "[[Alpha]]\nmiddle\n[[Beta]]"
+	m.previewLinks = []previewLinkItem{
+		{rendLine: 0, target: "Alpha", isWikilink: true},
+		{rendLine: 2, target: "Beta", isWikilink: true},
+	}
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	m = updateModel(m, keyMsg("]"))
+	m = updateModel(m, keyMsg("f"))
+
+	require.Equal(t, 1, m.previewLinkCursor)
+	require.Contains(t, m.status, "[[Beta]]")
+}
+
+func TestLinkNavAndTodoNavAreMutuallyExclusive(t *testing.T) {
+	// Simulate having pendingBracketDir already set (from a prior ']' press
+	// outside todo nav), then pressing 'f' while todo nav is also active.
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.preview.Height = 20
+	m.previewContent = "[[Alpha]]"
+	m.previewLinks = []previewLinkItem{{rendLine: 0, target: "Alpha", isWikilink: true}}
+	m.previewTodoNavMode = true
+	m.previewTodoCursor = 0
+	m.pendingBracketDir = "]"
+
+	m = updateModel(m, keyMsg("f"))
+
+	require.True(t, m.previewLinkNavMode)
+	require.False(t, m.previewTodoNavMode)
+	require.Equal(t, -1, m.previewTodoCursor)
+}
+
+func TestFollowSelectedLinkUnknownTargetSetsStatus(t *testing.T) {
+	m, _ := makeLinkNavModel(t)
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+	m.previewLinks[0] = previewLinkItem{rendLine: 1, target: "Nonexistent Note", isWikilink: true}
+	// notes is still set to "Linked" which won't match
+
+	cmd := m.followSelectedLink()
+
+	require.Nil(t, cmd)
+	require.Contains(t, m.status, "no note found for")
+	require.Contains(t, m.status, "Nonexistent Note")
+}
+
+// Trash browser tests
+
+func makeTrashItem(root, name string) notes.TrashedItem {
+	return notes.TrashedItem{
+		Name:          name,
+		OriginalPath:  filepath.Join(root, name),
+		TrashFilePath: "/tmp/trash/files/" + name,
+		TrashInfoPath: "/tmp/trash/info/" + name + ".trashinfo",
+		DeletionDate:  time.Now(),
+	}
+}
+
+func TestTrashBrowserOpenShowsModal(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(trashBrowserLoadedMsg{
+		items: []notes.TrashedItem{makeTrashItem(m.rootDir, "note.md")},
+	})
+	m = next.(Model)
+
+	require.True(t, m.showTrashBrowser)
+	require.Equal(t, 0, m.trashBrowserCursor)
+	require.Equal(t, "trash browser", m.status)
+}
+
+func TestTrashBrowserEscClosesModal(t *testing.T) {
+	m := newTestModel(t)
+	m.showTrashBrowser = true
+	m.trashBrowserItems = []notes.TrashedItem{makeTrashItem(m.rootDir, "note.md")}
+
+	next, _ := m.Update(keyMsg("esc"))
+	m = next.(Model)
+
+	require.False(t, m.showTrashBrowser)
+	require.Nil(t, m.trashBrowserItems)
+}
+
+func TestTrashBrowserNavigationMovesDown(t *testing.T) {
+	m := newTestModel(t)
+	m.showTrashBrowser = true
+	m.trashBrowserItems = []notes.TrashedItem{
+		makeTrashItem(m.rootDir, "a.md"),
+		makeTrashItem(m.rootDir, "b.md"),
+	}
+	m.trashBrowserCursor = 0
+
+	next, _ := m.Update(keyMsg("j"))
+	m = next.(Model)
+
+	require.Equal(t, 1, m.trashBrowserCursor)
+}
+
+func TestTrashBrowserNavigationClamped(t *testing.T) {
+	m := newTestModel(t)
+	m.showTrashBrowser = true
+	m.trashBrowserItems = []notes.TrashedItem{
+		makeTrashItem(m.rootDir, "a.md"),
+		makeTrashItem(m.rootDir, "b.md"),
+	}
+
+	// Can't go below 0.
+	m.trashBrowserCursor = 0
+	next, _ := m.Update(keyMsg("k"))
+	m = next.(Model)
+	require.Equal(t, 0, m.trashBrowserCursor)
+
+	// Can't go past last item.
+	m.trashBrowserCursor = 1
+	next, _ = m.Update(keyMsg("j"))
+	m = next.(Model)
+	require.Equal(t, 1, m.trashBrowserCursor)
+}
+
+func TestTrashBrowserEmptyDoesNotOpen(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := m.Update(trashBrowserLoadedMsg{items: nil})
+	m = next.(Model)
+
+	require.False(t, m.showTrashBrowser)
+	require.Contains(t, m.status, "empty")
+}
+
+func TestTrashBrowserRestoreErrorKeepsModalOpen(t *testing.T) {
+	m := newTestModel(t)
+	m.showTrashBrowser = true
+	m.trashBrowserItems = []notes.TrashedItem{makeTrashItem(m.rootDir, "note.md")}
+
+	next, _ := m.Update(trashRestoreMsg{
+		item: m.trashBrowserItems[0],
+		err:  errors.New("already exists"),
+	})
+	m = next.(Model)
+
+	require.True(t, m.showTrashBrowser)
+	require.Contains(t, m.status, "restore failed")
+}
+
+func TestTrashBrowserRestoreSuccessClosesAndRefreshes(t *testing.T) {
+	m := newTestModel(t)
+	item := makeTrashItem(m.rootDir, "note.md")
+	m.showTrashBrowser = true
+	m.trashBrowserItems = []notes.TrashedItem{item}
+
+	next, cmd := m.Update(trashRestoreMsg{item: item, err: nil})
+	m = next.(Model)
+
+	require.False(t, m.showTrashBrowser)
+	require.Nil(t, m.trashBrowserItems)
+	require.NotNil(t, cmd)
+	require.Contains(t, m.status, "note.md")
 }

@@ -16,7 +16,11 @@ import (
 	"github.com/yuin/goldmark/extension"
 	extast "github.com/yuin/goldmark/extension/ast"
 	gmtext "github.com/yuin/goldmark/text"
+
+	"atbuy/noteui/internal/notes"
 )
+
+const wikilinkURLPrefix = notes.WikilinkURLPrefix
 
 type markdownRenderOptions struct {
 	Width           int
@@ -576,7 +580,16 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 		if label == "" {
 			label = strings.TrimSpace(string(nodeText(n, r.source)))
 		}
+		label = stripANSI(label)
 		dest := strings.TrimSpace(string(n.Destination))
+
+		if strings.HasPrefix(dest, wikilinkURLPrefix) {
+			return lipgloss.NewStyle().
+				Underline(true).
+				Foreground(accentSoftColor).
+				Background(bgSoftColor).
+				Render("[[" + label + "]]")
+		}
 
 		styled := lipgloss.NewStyle().
 			Underline(true).

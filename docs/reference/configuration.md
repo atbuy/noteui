@@ -499,6 +499,7 @@ toggle_sync = ["S"]
 open_conflict_copy = ["O"]
 sync_import = ["I"]
 note_history = ["H"]
+trash_browser = ["X"]
 ```
 
 ### Everyday navigation and panes
@@ -624,6 +625,9 @@ note_history = ["H"]
 - `note_history`
   Default: `["H"]`
   Opens the version history modal for the selected local note.
+- `trash_browser`
+  Default: `["X"]`
+  Opens the trash browser modal, listing notes trashed from the current workspace. Navigate with `j`/`k`, press `enter` to restore, `esc` to close.
 
 ### Templates
 
@@ -666,6 +670,12 @@ note_history = ["H"]
   Default: `["d"]`
 - `toggle_encryption`
   Default: `["E"]`
+- `link_key`
+  Default: `["f"]`
+  Second key of the `]f` / `[f` chord to enter link nav mode in the preview pane. Also follows the selected link when already in link nav mode.
+- `follow_link`
+  Default: `["f"]`
+  Follows (opens) the currently selected wikilink while in link nav mode. Shares the default with `link_key`.
 
 The in-app help modal is still the live source of truth if you change keybindings heavily.
 

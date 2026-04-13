@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -202,6 +204,76 @@ func OpenOrCreateDailyNote(root, relDir, templatePath string, now time.Time) (pa
 	}
 
 	return path, true, nil
+}
+
+var wikilinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+
+// WikilinkURLPrefix is the synthetic URL prefix used to mark wikilink destinations.
+const WikilinkURLPrefix = "#wikilink:"
+
+// RewriteWikilinks replaces [[target]] patterns with [target](#wikilink:encoded)
+// so the standard markdown parser treats them as links. The target is
+// percent-encoded so the URL is valid (spaces and other chars are encoded).
+func RewriteWikilinks(content string) string {
+	return wikilinkRe.ReplaceAllStringFunc(content, func(match string) string {
+		inner := match[2 : len(match)-2]
+		encoded := url.PathEscape(inner)
+		return "[" + inner + "](#wikilink:" + encoded + ")"
+	})
+}
+
+// DecodeWikilinkTarget decodes a percent-encoded wikilink target extracted
+// from a #wikilink: URL. Returns the raw target string.
+func DecodeWikilinkTarget(encoded string) string {
+	decoded, err := url.PathUnescape(encoded)
+	if err != nil {
+		return encoded
+	}
+	return decoded
+}
+
+// ExtractWikilinks returns a deduplicated, ordered list of wikilink targets
+// found in content.
+func ExtractWikilinks(content string) []string {
+	matches := wikilinkRe.FindAllStringSubmatch(content, -1)
+	seen := make(map[string]bool, len(matches))
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		target := m[1]
+		if !seen[target] {
+			seen[target] = true
+			out = append(out, target)
+		}
+	}
+	return out
+}
+
+// FindNoteByWikilink searches notes for one whose title or filename matches
+// target (case-insensitive). It checks exact title match first, then exact
+// filename stem match, then prefix title match.
+func FindNoteByWikilink(ns []Note, target string) *Note {
+	lower := strings.ToLower(strings.TrimSpace(target))
+
+	for i := range ns {
+		if strings.ToLower(strings.TrimSpace(ns[i].TitleText)) == lower {
+			return &ns[i]
+		}
+	}
+
+	for i := range ns {
+		stem := strings.TrimSuffix(ns[i].Name, filepath.Ext(ns[i].Name))
+		if strings.ToLower(stem) == lower {
+			return &ns[i]
+		}
+	}
+
+	for i := range ns {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(ns[i].TitleText)), lower) {
+			return &ns[i]
+		}
+	}
+
+	return nil
 }
 
 func DiscoverTemporary(root string) ([]Note, error) {

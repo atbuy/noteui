@@ -65,6 +65,9 @@ This page documents the default keybindings that most users care about first.
 
 - `B`: toggle preview privacy
 - `L`: toggle preview line numbers
+- `]f` / `[f`: enter link nav mode and jump to the next or previous link; navigates both `[[wikilinks]]` and regular `[text](url)` links; the selected link is highlighted
+- In link nav: `f` or `enter` follows the selected link; for wikilinks, opens the referenced note; for external URLs, opens the URL in the system browser; `esc` exits link nav
+- `enter`: when not in link nav, follows the first visible `[[wikilink]]` on screen
 - `n` / `N`: next or previous search match in preview
 - `]h` / `[h`: next or previous heading in preview
 - `]t` / `[t`: next or previous todo in preview
@@ -81,6 +84,7 @@ This page documents the default keybindings that most users care about first.
 
 - `E`: toggle encryption
 - `H`: open the version history modal for the selected local note
+- `X`: open the trash browser; lists notes trashed from the current workspace, sorted by deletion date; press `enter` to restore, `esc` to close
 - `S`: toggle sync for the selected local note (`sync: local` ↔ `sync: synced`)
 - `ctrl+s`: toggle shared status of the selected note (`sync: shared` ↔ `sync: local`)
 - `O`: open the generated conflict copy for the selected conflicted synced note

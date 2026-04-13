@@ -298,6 +298,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showTrashBrowser {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderTrashBrowserModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showTemplatePicker {
 		return lipgloss.Place(
 			m.width,
@@ -2303,6 +2314,63 @@ func (m Model) renderNoteHistoryModal() string {
 			lipgloss.Left,
 			m.renderModalTitle("Note Version History", innerWidth),
 			m.renderModalHint(title+" • "+subtitle, innerWidth),
+			m.renderModalBlank(innerWidth),
+			lipgloss.JoinVertical(lipgloss.Left, rows...),
+			m.renderModalBlank(innerWidth),
+			m.renderModalFooter("up/down navigate • enter restore • esc close", innerWidth),
+		),
+	)
+	return modalCardStyle(modalWidth).Render(content)
+}
+
+func (m Model) renderTrashBrowserModal() string {
+	modalWidth, innerWidth := m.modalDimensions(62, 96)
+	maxVisible := max(4, min(20, m.height-14))
+
+	subtitle := fmt.Sprintf("%d item", len(m.trashBrowserItems))
+	if len(m.trashBrowserItems) != 1 {
+		subtitle += "s"
+	}
+
+	start := 0
+	if m.trashBrowserCursor >= maxVisible {
+		start = m.trashBrowserCursor - maxVisible + 1
+	}
+	end := min(start+maxVisible, len(m.trashBrowserItems))
+
+	rows := make([]string, 0, end-start)
+	for i := start; i < end; i++ {
+		item := m.trashBrowserItems[i]
+		prefix := "  "
+		if i == m.trashBrowserCursor {
+			prefix = "› "
+		}
+		rel, _ := filepath.Rel(m.rootDir, filepath.Dir(item.OriginalPath))
+		label := item.Name
+		if rel != "" && rel != "." {
+			label = rel + "/" + label
+		}
+		ts := item.DeletionDate.Local().Format("2006-01-02 15:04")
+		line := prefix + ts + "  " + label
+		bg := modalBgColor
+		fg := textColor
+		if i == m.trashBrowserCursor {
+			bg = selectedBgColor
+			fg = selectedFgColor
+		}
+		rows = append(rows, lipgloss.NewStyle().Width(innerWidth).Padding(0, 1).
+			Foreground(fg).Background(bg).Render(line))
+	}
+	if len(rows) == 0 {
+		rows = append(rows, lipgloss.NewStyle().Width(innerWidth).
+			Background(modalBgColor).Foreground(mutedColor).Render("  Trash is empty"))
+	}
+
+	content := lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(
+		lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.renderModalTitle("Trash Browser", innerWidth),
+			m.renderModalHint(subtitle, innerWidth),
 			m.renderModalBlank(innerWidth),
 			lipgloss.JoinVertical(lipgloss.Left, rows...),
 			m.renderModalBlank(innerWidth),

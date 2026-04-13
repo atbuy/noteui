@@ -691,3 +691,82 @@ func TestOpenOrCreateDailyNoteUsesTemplate(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected all template vars to be substituted, got %q", content)
 	}
 }
+
+func TestRewriteWikilinks(t *testing.T) {
+	cases := []struct {
+		in  string
+		out string
+	}{
+		{
+			in:  "See [[my note]] for details.",
+			out: "See [my note](#wikilink:my%20note) for details.",
+		},
+		{
+			in:  "[[first]] and [[second]]",
+			out: "[first](#wikilink:first) and [second](#wikilink:second)",
+		},
+		{
+			in:  "No wikilinks here.",
+			out: "No wikilinks here.",
+		},
+		{
+			in:  "[regular link](https://example.com) stays unchanged",
+			out: "[regular link](https://example.com) stays unchanged",
+		},
+		{
+			in:  "[[note with spaces]]",
+			out: "[note with spaces](#wikilink:note%20with%20spaces)",
+		},
+	}
+
+	for _, tc := range cases {
+		got := RewriteWikilinks(tc.in)
+		if got != tc.out {
+			require.Failf(t, "assertion failed", "RewriteWikilinks(%q) = %q; want %q", tc.in, got, tc.out)
+		}
+	}
+}
+
+func TestExtractWikilinks(t *testing.T) {
+	content := "See [[alpha]] and [[beta]].\nAlso [[alpha]] again and [[gamma]]."
+	got := ExtractWikilinks(content)
+	want := []string{"alpha", "beta", "gamma"}
+	require.Equal(t, want, got)
+}
+
+func TestFindNoteByWikilink(t *testing.T) {
+	ns := []Note{
+		{Name: "project-notes.md", TitleText: "Project Notes"},
+		{Name: "ideas.md", TitleText: "Ideas"},
+		{Name: "meeting-2026.md", TitleText: "Meeting 2026"},
+	}
+
+	// Exact title match (case-insensitive)
+	n := FindNoteByWikilink(ns, "Project Notes")
+	if n == nil || n.Name != "project-notes.md" {
+		require.Failf(t, "assertion failed", "expected project-notes.md, got %v", n)
+	}
+
+	n = FindNoteByWikilink(ns, "project notes")
+	if n == nil || n.Name != "project-notes.md" {
+		require.Failf(t, "assertion failed", "expected project-notes.md for lowercase match, got %v", n)
+	}
+
+	// Filename stem match
+	n = FindNoteByWikilink(ns, "ideas")
+	if n == nil || n.Name != "ideas.md" {
+		require.Failf(t, "assertion failed", "expected ideas.md for stem match, got %v", n)
+	}
+
+	// Prefix title match
+	n = FindNoteByWikilink(ns, "Meeting")
+	if n == nil || n.Name != "meeting-2026.md" {
+		require.Failf(t, "assertion failed", "expected meeting-2026.md for prefix match, got %v", n)
+	}
+
+	// Not found
+	n = FindNoteByWikilink(ns, "nonexistent")
+	if n != nil {
+		require.Failf(t, "assertion failed", "expected nil for nonexistent target, got %v", n)
+	}
+}

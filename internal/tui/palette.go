@@ -73,6 +73,7 @@ const (
 	cmdEditTodo              = "edit_todo"
 	cmdSetTodoDueDate        = "set_todo_due_date"
 	cmdSetTodoPriority       = "set_todo_priority"
+	cmdTrashBrowser          = "trash_browser"
 )
 
 // paletteKind identifies the type of an item in the command palette.
@@ -228,6 +229,8 @@ func paletteCommands(m Model) []paletteCommand {
 		paletteCommand{name: "Add Tags", desc: "Add tags to the selected note", category: "selection", action: cmdAddTags})
 	cmds = appendPaletteCommand(cmds, m.canTrashCurrent(),
 		paletteCommand{name: "Trash Current Item", desc: "Trash the selected note or category", category: "selection", action: cmdTrashCurrent})
+	cmds = appendPaletteCommand(cmds, true,
+		paletteCommand{name: "Trash Browser", desc: "Browse and restore trashed notes from this workspace", category: "notes", action: cmdTrashBrowser})
 	cmds = appendPaletteCommand(cmds, m.canTogglePinCurrent(),
 		paletteCommand{name: "Toggle Pin", desc: "Pin or unpin the current item or marked notes", category: "selection", action: cmdTogglePin})
 	cmds = appendPaletteCommand(cmds, m.canPromoteTemporary(),
@@ -922,6 +925,65 @@ func (m *Model) openDailyNote() tea.Cmd {
 	return editor.Open(path)
 }
 
+// followWikilinkUnderCursor finds the first [[target]] visible in the preview
+// viewport, resolves it to a note, and returns a command to open it in the
+// editor. Returns nil when no wikilink is visible or the target is not found.
+func (m *Model) followWikilinkUnderCursor() tea.Cmd {
+	stripped := strings.Split(stripANSI(m.previewContent), "\n")
+	start := m.preview.YOffset
+	end := start + m.preview.Height
+	if end > len(stripped) {
+		end = len(stripped)
+	}
+
+	var target string
+	for _, line := range stripped[start:end] {
+		if match := renderedWikilinkRe.FindStringSubmatch(line); match != nil {
+			target = match[1]
+			break
+		}
+	}
+
+	if target == "" {
+		return nil
+	}
+
+	n := notes.FindNoteByWikilink(m.notes, target)
+	if n == nil {
+		m.status = "no note found for [[" + target + "]]"
+		return nil
+	}
+
+	m.focus = focusTree
+	m.switchToNotesMode()
+	m.selectTreeNote(n.RelPath)
+	m.status = "opened [[" + target + "]]"
+	return editor.Open(n.Path)
+}
+
+func (m *Model) followSelectedLink() tea.Cmd {
+	if m.previewLinkCursor < 0 || m.previewLinkCursor >= len(m.previewLinks) {
+		return nil
+	}
+	link := m.previewLinks[m.previewLinkCursor]
+	if !link.isWikilink {
+		m.status = "opening: " + link.target
+		return openURLCmd(link.target)
+	}
+	n := notes.FindNoteByWikilink(m.notes, link.target)
+	if n == nil {
+		m.status = "no note found for [[" + link.target + "]]"
+		return nil
+	}
+	m.previewLinkNavMode = false
+	m.previewLinkCursor = -1
+	m.focus = focusTree
+	m.switchToNotesMode()
+	m.selectTreeNote(n.RelPath)
+	m.status = "opened [[" + link.target + "]]"
+	return editor.Open(n.Path)
+}
+
 func (m *Model) openTemplatePicker(templates []notes.Template) {
 	m.templateItems = templates
 	m.templatePickerCursor = 0
@@ -1192,6 +1254,8 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 		return nil
 	case cmdTrashCurrent:
 		return m.trashCurrentItem()
+	case cmdTrashBrowser:
+		return m.openTrashBrowser()
 	case cmdTogglePin:
 		if err := m.togglePinCurrent(); err != nil {
 			m.status = "pin failed: " + err.Error()

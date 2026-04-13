@@ -197,6 +197,8 @@ Move operations stay inside the notes root.
 
 After a successful trash operation the status bar shows `Z to undo`. Press `Z` to restore the trashed item back to its original path. The undo affordance is available until the next deletion or workspace switch. Trashing a second note replaces it; only the most recent deletion can be undone.
 
+To browse all notes trashed from the current workspace, press `X`. The trash browser shows each item's original location and deletion time. Navigate with `j`/`k`, press `enter` to restore an item to its original path, and `esc` to close the modal. The trash browser is also available from the command palette as "Trash Browser".
+
 Marked notes let the existing note actions work on a batch:
 
 - `p`: pin or unpin marked notes
@@ -254,6 +256,24 @@ Todo metadata can be stored inline in normal markdown task lines:
 - due date: `[due:YYYY-MM-DD]`
 
 The Todos view shows only open tasks and sorts them by due date first, then priority, then note order.
+
+## Wikilinks
+
+Inside any note you can write `[[note title]]` to link to another note by its title or filename.
+
+When the preview pane renders a note with wikilinks, each `[[target]]` appears as a styled link. To follow a wikilink:
+
+1. Focus the preview pane with `tab`.
+2. Scroll until a `[[target]]` line is visible.
+3. Press `enter`. noteui finds the matching note, selects it in the tree, and opens it in your editor.
+
+If the target does not match any note, the status bar shows `no note found for [[target]]`.
+
+Matching is case-insensitive and checks in this order:
+
+1. Exact title match
+2. Filename stem match (for example, `[[my-note]]` matches `my-note.md`)
+3. Title prefix match (for example, `[[Meeting]]` matches a note titled "Meeting 2026")
 
 ## Preview behavior
 
