@@ -1727,6 +1727,66 @@ func TestRebuildPreviewLinksFindsWikilinkLines(t *testing.T) {
 	require.Equal(t, "Note B", m.previewLinks[1].target)
 }
 
+func TestRebuildPreviewLinksFindsMultipleLinksOnOneLine(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "see [[Alpha]] and [[Beta]] for details"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 2)
+	require.Equal(t, 0, m.previewLinks[0].rendLine)
+	require.Equal(t, "Alpha", m.previewLinks[0].target)
+	require.Equal(t, 4, m.previewLinks[0].rendCol, "rendCol should be byte offset of [[ in line")
+	require.Equal(t, 0, m.previewLinks[1].rendLine)
+	require.Equal(t, "Beta", m.previewLinks[1].target)
+	require.Greater(t, m.previewLinks[1].rendCol, m.previewLinks[0].rendCol,
+		"second link should have a higher column than the first")
+}
+
+func TestRebuildPreviewLinksStoresMatchLen(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "[[Hello World]]"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, len("[[Hello World]]"), m.previewLinks[0].matchLen)
+}
+
+func TestApplyLinkSpanHighlightOnlyHighlightsLinkText(t *testing.T) {
+	content := "prefix [[My Note]] suffix"
+	link := previewLinkItem{rendLine: 0, rendCol: 7, matchLen: len("[[My Note]]"), target: "My Note", isWikilink: true}
+	result := applyLinkSpanHighlight(content, link)
+
+	// Visible text must be preserved exactly.
+	require.Equal(t, "prefix [[My Note]] suffix", stripANSI(result),
+		"visible text should be unchanged after span highlight")
+
+	// The literal text before the link ("prefix ") must be a prefix of the
+	// result: no ANSI codes were injected in front of it.
+	require.True(t, strings.HasPrefix(result, "prefix "),
+		"prefix before the link should be untouched")
+
+	// The literal text after the link (" suffix") must be a suffix of the
+	// ANSI-stripped result (suffix is never touched by the highlighter).
+	require.True(t, strings.HasSuffix(stripANSI(result), " suffix"),
+		"suffix after the link should be untouched")
+}
+
+func TestNavigatingMultipleLinksOnSameLine(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.preview.Height = 20
+	m.previewContent = "see [[Alpha]] and [[Beta]] for details"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 2)
+
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+
+	// Navigate from first to second link on the same line.
+	m.jumpToNextLink()
+	require.Equal(t, 1, m.previewLinkCursor)
+	require.Equal(t, "Beta", m.previewLinks[1].target)
+	require.Contains(t, m.status, "[[Beta]]")
+}
+
 func TestRebuildPreviewLinksFindsExternalLinks(t *testing.T) {
 	m := newTestModel(t)
 	m.previewContent = "some text\nhyperlink (https://example.com)\nmore text"

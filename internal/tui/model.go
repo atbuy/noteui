@@ -213,6 +213,8 @@ type previewTodoItem struct {
 
 type previewLinkItem struct {
 	rendLine   int
+	rendCol    int // byte offset in the ANSI-stripped line where the full match starts
+	matchLen   int // byte length of the full match in the stripped line
 	target     string
 	isWikilink bool
 }

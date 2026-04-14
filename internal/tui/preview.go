@@ -834,20 +834,33 @@ func (m *Model) rebuildPreviewLinks() {
 	m.previewLinks = m.previewLinks[:0]
 	lines := strings.Split(stripANSI(m.previewContent), "\n")
 	for i, line := range lines {
-		if match := renderedWikilinkRe.FindStringSubmatch(line); match != nil {
+		for _, idx := range renderedWikilinkRe.FindAllStringSubmatchIndex(line, -1) {
 			m.previewLinks = append(m.previewLinks, previewLinkItem{
 				rendLine:   i,
-				target:     match[1],
+				rendCol:    idx[0],
+				matchLen:   idx[1] - idx[0],
+				target:     line[idx[2]:idx[3]],
 				isWikilink: true,
 			})
-		} else if match := renderedExternalLinkRe.FindStringSubmatch(line); match != nil {
+		}
+		for _, idx := range renderedExternalLinkRe.FindAllStringSubmatchIndex(line, -1) {
 			m.previewLinks = append(m.previewLinks, previewLinkItem{
 				rendLine:   i,
-				target:     match[1],
+				rendCol:    idx[0],
+				matchLen:   idx[1] - idx[0],
+				target:     line[idx[2]:idx[3]],
 				isWikilink: false,
 			})
 		}
 	}
+	// Sort by line, then by column within the line, so navigation is in reading order.
+	sort.Slice(m.previewLinks, func(a, b int) bool {
+		la, lb := m.previewLinks[a], m.previewLinks[b]
+		if la.rendLine != lb.rendLine {
+			return la.rendLine < lb.rendLine
+		}
+		return la.rendCol < lb.rendCol
+	})
 	if m.previewLinkCursor >= len(m.previewLinks) {
 		m.previewLinkCursor = max(0, len(m.previewLinks)-1)
 	}
@@ -871,22 +884,42 @@ func (m *Model) reapplyLinkHighlight() {
 		return
 	}
 	link := m.previewLinks[m.previewLinkCursor]
-	m.setPreviewViewportContent(applyLinkLineHighlight(content, link.rendLine))
+	m.setPreviewViewportContent(applyLinkSpanHighlight(content, link))
 }
 
-func applyLinkLineHighlight(content string, rendLine int) string {
-	if rendLine < 0 {
+// applyLinkSpanHighlight highlights only the link's own text within its line,
+// leaving the rest of the line (and all other lines) unchanged.
+func applyLinkSpanHighlight(content string, link previewLinkItem) string {
+	if link.rendLine < 0 || link.matchLen <= 0 {
 		return content
 	}
 	lines := strings.Split(content, "\n")
-	if rendLine >= len(lines) {
+	if link.rendLine >= len(lines) {
 		return content
 	}
-	if hasANSI(lines[rendLine]) {
-		lines[rendLine] = renderSelectedRenderedTodoLine(lines[rendLine])
-	} else {
-		lines[rendLine] = lipgloss.NewStyle().Background(selectedBgColor).Foreground(selectedFgColor).Render(lines[rendLine])
+	line := lines[link.rendLine]
+
+	// Map visible-character byte positions in the stripped text to byte
+	// positions in the (potentially ANSI-decorated) line.
+	plain, chars := renderedVisibleByteRanges(line)
+
+	end := link.rendCol + link.matchLen
+	if link.rendCol < 0 || end > len(plain) || end > len(chars) {
+		// Out-of-range: nothing to highlight.
+		return content
 	}
+
+	byteStart := chars[link.rendCol].start
+	byteEnd := chars[end-1].end
+	spanText := plain[link.rendCol:end]
+
+	highlighted := lipgloss.NewStyle().
+		Background(selectedBgColor).
+		Foreground(selectedFgColor).
+		Bold(true).
+		Render(spanText)
+
+	lines[link.rendLine] = line[:byteStart] + highlighted + line[byteEnd:]
 	return strings.Join(lines, "\n")
 }
 
