@@ -62,6 +62,95 @@ func renderMarkdownTerminal(raw string, opts markdownRenderOptions) string {
 	return strings.TrimSpace(out)
 }
 
+type renderedMarkdownLink struct {
+	target     string
+	isWikilink bool
+	showTarget bool
+	label      string
+}
+
+func extractRenderedMarkdownLinks(raw string) []renderedMarkdownLink {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	raw = notes.RewriteWikilinks(raw)
+	md := goldmark.New(
+		goldmark.WithExtensions(
+			extension.GFM,
+		),
+	)
+	doc := md.Parser().Parse(gmtext.NewReader([]byte(raw)))
+
+	var links []renderedMarkdownLink
+	var walk func(ast.Node)
+	walk = func(node ast.Node) {
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			switch n := child.(type) {
+			case *ast.Link:
+				label := strings.TrimSpace(stripANSI(renderInlineLabelText(n, []byte(raw))))
+				if label == "" {
+					label = strings.TrimSpace(string(nodeText(n, []byte(raw))))
+				}
+				dest := strings.TrimSpace(string(n.Destination))
+				item := renderedMarkdownLink{label: label}
+				if strings.HasPrefix(dest, wikilinkURLPrefix) {
+					item.target = notes.DecodeWikilinkTarget(strings.TrimPrefix(dest, wikilinkURLPrefix))
+					item.isWikilink = true
+					item.label = "[[" + label + "]]"
+				} else {
+					item.target = dest
+					item.showTarget = dest != ""
+				}
+				if item.label != "" && item.target != "" {
+					links = append(links, item)
+				}
+			case *ast.AutoLink:
+				text := strings.TrimSpace(string(n.Label([]byte(raw))))
+				if text != "" {
+					links = append(links, renderedMarkdownLink{label: text, target: text})
+				}
+			}
+			walk(child)
+		}
+	}
+	walk(doc)
+	return links
+}
+
+func renderInlineLabelText(node ast.Node, source []byte) string {
+	if node == nil {
+		return ""
+	}
+
+	switch n := node.(type) {
+	case *ast.Text:
+		s := string(n.Segment.Value(source))
+		if n.HardLineBreak() {
+			return s + "\n"
+		}
+		if n.SoftLineBreak() {
+			return s + " "
+		}
+		return s
+	case *ast.String:
+		return string(n.Value)
+	case *ast.CodeSpan:
+		return strings.TrimSpace(string(nodeText(n, source)))
+	case *extast.TaskCheckBox:
+		return ""
+	default:
+		var parts strings.Builder
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			parts.WriteString(renderInlineLabelText(child, source))
+		}
+		if parts.Len() > 0 {
+			return parts.String()
+		}
+		return string(nodeText(node, source))
+	}
+}
+
 func (r markdownPreviewRenderer) renderBlocks(parent ast.Node, indent int) string {
 	var parts []string
 	for child := parent.FirstChild(); child != nil; child = child.NextSibling() {
@@ -595,19 +684,11 @@ func (r markdownPreviewRenderer) renderInlineNode(node ast.Node) string {
 				Render("[[" + label + "]]")
 		}
 
-		styled := lipgloss.NewStyle().
+		return lipgloss.NewStyle().
 			Underline(true).
 			Foreground(accentColor).
 			Background(bgSoftColor).
 			Render(label)
-
-		if dest != "" && dest != label {
-			return styled + lipgloss.NewStyle().
-				Foreground(mutedColor).
-				Background(bgSoftColor).
-				Render(" ("+dest+")")
-		}
-		return styled
 
 	case *ast.AutoLink:
 		text := strings.TrimSpace(string(n.Label(r.source)))

@@ -1862,6 +1862,78 @@ func TestRebuildPreviewLinksFindsExternalLinks(t *testing.T) {
 	require.False(t, m.previewLinks[0].isWikilink)
 }
 
+func TestRebuildPreviewLinksFindsRenderedMarkdownExternalLinks(t *testing.T) {
+	m := newTestModel(t)
+	raw := "some [hyperlink](https://example.com) text"
+	m.previewRawContent = raw
+	m.previewBaseContent = renderMarkdownTerminal(raw, markdownRenderOptions{Width: 80})
+	m.previewContent = m.previewBaseContent
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, "https://example.com", m.previewLinks[0].target)
+	require.False(t, m.previewLinks[0].isWikilink)
+	require.True(t, m.previewLinks[0].showTarget)
+	require.Equal(t, "some hyperlink text", stripANSI(m.previewBaseContent))
+}
+
+func TestBracketFEntersLinkNavModeForRenderedMarkdownExternalLink(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.previewPath = filepath.Join(m.rootDir, "note.md")
+	raw := "some [hyperlink](https://example.com) text"
+	m = updateModel(m, previewRenderedMsg{
+		forPath:     m.previewPath,
+		baseContent: renderMarkdownTerminal(raw, markdownRenderOptions{Width: 80}),
+		rawContent:  raw,
+	})
+	require.Len(t, m.previewLinks, 1)
+
+	m = updateModel(m, keyMsg("["))
+	m = updateModel(m, keyMsg("f"))
+
+	require.True(t, m.previewLinkNavMode)
+	require.Equal(t, 0, m.previewLinkCursor)
+	require.Contains(t, m.status, "https://example.com")
+}
+
+func TestFollowSelectedRenderedMarkdownExternalLinkOpensBrowser(t *testing.T) {
+	m := newTestModel(t)
+	m.focus = focusPreview
+	m.previewPath = filepath.Join(m.rootDir, "note.md")
+	raw := "some [hyperlink](https://example.com) text"
+	m = updateModel(m, previewRenderedMsg{
+		forPath:     m.previewPath,
+		baseContent: renderMarkdownTerminal(raw, markdownRenderOptions{Width: 80}),
+		rawContent:  raw,
+	})
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+	m.reapplyLinkHighlight()
+
+	next, cmd := m.Update(keyMsg("f"))
+	m = next.(Model)
+
+	require.NotNil(t, cmd)
+	require.Equal(t, "opening: https://example.com", m.status)
+}
+
+func TestApplyLinkSpanHighlightShowsTargetOnlyForSelectedMarkdownLink(t *testing.T) {
+	content := "see first and second"
+	result := applyLinkSpanHighlight(content, previewLinkItem{
+		rendLine:    0,
+		rendCol:     4,
+		rendLen:     len("first"),
+		rendEndLine: 0,
+		rendEndCol:  9,
+		target:      "https://example.com/first",
+		showTarget:  true,
+	})
+	plain := stripANSI(result)
+	require.Contains(t, plain, "first (https://example.com/first)")
+	require.NotContains(t, plain, "second (")
+	require.Equal(t, "see first (https://example.com/first) and second", plain)
+}
+
 func TestRebuildPreviewLinksFindsBareExternalLinkWithFragment(t *testing.T) {
 	m := newTestModel(t)
 	m.previewContent = "see https://pypi.org#test for details"

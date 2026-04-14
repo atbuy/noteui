@@ -65,7 +65,7 @@ This page documents the default keybindings that most users care about first.
 
 - `B`: toggle preview privacy
 - `L`: toggle preview line numbers
-- `]f` / `[f`: enter link nav mode and jump to the next or previous link; navigates both `[[wikilinks]]` and regular `[text](url)` links; the selected link is highlighted
+- `]f` / `[f`: enter link nav mode and jump to the next or previous link; navigates both `[[wikilinks]]` and regular `[text](url)` links; the selected link is highlighted, and markdown links reveal their URL only while selected
 - In link nav: `f` or `enter` follows the selected link; for wikilinks, opens the referenced note; for external URLs, opens the URL in the system browser; `esc` exits link nav
 - `enter`: when not in link nav, follows the first visible `[[wikilink]]` on screen
 - `n` / `N`: next or previous search match in preview

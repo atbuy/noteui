@@ -221,6 +221,7 @@ type previewLinkItem struct {
 	rendEndCol  int // byte offset in rendEndLine where the full match ends (exclusive)
 	target      string
 	isWikilink  bool
+	showTarget  bool
 }
 
 type treeItem struct {
@@ -317,6 +318,7 @@ type Model struct {
 	previewMatches        []previewMatch
 	previewMatchIndex     int
 	previewBaseContent    string
+	previewRawContent     string
 	pendingPreviewCmd     tea.Cmd
 	pendingPreviewYOffset int
 
@@ -1068,6 +1070,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.previewBaseContent = msg.baseContent
+		m.previewRawContent = msg.rawContent
 		m.previewPrivacyForcedByNote = msg.privacyForcedByNote
 		m.previewLineNumberStart = msg.lineNumberStart
 		query := strings.TrimSpace(m.searchInput.Value())

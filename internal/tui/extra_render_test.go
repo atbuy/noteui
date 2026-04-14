@@ -826,12 +826,13 @@ func TestMarkdownLinkRenderNoANSIGarbage(t *testing.T) {
 	rendered := renderMarkdownTerminal("[hyperlink](https://example.com)", opts)
 	plain := stripANSI(rendered)
 
-	// The visible text must contain the label and the destination.
+	// The visible text must contain the label, but the URL should stay hidden
+	// until that link is selected in link-nav mode.
 	if !strings.Contains(plain, "hyperlink") {
 		require.Failf(t, "assertion failed", "expected 'hyperlink' in rendered output, got %q", plain)
 	}
-	if !strings.Contains(plain, "https://example.com") {
-		require.Failf(t, "assertion failed", "expected URL in rendered output, got %q", plain)
+	if strings.Contains(plain, "https://example.com") {
+		require.Failf(t, "assertion failed", "expected URL to stay hidden in rendered output, got %q", plain)
 	}
 
 	// The raw rendered string must not contain the ANSI escape garbage pattern

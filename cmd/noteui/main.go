@@ -39,7 +39,6 @@ func main() {
 				os.Exit(1)
 			}
 			name := args[i+1]
-			i++
 			if !config.IsValidThemeName(name) {
 				printError(os.Stderr, fmt.Sprintf("unknown theme %q - run 'noteui +themes' to see available themes", name))
 				os.Exit(1)

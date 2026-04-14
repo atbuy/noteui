@@ -18,6 +18,7 @@ import (
 func (m *Model) setPreviewPlaceholder(pathKey, content string) {
 	m.previewPath = pathKey
 	m.previewBaseContent = ""
+	m.previewRawContent = ""
 	m.previewContent = content
 	m.previewPrivacyForcedByNote = false
 	m.previewLineNumberStart = 0
@@ -39,6 +40,7 @@ func (m *Model) setPreviewPlaceholder(pathKey, content string) {
 func (m *Model) setStaticPreview(pathKey, rendered string) {
 	m.previewPath = pathKey
 	m.previewBaseContent = rendered
+	m.previewRawContent = ""
 	m.previewContent = rendered
 	m.previewPrivacyForcedByNote = false
 	m.previewLineNumberStart = 0
@@ -965,11 +967,73 @@ func normalizeRenderedLinkTarget(target string, isWikilink bool) string {
 	return strings.Join(strings.Fields(target), "")
 }
 
-func (m *Model) rebuildPreviewLinks() {
-	m.previewLinks = m.previewLinks[:0]
-	// Strip ANSI once and search the whole content so links that were
-	// word-wrapped across lines (e.g. [[A Long\nTitle]]) are still found.
-	content := stripANSI(m.previewContent)
+func findRenderedLabelRange(content, label string, start int) (int, int, bool) {
+	if label == "" || start < 0 || start >= len(content) {
+		return 0, 0, false
+	}
+	for i := start; i < len(content); i++ {
+		ci, li := i, 0
+		for ci < len(content) && li < len(label) {
+			if content[ci] == label[li] {
+				ci++
+				li++
+				continue
+			}
+			if content[ci] <= ' ' && label[li] <= ' ' {
+				for ci < len(content) && content[ci] <= ' ' {
+					ci++
+				}
+				for li < len(label) && label[li] <= ' ' {
+					li++
+				}
+				continue
+			}
+			break
+		}
+		if li == len(label) {
+			return i, ci, true
+		}
+	}
+	return 0, 0, false
+}
+
+func buildPreviewLinksFromMarkdown(rendered, raw string) []previewLinkItem {
+	content := stripANSI(rendered)
+	meta := extractRenderedMarkdownLinks(raw)
+	if len(content) == 0 || len(meta) == 0 {
+		return nil
+	}
+
+	links := make([]previewLinkItem, 0, len(meta))
+	searchStart := 0
+	for _, item := range meta {
+		start, end, ok := findRenderedLabelRange(content, item.label, searchStart)
+		if !ok || end <= start {
+			return nil
+		}
+		line, col := byteOffsetToLineCol(content, start)
+		endLine, endCol := byteOffsetToLineCol(content, end)
+		rendLen := end - start
+		if nl := strings.IndexByte(content[start:end], '\n'); nl >= 0 {
+			rendLen = nl
+		}
+		links = append(links, previewLinkItem{
+			rendLine:    line,
+			rendCol:     col,
+			rendLen:     rendLen,
+			rendEndLine: endLine,
+			rendEndCol:  endCol,
+			target:      item.target,
+			isWikilink:  item.isWikilink,
+			showTarget:  item.showTarget,
+		})
+		searchStart = end
+	}
+	return links
+}
+
+func rebuildPreviewLinksFromRenderedContent(content string) []previewLinkItem {
+	var links []previewLinkItem
 	type matchRange struct{ start, end int }
 	var seen []matchRange
 
@@ -988,18 +1052,15 @@ func (m *Model) rebuildPreviewLinks() {
 		}
 		fullMatch := content[idx[0]:idx[1]]
 		target := content[idx[2]:idx[3]]
-		// Normalize whitespace introduced by soft wrapping in the rendered preview.
 		target = normalizeRenderedLinkTarget(target, isWikilink)
 
 		line, col := byteOffsetToLineCol(content, idx[0])
 		endLine, endCol := byteOffsetToLineCol(content, idx[1])
-		// rendLen: only count chars up to the first newline so the highlight
-		// stays on the starting line.
 		rendLen := len(fullMatch)
 		if nl := strings.IndexByte(fullMatch, '\n'); nl >= 0 {
 			rendLen = nl
 		}
-		m.previewLinks = append(m.previewLinks, previewLinkItem{
+		links = append(links, previewLinkItem{
 			rendLine:    line,
 			rendCol:     col,
 			rendLen:     rendLen,
@@ -1021,7 +1082,21 @@ func (m *Model) rebuildPreviewLinks() {
 		addLink([]int{idx[0], idx[1], idx[0], idx[1]}, false)
 	}
 
-	// Sort into reading order: top-to-bottom, left-to-right.
+	return links
+}
+
+func (m *Model) rebuildPreviewLinks() {
+	m.previewLinks = m.previewLinks[:0]
+	rendered := m.previewBaseContent
+	if rendered == "" {
+		rendered = m.previewContent
+	}
+	if links := buildPreviewLinksFromMarkdown(rendered, m.previewRawContent); len(links) > 0 {
+		m.previewLinks = links
+	} else {
+		m.previewLinks = rebuildPreviewLinksFromRenderedContent(stripANSI(rendered))
+	}
+
 	sort.Slice(m.previewLinks, func(a, b int) bool {
 		la, lb := m.previewLinks[a], m.previewLinks[b]
 		if la.rendLine != lb.rendLine {
@@ -1109,7 +1184,15 @@ func applyLinkSpanHighlight(content string, link previewLinkItem) string {
 			Bold(true).
 			Render(spanText)
 
-		lines[i] = line[:byteStart] + highlighted + line[byteEnd:]
+		suffix := ""
+		if link.showTarget && i == endLine {
+			suffix = lipgloss.NewStyle().
+				Foreground(mutedColor).
+				Background(bgSoftColor).
+				Render(" (" + link.target + ")")
+		}
+
+		lines[i] = line[:byteStart] + highlighted + suffix + line[byteEnd:]
 	}
 	return strings.Join(lines, "\n")
 }
