@@ -12,6 +12,25 @@ It is built for people who want a keyboard-driven notes workflow without giving 
 
 ![noteui demo](demo/noteui-demo.gif)
 
+## Table of contents
+
+- [Try it in 30 seconds](#try-it-in-30-seconds)
+- [Documentation](#documentation)
+- [Highlights](#highlights)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Key features](#key-features)
+  - [Notes and organization](#notes-and-organization)
+  - [Themes](#themes)
+  - [Sync](#sync)
+  - [Todos](#todos)
+  - [Encryption](#encryption)
+- [CLI options](#cli-options)
+- [Sync setup](#sync-setup)
+- [Build from source](#build-from-source)
+
+---
+
 ## Try it in 30 seconds
 
 Already installed noteui? Run:
@@ -33,6 +52,7 @@ Recommended entry points:
 - [Getting started](https://atbuy.github.io/noteui/tutorial/getting-started/)
 - [Installation](https://atbuy.github.io/noteui/tutorial/installation/)
 - [Usage guide](https://atbuy.github.io/noteui/guide/usage/)
+- [Keybindings](https://atbuy.github.io/noteui/guide/keybindings/)
 - [Configuration reference](https://atbuy.github.io/noteui/reference/configuration/)
 - [Environment variables](https://atbuy.github.io/noteui/reference/environment/)
 - [FAQ](https://atbuy.github.io/noteui/faq/)
@@ -40,7 +60,7 @@ Recommended entry points:
 ## Highlights
 
 - browse notes and categories in a tree view
-- preview notes directly in the terminal
+- preview notes directly in the terminal with search highlighting
 - search by title, path, content preview, and tags
 - create, rename, move, and delete notes or categories
 - keep temporary notes separate from your main notes
@@ -48,12 +68,14 @@ Recommended entry points:
 - promote, archive, and batch-process temporary notes
 - pin important notes and categories
 - automatic version history for every note, with an in-app rollback modal (`H`)
+- live theme picker with instant full-UI preview (`ctrl+y`), 20+ built-in themes
 - optional SSH-based sync for `sync: synced` notes with tree sync markers
 - per-workspace `sync_remote_root` keeps multiple workspaces isolated on the remote
 - encrypted note bodies, with atomic writes and history-based recovery
 - customize theme, preview behavior, icons, and keybindings
 - keep your notes as regular files on disk
 - switch between named workspaces with isolated local UI state
+- command palette (`ctrl+p`) for quick access to every action
 
 ## Install
 
@@ -90,6 +112,66 @@ By default, `noteui`:
 - stores temporary notes under `.tmp` inside the notes root
 - opens notes with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`
 - stores local UI state under `$HOME/.local/state/noteui/state.json`
+
+## Key features
+
+### Notes and organization
+
+Notes are plain Markdown files. noteui adds no proprietary format - you can open, edit, and move them with any tool.
+
+- **Tree view**: categories are directories; collapse and expand with `h`/`l`
+- **Editor**: opens with your `$EDITOR`; noteui resumes after you close it
+- **Search**: `/` filters by title, path, content, and tags; `#tag` to narrow by tag
+- **Pins**: `p` pins any note or category; `P` jumps to the pinned items view
+- **Version history**: `H` opens a rollback modal with every saved revision
+- **Trash browser**: `X` lists trashed notes so you can restore them; `Z` undoes the last trash
+- **Daily notes**: `D` opens or creates today's note (configurable path and template)
+
+### Themes
+
+noteui ships with 20+ built-in color themes. You can switch themes three ways:
+
+- **In-app theme picker** (`ctrl+y`): hover to preview the full UI live, `enter` to apply, `esc` to cancel
+- **CLI**: `noteui +set-theme <name>` switches the active theme without opening the UI
+- **Config**: set `theme.name` in `config.toml`
+
+To list all available themes with color swatches:
+
+```sh
+noteui +themes
+```
+
+### Sync
+
+noteui has optional SSH-based sync. Mark a note with `sync: synced` in its frontmatter and noteui will replicate it to a configured remote host using a small helper binary (`noteui-sync`). See [Sync setup](#sync-setup) below.
+
+### Todos
+
+Notes that contain Markdown checkboxes (`- [ ] item`) are recognized as todo lists. The global todos view (`ctrl+t`) aggregates all open tasks across all notes into a single scrollable list. From there you can toggle, edit, and jump to the source note.
+
+### Encryption
+
+`E` toggles encryption on the selected note. Encrypted notes are stored as opaque blobs and decrypted in-memory for preview and editing. Passphrases are per-note and prompted when needed.
+
+## CLI options
+
+```
+noteui [options]
+
+Options:
+  -h, --help            Show help
+  -v, --version         Print version and exit
+  --demo                Launch in demo mode with sample notes
+  -w, --capture TEXT    Append TEXT to inbox.md without opening the UI
+
+Theme management:
+  +themes               List all available themes with color previews
+  +set-theme <name>     Switch the active theme without opening the UI
+
+Environment variables:
+  NOTES_ROOT            Override the default notes root directory
+  NOTEUI_CONFIG         Path to a custom config.toml
+```
 
 ## Sync setup
 

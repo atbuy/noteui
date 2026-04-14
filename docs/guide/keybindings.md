@@ -95,6 +95,10 @@ This page documents the default keybindings that most users care about first.
 - `I`: import all missing synced notes
 - `Z`: undo the last trash operation; restores the trashed note or category to its original path (available until the next deletion or workspace switch)
 
+## Appearance
+
+- `ctrl+y`: open the theme picker; hover over themes to preview them live across the whole UI; `esc` restores the original theme, `enter` saves the selection
+
 ## Customizing keybindings
 
 Keybindings can be overridden in the `[keys]` section of the config file.

@@ -78,6 +78,9 @@ const (
 	cmdSetTodoDueDate        = "set_todo_due_date"
 	cmdSetTodoPriority       = "set_todo_priority"
 	cmdTrashBrowser          = "trash_browser"
+	cmdOpenThemePicker       = "open_theme_picker"
+	cmdOpenDailyNote         = "open_daily_note"
+	cmdOpenNoteHistory       = "open_note_history"
 )
 
 // paletteKind identifies the type of an item in the command palette.
@@ -209,6 +212,8 @@ func paletteCommands(m Model) []paletteCommand {
 		{name: "Show Help", desc: "Open the help modal", category: "app", action: cmdShowHelp},
 		{name: "Show Pins", desc: "Toggle the pins view", category: "view", action: cmdShowPins},
 		{name: "Show Todos", desc: "Toggle the global open todos view", category: "view", action: cmdShowTodos},
+		{name: "Open Theme Picker", desc: "Open the live theme picker (esc to cancel, enter to apply)", category: "app", action: cmdOpenThemePicker},
+		{name: "Open Daily Note", desc: "Open or create today's daily note", category: "notes", action: cmdOpenDailyNote},
 	}
 
 	cmds = appendPaletteCommand(cmds, m.listMode != listModePins,
@@ -267,6 +272,8 @@ func paletteCommands(m Model) []paletteCommand {
 		paletteCommand{name: "Sync Now", desc: "Run sync immediately", category: "sync", action: cmdSyncNow})
 	cmds = appendPaletteCommand(cmds, notesync.HasSyncProfile(m.cfg.Sync),
 		paletteCommand{name: "View Sync Timeline", desc: "Show history of sync runs for this workspace", category: "sync", action: cmdShowSyncTimeline})
+	cmds = appendPaletteCommand(cmds, m.canOpenNoteHistory(),
+		paletteCommand{name: "Note History", desc: "Open version history for the selected note", category: "notes", action: cmdOpenNoteHistory})
 	cmds = appendPaletteCommand(cmds, m.canToggleEncryptionCurrent(),
 		paletteCommand{name: "Toggle Note Encryption", desc: "Encrypt or decrypt the selected note", category: "notes", action: cmdToggleEncryption})
 	cmds = appendPaletteCommand(cmds, m.canAddTodoItem(),
@@ -431,6 +438,10 @@ func (m Model) canImportCurrentRemoteNote() bool {
 
 func (m Model) canToggleEncryptionCurrent() bool {
 	return m.currentRemoteOnlyNote() == nil && strings.TrimSpace(m.currentNotePath()) != ""
+}
+
+func (m Model) canOpenNoteHistory() bool {
+	return m.currentLocalNote() != nil
 }
 
 func (m Model) canAddTodoItem() bool {
@@ -1361,6 +1372,13 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 	case cmdSetTodoPriority:
 		m.armSetCurrentTodoPriority()
 		return nil
+	case cmdOpenThemePicker:
+		m.openThemePicker()
+		return nil
+	case cmdOpenDailyNote:
+		return m.openDailyNote()
+	case cmdOpenNoteHistory:
+		return m.openNoteHistory()
 	}
 	return nil
 }
