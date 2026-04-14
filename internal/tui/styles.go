@@ -625,6 +625,55 @@ func builtinTheme(name string) themePalette {
 	}
 }
 
+// BuiltinThemeEntry describes a built-in theme available for use in config.toml.
+type BuiltinThemeEntry struct {
+	// Name is the value to set as theme.name in config.toml.
+	Name string
+	// Aliases lists alternate names accepted by the config parser.
+	Aliases []string
+	// Description is a short human-readable summary of the theme's look and feel.
+	Description string
+	// Palette is the resolved color palette for the theme.
+	Palette themePalette
+}
+
+// BuiltinThemes returns the list of all built-in themes with their palettes and descriptions.
+func BuiltinThemes() []BuiltinThemeEntry {
+	entries := []struct {
+		name    string
+		aliases []string
+		desc    string
+	}{
+		{"default", nil, "Dark theme with deep purple accents"},
+		{"nord", nil, "Arctic dark theme with cool blue and slate tones"},
+		{"gruvbox", nil, "Retro dark theme with warm amber and earthy browns"},
+		{"catppuccin", []string{"catppuccin-mocha", "mocha"}, "Soothing dark theme with soft pastel colors (Catppuccin Mocha)"},
+		{"latte", []string{"catppuccin-latte"}, "Warm light theme with gentle pastel tones (Catppuccin Latte)"},
+		{"solarized-light", nil, "Light theme using the iconic Solarized color palette"},
+		{"paper", nil, "Minimal light theme inspired by ink on paper"},
+		{"onedark", nil, "Dark theme inspired by Atom's One Dark colorscheme"},
+		{"kanagawa", nil, "Dark theme with warm earth tones evoking Japanese woodblock art"},
+		{"dracula", nil, "Dark theme with vibrant neon pink and purple accents"},
+		{"everforest", []string{"everforest-dark"}, "Comfortable dark theme with natural muted green tones"},
+		{"tokyo-night-storm", []string{"tokyonight-storm"}, "Dark theme evoking neon city lights on a rainy Tokyo night"},
+		{"github-light", nil, "Light theme faithful to GitHub's interface colors"},
+		{"github-dark", nil, "Dark theme faithful to GitHub's interface colors"},
+		{"carbonfox", nil, "Sleek dark theme with IBM Carbon design aesthetics"},
+		{"crimson", nil, "Deep dark theme with rich crimson and wine-red accents"},
+		{"dusk", nil, "Dark theme with twilight purples evoking the last light of day"},
+	}
+	result := make([]BuiltinThemeEntry, len(entries))
+	for i, e := range entries {
+		result[i] = BuiltinThemeEntry{
+			Name:        e.name,
+			Aliases:     e.aliases,
+			Description: e.desc,
+			Palette:     builtinTheme(e.name),
+		}
+	}
+	return result
+}
+
 func normalizeThemeName(name string) string {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "catppuccin-mocha", "mocha":

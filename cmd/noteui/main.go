@@ -30,6 +30,9 @@ func main() {
 		case "--version", "-version", "-v":
 			fmt.Println(buildinfo.Version)
 			return
+		case "+themes":
+			printThemes(os.Stdout)
+			return
 		case "--capture", "-w":
 			captureMode = true
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
@@ -38,6 +41,9 @@ func main() {
 			}
 		case "--demo":
 			demoMode = true
+		default:
+			printError(os.Stderr, fmt.Sprintf("unknown option %q", args[i]))
+			os.Exit(1)
 		}
 	}
 

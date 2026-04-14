@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"atbuy/noteui/internal/buildinfo"
+	"atbuy/noteui/internal/tui"
 )
 
 const banner = `
@@ -33,6 +34,7 @@ var helpFlags = []flagDef{
 	{"-v, --version", "Print version and exit"},
 	{"    --demo", "Launch in demo mode with sample notes"},
 	{"-w, --capture", "Append text to inbox.md without opening the TUI"},
+	{"   +themes", "List all available themes with color previews"},
 }
 
 var helpEnvs = []envDef{
@@ -74,6 +76,72 @@ func printHelp(w io.Writer) {
 	p("  %s  %s\n", green.Render(fmt.Sprintf("%-26s", "NOTES_ROOT=~/work noteui")), muted.Render("Use a custom notes directory"))
 	p("  %s  %s\n", green.Render(fmt.Sprintf("%-26s", `noteui --capture "buy milk"`)), muted.Render("Append a quick note to inbox.md"))
 	p("\n")
+
+	_, _ = io.WriteString(w, sb.String())
+}
+
+func printError(w io.Writer, msg string) {
+	errorLabel := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#D75F5F")).
+		Render("error:")
+	msgStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#E5E5E5")).
+		Render(msg)
+	hint := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#666666")).
+		Render("Run 'noteui --help' for usage.")
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%s %s\n%s\n", errorLabel, msgStyle, hint)
+	_, _ = io.WriteString(w, sb.String())
+}
+
+func printThemes(w io.Writer) {
+	bold := lipgloss.NewStyle().Bold(true)
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A8A8"))
+	subtle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+
+	var sb strings.Builder
+	p := func(format string, args ...any) { _, _ = fmt.Fprintf(&sb, format, args...) }
+
+	p("%s\n\n", bold.Render("THEMES"))
+	p("  %s\n\n", muted.Render(`Set a theme in config.toml with:  [theme]  name = "..."`))
+
+	for _, entry := range tui.BuiltinThemes() {
+		pal := entry.Palette
+
+		// Build color swatches from key palette colors.
+		swatch := func(hex string) string {
+			return lipgloss.NewStyle().Foreground(lipgloss.Color(hex)).Render("███")
+		}
+		swatches := swatch(pal.BgColor) +
+			swatch(pal.PanelBgColor) +
+			swatch(pal.AccentColor) +
+			swatch(pal.AccentSoftColor) +
+			swatch(pal.TextColor) +
+			swatch(pal.SuccessColor) +
+			swatch(pal.ErrorColor)
+
+		// Name styled with the theme's own accent color.
+		nameStyle := lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(pal.AccentColor))
+		nameField := fmt.Sprintf("%-20s", entry.Name)
+
+		// Aliases, if any.
+		aliasLine := ""
+		if len(entry.Aliases) > 0 {
+			aliasLine = subtle.Render("  also: "+strings.Join(entry.Aliases, ", ")) + "\n"
+		}
+
+		p("  %s  %s\n", nameStyle.Render(nameField), swatches)
+		p("  %s%s\n", muted.Render(entry.Description), "")
+		if aliasLine != "" {
+			p("%s", aliasLine)
+		}
+		p("\n")
+	}
 
 	_, _ = io.WriteString(w, sb.String())
 }
