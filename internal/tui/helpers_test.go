@@ -237,28 +237,28 @@ func TestNewThemesLoadWithoutPanic(t *testing.T) {
 }
 
 func TestThemeAndColorHelpers(t *testing.T) {
-	if got := normalizeThemeName(" mocha "); got != "catppuccin" {
+	if got := NormalizeThemeName(" mocha "); got != "catppuccin" {
 		require.Failf(t, "assertion failed", "expected mocha alias to normalize to catppuccin, got %q", got)
 	}
-	if got := normalizeThemeName("Catppuccin-Latte"); got != "latte" {
+	if got := NormalizeThemeName("Catppuccin-Latte"); got != "latte" {
 		require.Failf(t, "assertion failed", "expected latte alias to normalize to latte, got %q", got)
 	}
-	if got := normalizeThemeName("crimson"); got != "crimson" {
+	if got := NormalizeThemeName("crimson"); got != "crimson" {
 		require.Failf(t, "assertion failed", "expected 'crimson' to pass through unchanged, got %q", got)
 	}
-	if got := normalizeThemeName("dusk"); got != "dusk" {
+	if got := NormalizeThemeName("dusk"); got != "dusk" {
 		require.Failf(t, "assertion failed", "expected 'dusk' to pass through unchanged, got %q", got)
 	}
-	if got := normalizeThemeName("rosepine"); got != "rose-pine" {
+	if got := NormalizeThemeName("rosepine"); got != "rose-pine" {
 		require.Failf(t, "assertion failed", "expected rosepine alias to normalize to rose-pine, got %q", got)
 	}
-	if got := normalizeThemeName("ayu"); got != "ayu-dark" {
+	if got := NormalizeThemeName("ayu"); got != "ayu-dark" {
 		require.Failf(t, "assertion failed", "expected ayu alias to normalize to ayu-dark, got %q", got)
 	}
-	if got := normalizeThemeName("solarized"); got != "solarized-dark" {
+	if got := NormalizeThemeName("solarized"); got != "solarized-dark" {
 		require.Failf(t, "assertion failed", "expected solarized alias to normalize to solarized-dark, got %q", got)
 	}
-	if got := normalizeThemeName("material-dark"); got != "material" {
+	if got := NormalizeThemeName("material-dark"); got != "material" {
 		require.Failf(t, "assertion failed", "expected material-dark alias to normalize to material, got %q", got)
 	}
 

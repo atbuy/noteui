@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"atbuy/noteui/internal/tui"
 )
 
 func TestPrintHelpContainsExpectedSections(t *testing.T) {
@@ -10,7 +12,7 @@ func TestPrintHelpContainsExpectedSections(t *testing.T) {
 	printHelp(&buf)
 	out := buf.String()
 
-	for _, want := range []string{"USAGE", "FLAGS", "ENVIRONMENT", "EXAMPLES", "--help", "--version", "--demo", "+themes", "NOTES_ROOT", "NOTEUI_CONFIG"} {
+	for _, want := range []string{"USAGE", "FLAGS", "ENVIRONMENT", "EXAMPLES", "--help", "--version", "--demo", "+themes", "+set-theme", "NOTES_ROOT", "NOTEUI_CONFIG"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("printHelp output missing %q", want)
 		}
@@ -27,6 +29,37 @@ func TestPrintHelpContainsBanner(t *testing.T) {
 	}
 	if !strings.Contains(out, "keyboard-driven terminal notes") {
 		t.Error("printHelp output missing tagline")
+	}
+}
+
+func TestPrintThemesContainsSetThemeTip(t *testing.T) {
+	var buf strings.Builder
+	printThemes(&buf)
+	out := buf.String()
+	if !strings.Contains(out, "+set-theme") {
+		t.Error("printThemes output missing +set-theme tip")
+	}
+}
+
+func TestPrintThemeChangedContainsOldAndNewName(t *testing.T) {
+	var buf strings.Builder
+	var entry tui.BuiltinThemeEntry
+	for _, e := range tui.BuiltinThemes() {
+		if e.Name == "dracula" {
+			entry = e
+			break
+		}
+	}
+	printThemeChanged(&buf, "nord", "dracula", "/home/user/.config/noteui/config.toml", entry)
+	out := buf.String()
+	if !strings.Contains(out, "nord") {
+		t.Error("printThemeChanged output missing old theme name")
+	}
+	if !strings.Contains(out, "dracula") {
+		t.Error("printThemeChanged output missing new theme name")
+	}
+	if !strings.Contains(out, "/home/user/.config/noteui/config.toml") {
+		t.Error("printThemeChanged output missing config path")
 	}
 }
 

@@ -86,6 +86,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Filter", key: keys.Search.Help().Key, desc: "Search"},
 		{section: "Filter", key: "#tag", desc: "Filter by tag in search"},
 		{section: "Filter", key: "esc", desc: "Leave search, then clear on second press"},
+		{section: "Global", key: keys.ShowThemePicker.Help().Key, desc: "Open theme picker (live preview, esc to cancel)"},
 		{section: "Global", key: keys.Focus.Help().Key, desc: "Switch focused pane"},
 		{section: "Global", key: keys.SortKey.Help().Key, desc: "Sort menu (name / modified / created / size / reverse)"},
 		{section: "Global", key: keys.Refresh.Help().Key, desc: "Refresh"},

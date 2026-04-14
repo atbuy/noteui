@@ -87,6 +87,7 @@ type keyMap struct {
 	OpenDailyNote    key.Binding
 	LinkKey          key.Binding
 	FollowLink       key.Binding
+	ShowThemePicker  key.Binding
 }
 
 var keys = keyMap{
@@ -391,6 +392,10 @@ var keys = keyMap{
 		key.WithKeys("f"),
 		key.WithHelp("f", "Follow selected link"),
 	),
+	ShowThemePicker: key.NewBinding(
+		key.WithKeys("ctrl+y"),
+		key.WithHelp("ctrl+y", "Theme picker"),
+	),
 }
 
 // ApplyConfigKeys overwrites key bindings with user-provided overrides from config.
@@ -480,6 +485,7 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.OpenDailyNote, cfg.OpenDailyNote)
 	apply(&keys.LinkKey, cfg.LinkKey)
 	apply(&keys.FollowLink, cfg.FollowLink)
+	apply(&keys.ShowThemePicker, cfg.ShowThemePicker)
 }
 
 // ValidateKeyCollisions checks for duplicate key assignments among primary bindings
@@ -551,6 +557,7 @@ func ValidateKeyCollisions() []string {
 		{"new_template", &keys.NewTemplate},
 		{"edit_templates", &keys.EditTemplates},
 		{"open_daily_note", &keys.OpenDailyNote},
+		{"show_theme_picker", &keys.ShowThemePicker},
 	}
 
 	seen := make(map[string][]string) // key string -> action names

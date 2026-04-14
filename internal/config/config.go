@@ -204,6 +204,7 @@ type KeysConfig struct {
 	OpenDailyNote            []string `toml:"open_daily_note"`
 	LinkKey                  []string `toml:"link_key"`
 	FollowLink               []string `toml:"follow_link"`
+	ShowThemePicker          []string `toml:"show_theme_picker"`
 }
 
 func Default() Config {
@@ -449,6 +450,17 @@ func ValidThemeNames() []string {
 		"carbonfox",
 		"crimson",
 		"dusk",
+		"rose-pine",
+		"rosepine",
+		"rose_pine",
+		"monokai",
+		"solarized-dark",
+		"solarized",
+		"ayu-dark",
+		"ayu",
+		"material",
+		"material-dark",
+		"nightfox",
 	}
 }
 

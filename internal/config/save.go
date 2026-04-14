@@ -45,6 +45,28 @@ func Save(cfg Config) error {
 	return encErr
 }
 
+// SaveTheme updates theme.name in the config file and returns the previous
+// theme name and the path of the file that was written.
+func SaveTheme(name string) (oldName, configPath string, err error) {
+	cfg, err := Load()
+	if err != nil {
+		return "", "", err
+	}
+	oldName = strings.TrimSpace(cfg.Theme.Name)
+	if oldName == "" {
+		oldName = "default"
+	}
+	cfg.Theme.Name = name
+	path, err := ResolvePath()
+	if err != nil {
+		return "", "", err
+	}
+	if err := Save(cfg); err != nil {
+		return "", "", err
+	}
+	return oldName, path, nil
+}
+
 func SaveDefaultSyncProfile(profile string) (Config, string, error) {
 	cfg, err := Load()
 	if err != nil {

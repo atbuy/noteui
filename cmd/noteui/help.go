@@ -35,6 +35,7 @@ var helpFlags = []flagDef{
 	{"    --demo", "Launch in demo mode with sample notes"},
 	{"-w, --capture", "Append text to inbox.md without opening the TUI"},
 	{"   +themes", "List all available themes with color previews"},
+	{"   +set-theme <name>", "Switch the active theme without opening the editor"},
 }
 
 var helpEnvs = []envDef{
@@ -101,6 +102,7 @@ func printThemes(w io.Writer) {
 	bold := lipgloss.NewStyle().Bold(true)
 	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A8A8"))
 	subtle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	accent := lipgloss.NewStyle().Foreground(lipgloss.Color("#9E7CC0"))
 
 	var sb strings.Builder
 	p := func(format string, args ...any) { _, _ = fmt.Fprintf(&sb, format, args...) }
@@ -136,12 +138,49 @@ func printThemes(w io.Writer) {
 		}
 
 		p("  %s  %s\n", nameStyle.Render(nameField), swatches)
-		p("  %s%s\n", muted.Render(entry.Description), "")
+		p("  %s\n", muted.Render(entry.Description))
 		if aliasLine != "" {
 			p("%s", aliasLine)
 		}
 		p("\n")
 	}
+
+	p("%s  %s\n",
+		accent.Render("Tip:"),
+		muted.Render("noteui +set-theme <name>   switch theme without editing config.toml"),
+	)
+
+	_, _ = io.WriteString(w, sb.String())
+}
+
+func printThemeChanged(w io.Writer, oldName, newName, configPath string, newPalette tui.BuiltinThemeEntry) {
+	bold := lipgloss.NewStyle().Bold(true)
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A8A8"))
+	subtle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	newAccent := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(newPalette.Palette.AccentColor))
+
+	swatch := func(hex string) string {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(hex)).Render("███")
+	}
+	swatches := swatch(newPalette.Palette.BgColor) +
+		swatch(newPalette.Palette.PanelBgColor) +
+		swatch(newPalette.Palette.AccentColor) +
+		swatch(newPalette.Palette.AccentSoftColor) +
+		swatch(newPalette.Palette.TextColor) +
+		swatch(newPalette.Palette.SuccessColor) +
+		swatch(newPalette.Palette.ErrorColor)
+
+	var sb strings.Builder
+	p := func(format string, args ...any) { _, _ = fmt.Fprintf(&sb, format, args...) }
+
+	p("%s\n", bold.Render("Theme switched"))
+	p("%s  %s  %s  %s\n",
+		muted.Render(oldName),
+		subtle.Render("→"),
+		newAccent.Render(newName),
+		swatches,
+	)
+	p("%s\n", subtle.Render(configPath))
 
 	_, _ = io.WriteString(w, sb.String())
 }

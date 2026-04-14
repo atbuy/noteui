@@ -241,6 +241,50 @@ func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
 	require.Equal(t, "backup-host", reloaded.Sync.Profiles["backup"].SSHHost)
 }
 
+func TestSaveThemeWritesNewThemeAndReturnsOld(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := "[theme]\nname = \"nord\"\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	oldName, writtenPath, err := SaveTheme("dracula")
+	require.NoError(t, err)
+	require.Equal(t, "nord", oldName)
+	require.Equal(t, path, writtenPath)
+
+	reloaded, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "dracula", reloaded.Theme.Name)
+}
+
+func TestSaveThemeReturnsDefaultWhenNoConfigExists(t *testing.T) {
+	t.Setenv("NOTEUI_CONFIG", filepath.Join(t.TempDir(), "missing.toml"))
+
+	oldName, _, err := SaveTheme("nord")
+	require.NoError(t, err)
+	require.Equal(t, "default", oldName)
+}
+
+func TestValidThemeNamesIncludesNewThemes(t *testing.T) {
+	names := ValidThemeNames()
+	for _, want := range []string{
+		"rose-pine", "rosepine", "monokai", "solarized-dark", "solarized",
+		"ayu-dark", "ayu", "material", "material-dark", "nightfox",
+	} {
+		found := false
+		for _, n := range names {
+			if n == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("ValidThemeNames missing %q", want)
+		}
+	}
+}
+
 func TestValidateRejectsUnknownDefaultWorkspace(t *testing.T) {
 	cfg := Default()
 	cfg.DefaultWorkspace = "missing"

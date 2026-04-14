@@ -33,6 +33,32 @@ func main() {
 		case "+themes":
 			printThemes(os.Stdout)
 			return
+		case "+set-theme":
+			if i+1 >= len(args) {
+				printError(os.Stderr, "usage: noteui +set-theme <name>  (run 'noteui +themes' to see available themes)")
+				os.Exit(1)
+			}
+			name := args[i+1]
+			i++
+			if !config.IsValidThemeName(name) {
+				printError(os.Stderr, fmt.Sprintf("unknown theme %q - run 'noteui +themes' to see available themes", name))
+				os.Exit(1)
+			}
+			canonical := tui.NormalizeThemeName(name)
+			oldName, configPath, saveErr := config.SaveTheme(canonical)
+			if saveErr != nil {
+				printError(os.Stderr, fmt.Sprintf("failed to save config: %v", saveErr))
+				os.Exit(1)
+			}
+			var newEntry tui.BuiltinThemeEntry
+			for _, entry := range tui.BuiltinThemes() {
+				if entry.Name == canonical {
+					newEntry = entry
+					break
+				}
+			}
+			printThemeChanged(os.Stdout, oldName, canonical, configPath, newEntry)
+			return
 		case "--capture", "-w":
 			captureMode = true
 			if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {

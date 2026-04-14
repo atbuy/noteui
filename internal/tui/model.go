@@ -442,6 +442,11 @@ type Model struct {
 	templateItems          []notes.Template
 	templatePickerCursor   int
 	templatePickerRelDir   string
+
+	showThemePicker          bool
+	themePickerCursor        int
+	themePickerScrollOffset  int
+	themePickerOrigTheme     string
 }
 
 type dataLoadedMsg struct {
@@ -2572,6 +2577,20 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 
+		if m.showThemePicker {
+			switch {
+			case msg.String() == "esc":
+				m.cancelThemePicker()
+			case msg.Type == tea.KeyEnter:
+				m.confirmThemePicker()
+			case key.Matches(msg, keys.MoveUp):
+				m.moveThemePickerCursor(-1)
+			case key.Matches(msg, keys.MoveDown):
+				m.moveThemePickerCursor(1)
+			}
+			return m, nil
+		}
+
 		if m.showCommandPalette {
 			var paletteCmd tea.Cmd
 			switch msg.Type {
@@ -2799,6 +2818,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		if key.Matches(msg, keys.SortKey) {
 			m.pendingSort = true
 			m.status = "sort: [n]ame  [m]odified  [c]reated  [s]ize  [r]everse  esc=cancel"
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.ShowThemePicker) {
+			m.openThemePicker()
 			return m, nil
 		}
 

@@ -210,6 +210,10 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showThemePicker {
+		return placeOverlay(m.renderBaseView(), m.renderThemePickerModal(), m.width, m.height)
+	}
+
 	if m.showHelp {
 		return lipgloss.Place(
 			m.width,

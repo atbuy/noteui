@@ -280,7 +280,7 @@ func ApplyTheme(cfg config.Config) {
 }
 
 func builtinTheme(name string) themePalette {
-	switch normalizeThemeName(name) {
+	switch NormalizeThemeName(name) {
 	case "nord":
 		return themePalette{
 			BgColor:          "#2E3440",
@@ -800,7 +800,8 @@ func BuiltinThemes() []BuiltinThemeEntry {
 	return result
 }
 
-func normalizeThemeName(name string) string {
+// NormalizeThemeName returns the canonical theme name for any accepted alias.
+func NormalizeThemeName(name string) string {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "catppuccin-mocha", "mocha":
 		return "catppuccin"
