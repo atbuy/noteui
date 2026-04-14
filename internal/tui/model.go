@@ -205,18 +205,22 @@ type (
 )
 
 type previewTodoItem struct {
-	rawLine  int
-	rendLine int
-	checked  bool
-	text     string
+	rawLine     int
+	rendLine    int
+	rendEndLine int
+	checked     bool
+	text        string
+	raw         string
 }
 
 type previewLinkItem struct {
-	rendLine   int
-	rendCol    int // byte offset in the ANSI-stripped line where the full match starts
-	matchLen   int // byte length of the full match in the stripped line
-	target     string
-	isWikilink bool
+	rendLine    int
+	rendCol     int // byte offset in the ANSI-stripped line where the match starts
+	rendLen     int // bytes to highlight on rendLine (capped at the first newline in the match)
+	rendEndLine int // line where the full match ends
+	rendEndCol  int // byte offset in rendEndLine where the full match ends (exclusive)
+	target      string
+	isWikilink  bool
 }
 
 type treeItem struct {
@@ -445,10 +449,10 @@ type Model struct {
 	templatePickerCursor   int
 	templatePickerRelDir   string
 
-	showThemePicker          bool
-	themePickerCursor        int
-	themePickerScrollOffset  int
-	themePickerOrigTheme     string
+	showThemePicker         bool
+	themePickerCursor       int
+	themePickerScrollOffset int
+	themePickerOrigTheme    string
 }
 
 type dataLoadedMsg struct {

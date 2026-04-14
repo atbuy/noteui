@@ -476,15 +476,16 @@ func (m *Model) rebuildPreviewTodos(raw, rendered string, rawLineOffset int) {
 		lineIdx int
 		checked bool
 		text    string
+		raw     string
 	}
 	var rawTodos []rawTodo
 	for i, line := range rawLines {
 		trimmed := strings.TrimLeft(line, " \t")
 		switch {
 		case strings.HasPrefix(trimmed, "- [ ] "):
-			rawTodos = append(rawTodos, rawTodo{i, false, trimmed[6:]})
+			rawTodos = append(rawTodos, rawTodo{i, false, trimmed[6:], line})
 		case strings.HasPrefix(trimmed, "- [x] "), strings.HasPrefix(trimmed, "- [X] "):
-			rawTodos = append(rawTodos, rawTodo{i, true, trimmed[6:]})
+			rawTodos = append(rawTodos, rawTodo{i, true, trimmed[6:], line})
 		}
 	}
 	if len(rawTodos) == 0 {
@@ -504,20 +505,51 @@ func (m *Model) rebuildPreviewTodos(raw, rendered string, rawLineOffset int) {
 
 	limit := min(len(rawTodos), len(rendTodoLines))
 	for i := range limit {
+		startLine := rendTodoLines[i]
+		var rendEndLine int
+		if i+1 < len(rendTodoLines) {
+			// Every line up to (but not including) the next todo's start belongs to
+			// this item – no re-render needed and the width always matches.
+			rendEndLine = rendTodoLines[i+1] - 1
+		} else {
+			// Last matched todo: scan forward through indented continuation lines.
+			rendEndLine = startLine
+			for j := startLine + 1; j < len(rendLines); j++ {
+				t := strings.TrimSpace(rendLines[j])
+				if t == "" {
+					break
+				}
+				if strings.HasPrefix(t, "[ ]") || strings.HasPrefix(t, "[X]") ||
+					strings.HasPrefix(t, "[x]") {
+					break
+				}
+				if !strings.HasPrefix(rendLines[j], " ") {
+					break
+				}
+				rendEndLine = j
+			}
+		}
+		if rendEndLine >= len(rendLines) {
+			rendEndLine = len(rendLines) - 1
+		}
 		m.previewTodos = append(m.previewTodos, previewTodoItem{
-			rawLine:  rawLineOffset + rawTodos[i].lineIdx,
-			rendLine: rendTodoLines[i],
-			checked:  rawTodos[i].checked,
-			text:     rawTodos[i].text,
+			rawLine:     rawLineOffset + rawTodos[i].lineIdx,
+			rendLine:    startLine,
+			rendEndLine: rendEndLine,
+			checked:     rawTodos[i].checked,
+			text:        rawTodos[i].text,
+			raw:         rawTodos[i].raw,
 		})
 	}
 
 	for i := limit; i < len(rawTodos); i++ {
 		m.previewTodos = append(m.previewTodos, previewTodoItem{
-			rawLine:  rawLineOffset + rawTodos[i].lineIdx,
-			rendLine: -1,
-			checked:  rawTodos[i].checked,
-			text:     rawTodos[i].text,
+			rawLine:     rawLineOffset + rawTodos[i].lineIdx,
+			rendLine:    -1,
+			rendEndLine: -1,
+			checked:     rawTodos[i].checked,
+			text:        rawTodos[i].text,
+			raw:         rawTodos[i].raw,
 		})
 	}
 
@@ -586,25 +618,110 @@ func (m *Model) jumpToLastTodo() {
 }
 
 func applyTodoLineHighlight(content string, rendLine int) string {
+	return applyTodoPreviewHighlight(
+		content,
+		previewTodoItem{rendLine: rendLine, rendEndLine: rendLine},
+		0,
+	)
+}
+
+func (m *Model) previewTodoRenderedLines(rawLine string) []string {
+	if strings.TrimSpace(rawLine) == "" {
+		return nil
+	}
+	rendered := renderMarkdownTerminal(rawLine+"\n", markdownRenderOptions{
+		Width:           m.preview.Width,
+		SyntaxHighlight: m.cfg.Preview.SyntaxHighlight,
+		CodeStyle:       m.cfg.Preview.CodeStyle,
+	})
+	if strings.TrimSpace(stripANSI(rendered)) == "" {
+		return nil
+	}
+	return strings.Split(rendered, "\n")
+}
+
+func normalizeRenderedTodoLine(line string) string {
+	return strings.TrimRight(stripANSI(line), " ")
+}
+
+func (m *Model) replaceTodoPreviewBlock(content string, todo previewTodoItem) (string, bool) {
+	if todo.raw == "" || todo.rendLine < 0 {
+		return "", false
+	}
+	renderedLines := m.previewTodoRenderedLines(todo.raw)
+	if len(renderedLines) == 0 {
+		return "", false
+	}
+	lines := strings.Split(content, "\n")
+	if todo.rendLine+len(renderedLines) > len(lines) {
+		return "", false
+	}
+	for i := range renderedLines {
+		if normalizeRenderedTodoLine(lines[todo.rendLine+i]) != normalizeRenderedTodoLine(renderedLines[i]) {
+			return "", false
+		}
+	}
+	for i := range renderedLines {
+		lines[todo.rendLine+i] = highlightTodoLine(renderedLines[i], m.preview.Width)
+	}
+	return strings.Join(lines, "\n"), true
+}
+
+func applyTodoPreviewHighlight(content string, todo previewTodoItem, width int) string {
+	rendLine := todo.rendLine
 	if rendLine < 0 {
 		return content
 	}
+	rendEndLine := max(todo.rendEndLine, rendLine)
 	lines := strings.Split(content, "\n")
 	if rendLine >= len(lines) {
 		return content
 	}
-	if hasANSI(lines[rendLine]) {
-		lines[rendLine] = renderSelectedRenderedTodoLine(lines[rendLine])
-	} else {
-		lines[rendLine] = renderSelectedTodoLine(lines[rendLine])
+	if rendEndLine >= len(lines) {
+		rendEndLine = len(lines) - 1
+	}
+	for i := rendLine; i <= rendEndLine; i++ {
+		lines[i] = highlightTodoLine(lines[i], width)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func renderTodoPreviewBody(text string, selected bool, bg lipgloss.Color, textFg lipgloss.Color) string {
+// highlightTodoLine highlights one rendered line as the selected todo.
+// It replaces every background colour in the ANSI stream with selectedBgColor
+// so all foreground colours (checkbox red/green, priority, due-date, inline-
+// code, bold, italic) are preserved while the entire row gets the selection
+// background.  When no ANSI is present (markdown rendering disabled) it falls
+// back to a plain re-render.
+func highlightTodoLine(line string, width int) string {
+	bgParam, ok := ansiBackgroundParam(selectedBgColor)
+	if !ok || !hasANSI(line) {
+		return lipgloss.NewStyle().
+			Background(selectedBgColor).
+			Foreground(selectedFgColor).
+			Width(width).
+			Render(stripANSI(line))
+	}
+	bgEsc := "\x1b[" + bgParam + "m"
+
+	// 1. Swap every explicit background colour for the selection background.
+	result := ansiAnyBgColorRe.ReplaceAllString(line, bgParam)
+	// 2. Re-inject the selection background at the start and after every reset
+	//    so characters that had no explicit background also get it.
+	result = bgEsc + strings.ReplaceAll(result, "\x1b[0m", "\x1b[0m"+bgEsc)
+
+	// 3. Pad to the full viewport width with the selection background.
+	if width > 0 {
+		if w := lipgloss.Width(result); width > w {
+			result += bgEsc + strings.Repeat(" ", width-w) + "\x1b[0m"
+		}
+	}
+	return result
+}
+
+func renderTodoPreviewBody(text string, bg lipgloss.Color, textFg lipgloss.Color) string {
 	display, metadata := notes.ParseTodoMetadata(text)
 	display = strings.TrimSpace(display)
-	base := lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected)
+	base := lipgloss.NewStyle().Background(bg).Foreground(textFg)
 	if metadata.Priority == 0 && strings.TrimSpace(metadata.DueDate) == "" {
 		return base.Render(display)
 	}
@@ -615,24 +732,32 @@ func renderTodoPreviewBody(text string, selected bool, bg lipgloss.Color, textFg
 	}
 	if metadata.Priority > 0 {
 		priority := fmt.Sprintf("[p%d]", metadata.Priority)
-		parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(todoPriorityColor(metadata.Priority)).Bold(selected).Render(priority))
+		parts = append(
+			parts,
+			lipgloss.NewStyle().
+				Background(bg).
+				Foreground(todoPriorityColor(metadata.Priority)).
+				Render(priority),
+		)
 	}
 	if metadata.DueDate != "" {
 		due := "[due:" + metadata.DueDate + "]"
-		parts = append(parts, lipgloss.NewStyle().Background(bg).Foreground(todoDueDateColor(metadata.DueDate, time.Now().Format("2006-01-02"))).Bold(selected).Render(due))
+		parts = append(
+			parts,
+			lipgloss.NewStyle().
+				Background(bg).
+				Foreground(todoDueDateColor(metadata.DueDate, time.Now().Format("2006-01-02"))).
+				Render(due),
+		)
 	}
 	return strings.Join(parts, lipgloss.NewStyle().Background(bg).Render(" "))
 }
 
-func renderTodoPreviewLine(plain string, selected bool) string {
+func renderTodoPreviewLine(plain string) string {
 	bg := bgSoftColor
 	textFg := textColor
 	checkedFg := successColor
 	uncheckedFg := errorColor
-	if selected {
-		bg = selectedBgColor
-		textFg = selectedFgColor
-	}
 
 	indentWidth := len(plain) - len(strings.TrimLeft(plain, " "))
 	indent := strings.Repeat(" ", indentWidth)
@@ -648,7 +773,7 @@ func renderTodoPreviewLine(plain string, selected bool) string {
 			indentPart,
 			lipgloss.NewStyle().Background(bg).Foreground(checkedFg).Bold(true).Render("[X]"),
 			spacePart,
-			renderTodoPreviewBody(rest, selected, bg, textFg),
+			renderTodoPreviewBody(rest, bg, textFg),
 		)
 	case strings.HasPrefix(body, "[ ] "):
 		rest := body[4:]
@@ -657,35 +782,11 @@ func renderTodoPreviewLine(plain string, selected bool) string {
 			indentPart,
 			lipgloss.NewStyle().Background(bg).Foreground(uncheckedFg).Bold(true).Render("[ ]"),
 			spacePart,
-			renderTodoPreviewBody(rest, selected, bg, textFg),
+			renderTodoPreviewBody(rest, bg, textFg),
 		)
 	default:
-		return lipgloss.NewStyle().Background(bg).Foreground(textFg).Bold(selected).Render(plain)
+		return lipgloss.NewStyle().Background(bg).Foreground(textFg).Render(plain)
 	}
-}
-
-func renderSelectedTodoLine(plain string) string {
-	return renderTodoPreviewLine(plain, true)
-}
-
-func renderSelectedRenderedTodoLine(line string) string {
-	line = replaceRenderedBackground(line, bgSoftColor, selectedBgColor)
-	if strings.TrimSpace(stripANSI(line)) == "" {
-		return lipgloss.NewStyle().Background(selectedBgColor).Render(stripANSI(line))
-	}
-	return line
-}
-
-func replaceRenderedBackground(line string, from, to lipgloss.Color) string {
-	fromParam, ok := ansiBackgroundParam(from)
-	if !ok {
-		return line
-	}
-	toParam, ok := ansiBackgroundParam(to)
-	if !ok {
-		return line
-	}
-	return strings.ReplaceAll(line, fromParam, toParam)
 }
 
 func ansiBackgroundParam(color lipgloss.Color) (string, bool) {
@@ -693,7 +794,12 @@ func ansiBackgroundParam(color lipgloss.Color) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return fmt.Sprintf("48;2;%d;%d;%d", clampChannel(rgb.r), clampChannel(rgb.g), clampChannel(rgb.b)), true
+	return fmt.Sprintf(
+		"48;2;%d;%d;%d",
+		clampChannel(rgb.r),
+		clampChannel(rgb.g),
+		clampChannel(rgb.b),
+	), true
 }
 
 func hasANSI(s string) bool {
@@ -803,8 +909,9 @@ func applyTodoDueDateHints(content string) string {
 		}
 		plain := stripANSI(line)
 		trimmed := strings.TrimSpace(plain)
-		if strings.HasPrefix(trimmed, "[ ] ") || strings.HasPrefix(trimmed, "[X] ") || strings.HasPrefix(trimmed, "[x] ") {
-			lines[i] = renderTodoPreviewLine(plain, false)
+		if strings.HasPrefix(trimmed, "[ ] ") || strings.HasPrefix(trimmed, "[X] ") ||
+			strings.HasPrefix(trimmed, "[x] ") {
+			lines[i] = renderTodoPreviewLine(plain)
 		}
 	}
 	return strings.Join(lines, "\n")
@@ -822,38 +929,99 @@ func (m *Model) reapplyTodoHighlight() {
 		return
 	}
 	todo := m.previewTodos[m.previewTodoCursor]
-	m.setPreviewViewportContent(applyTodoLineHighlight(content, todo.rendLine))
+	if replaced, ok := m.replaceTodoPreviewBlock(content, todo); ok {
+		m.setPreviewViewportContent(replaced)
+		return
+	}
+	m.setPreviewViewportContent(applyTodoPreviewHighlight(content, todo, m.preview.Width))
 }
 
 var (
 	renderedWikilinkRe     = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
-	renderedExternalLinkRe = regexp.MustCompile(`\((https?://[^)\s]+)\)`)
+	renderedExternalLinkRe = regexp.MustCompile(`\((https?://(?:[^)\s]|[ \t]*\n[ \t]*)+)\)`)
+	renderedBareURLRe      = regexp.MustCompile(`https?://(?:[^\s)\]>]|[ \t]*\n[ \t]*)+`)
+	// matches any 24-bit ANSI background colour parameter (48;2;R;G;B)
+	ansiAnyBgColorRe = regexp.MustCompile(`48;2;\d+;\d+;\d+`)
 )
+
+// byteOffsetToLineCol converts a byte offset in a multi-line string to a
+// (line index, column byte offset within that line) pair.
+func byteOffsetToLineCol(content string, offset int) (line, col int) {
+	before := content[:offset]
+	line = strings.Count(before, "\n")
+	lastNL := strings.LastIndexByte(before, '\n')
+	if lastNL < 0 {
+		col = offset
+	} else {
+		col = offset - lastNL - 1
+	}
+	return
+}
+
+func normalizeRenderedLinkTarget(target string, isWikilink bool) string {
+	if isWikilink {
+		return strings.Join(strings.Fields(target), " ")
+	}
+	return strings.Join(strings.Fields(target), "")
+}
 
 func (m *Model) rebuildPreviewLinks() {
 	m.previewLinks = m.previewLinks[:0]
-	lines := strings.Split(stripANSI(m.previewContent), "\n")
-	for i, line := range lines {
-		for _, idx := range renderedWikilinkRe.FindAllStringSubmatchIndex(line, -1) {
-			m.previewLinks = append(m.previewLinks, previewLinkItem{
-				rendLine:   i,
-				rendCol:    idx[0],
-				matchLen:   idx[1] - idx[0],
-				target:     line[idx[2]:idx[3]],
-				isWikilink: true,
-			})
+	// Strip ANSI once and search the whole content so links that were
+	// word-wrapped across lines (e.g. [[A Long\nTitle]]) are still found.
+	content := stripANSI(m.previewContent)
+	type matchRange struct{ start, end int }
+	var seen []matchRange
+
+	overlapsSeen := func(start, end int) bool {
+		for _, r := range seen {
+			if start < r.end && end > r.start {
+				return true
+			}
 		}
-		for _, idx := range renderedExternalLinkRe.FindAllStringSubmatchIndex(line, -1) {
-			m.previewLinks = append(m.previewLinks, previewLinkItem{
-				rendLine:   i,
-				rendCol:    idx[0],
-				matchLen:   idx[1] - idx[0],
-				target:     line[idx[2]:idx[3]],
-				isWikilink: false,
-			})
-		}
+		return false
 	}
-	// Sort by line, then by column within the line, so navigation is in reading order.
+
+	addLink := func(idx []int, isWikilink bool) {
+		if len(idx) < 2 || overlapsSeen(idx[0], idx[1]) {
+			return
+		}
+		fullMatch := content[idx[0]:idx[1]]
+		target := content[idx[2]:idx[3]]
+		// Normalize whitespace introduced by soft wrapping in the rendered preview.
+		target = normalizeRenderedLinkTarget(target, isWikilink)
+
+		line, col := byteOffsetToLineCol(content, idx[0])
+		endLine, endCol := byteOffsetToLineCol(content, idx[1])
+		// rendLen: only count chars up to the first newline so the highlight
+		// stays on the starting line.
+		rendLen := len(fullMatch)
+		if nl := strings.IndexByte(fullMatch, '\n'); nl >= 0 {
+			rendLen = nl
+		}
+		m.previewLinks = append(m.previewLinks, previewLinkItem{
+			rendLine:    line,
+			rendCol:     col,
+			rendLen:     rendLen,
+			rendEndLine: endLine,
+			rendEndCol:  endCol,
+			target:      target,
+			isWikilink:  isWikilink,
+		})
+		seen = append(seen, matchRange{start: idx[0], end: idx[1]})
+	}
+
+	for _, idx := range renderedWikilinkRe.FindAllStringSubmatchIndex(content, -1) {
+		addLink(idx, true)
+	}
+	for _, idx := range renderedExternalLinkRe.FindAllStringSubmatchIndex(content, -1) {
+		addLink(idx, false)
+	}
+	for _, idx := range renderedBareURLRe.FindAllStringIndex(content, -1) {
+		addLink([]int{idx[0], idx[1], idx[0], idx[1]}, false)
+	}
+
+	// Sort into reading order: top-to-bottom, left-to-right.
 	sort.Slice(m.previewLinks, func(a, b int) bool {
 		la, lb := m.previewLinks[a], m.previewLinks[b]
 		if la.rendLine != lb.rendLine {
@@ -888,38 +1056,61 @@ func (m *Model) reapplyLinkHighlight() {
 }
 
 // applyLinkSpanHighlight highlights only the link's own text within its line,
-// leaving the rest of the line (and all other lines) unchanged.
+// leaving the rest of the preview unchanged.
 func applyLinkSpanHighlight(content string, link previewLinkItem) string {
-	if link.rendLine < 0 || link.matchLen <= 0 {
+	startLine, startCol := link.rendLine, link.rendCol
+	endLine, endCol := link.rendEndLine, link.rendEndCol
+	if endLine < startLine || (endLine == startLine && endCol <= startCol) {
+		if link.rendLine < 0 || link.rendLen <= 0 {
+			return content
+		}
+		endLine = startLine
+		endCol = startCol + link.rendLen
+	}
+	if startLine < 0 {
 		return content
 	}
 	lines := strings.Split(content, "\n")
-	if link.rendLine >= len(lines) {
+	if startLine >= len(lines) {
 		return content
 	}
-	line := lines[link.rendLine]
-
-	// Map visible-character byte positions in the stripped text to byte
-	// positions in the (potentially ANSI-decorated) line.
-	plain, chars := renderedVisibleByteRanges(line)
-
-	end := link.rendCol + link.matchLen
-	if link.rendCol < 0 || end > len(plain) || end > len(chars) {
-		// Out-of-range: nothing to highlight.
-		return content
+	if endLine >= len(lines) {
+		endLine = len(lines) - 1
 	}
 
-	byteStart := chars[link.rendCol].start
-	byteEnd := chars[end-1].end
-	spanText := plain[link.rendCol:end]
+	for i := startLine; i <= endLine; i++ {
+		line := lines[i]
+		plain, chars := renderedVisibleByteRanges(line)
+		lineStart := 0
+		if i == startLine {
+			lineStart = startCol
+		}
+		lineEnd := len(plain)
+		if i == endLine {
+			lineEnd = endCol
+		}
+		if lineStart < 0 || lineStart > len(plain) || lineEnd < lineStart || lineEnd > len(plain) {
+			return content
+		}
+		if lineStart == lineEnd {
+			continue
+		}
+		if lineEnd > len(chars) {
+			return content
+		}
 
-	highlighted := lipgloss.NewStyle().
-		Background(selectedBgColor).
-		Foreground(selectedFgColor).
-		Bold(true).
-		Render(spanText)
+		byteStart := chars[lineStart].start
+		byteEnd := chars[lineEnd-1].end
+		spanText := plain[lineStart:lineEnd]
 
-	lines[link.rendLine] = line[:byteStart] + highlighted + line[byteEnd:]
+		highlighted := lipgloss.NewStyle().
+			Background(selectedBgColor).
+			Foreground(selectedFgColor).
+			Bold(true).
+			Render(spanText)
+
+		lines[i] = line[:byteStart] + highlighted + line[byteEnd:]
+	}
 	return strings.Join(lines, "\n")
 }
 
@@ -935,7 +1126,12 @@ func (m *Model) jumpToNextLink() {
 	}
 	link := m.previewLinks[m.previewLinkCursor]
 	m.ensurePreviewLineVisible(link.rendLine)
-	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.status = fmt.Sprintf(
+		"link %d/%d: %s",
+		m.previewLinkCursor+1,
+		len(m.previewLinks),
+		linkStatusLabel(link),
+	)
 	m.reapplyLinkHighlight()
 }
 
@@ -951,7 +1147,12 @@ func (m *Model) jumpToPrevLink() {
 	}
 	link := m.previewLinks[m.previewLinkCursor]
 	m.ensurePreviewLineVisible(link.rendLine)
-	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.status = fmt.Sprintf(
+		"link %d/%d: %s",
+		m.previewLinkCursor+1,
+		len(m.previewLinks),
+		linkStatusLabel(link),
+	)
 	m.reapplyLinkHighlight()
 }
 
@@ -963,7 +1164,12 @@ func (m *Model) jumpToFirstLink() {
 	m.previewLinkCursor = 0
 	link := m.previewLinks[m.previewLinkCursor]
 	m.ensurePreviewLineVisible(link.rendLine)
-	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.status = fmt.Sprintf(
+		"link %d/%d: %s",
+		m.previewLinkCursor+1,
+		len(m.previewLinks),
+		linkStatusLabel(link),
+	)
 	m.reapplyLinkHighlight()
 }
 
@@ -975,7 +1181,12 @@ func (m *Model) jumpToLastLink() {
 	m.previewLinkCursor = len(m.previewLinks) - 1
 	link := m.previewLinks[m.previewLinkCursor]
 	m.ensurePreviewLineVisible(link.rendLine)
-	m.status = fmt.Sprintf("link %d/%d: %s", m.previewLinkCursor+1, len(m.previewLinks), linkStatusLabel(link))
+	m.status = fmt.Sprintf(
+		"link %d/%d: %s",
+		m.previewLinkCursor+1,
+		len(m.previewLinks),
+		linkStatusLabel(link),
+	)
 	m.reapplyLinkHighlight()
 }
 

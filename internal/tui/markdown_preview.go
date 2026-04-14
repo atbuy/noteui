@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/formatters"
 	"github.com/alecthomas/chroma/v2/lexers"
 	chromastyles "github.com/alecthomas/chroma/v2/styles"
 	"github.com/charmbracelet/lipgloss"
+	ansi "github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/ansi/parser"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -673,12 +677,173 @@ func (r markdownPreviewRenderer) linesText(lines *gmtext.Segments) string {
 func (r markdownPreviewRenderer) wrap(text string, indent int) string {
 	width := max(10, r.width-indent)
 	rendered := lipgloss.NewStyle().
-		Width(width).
 		Foreground(textColor).
 		Background(bgSoftColor).
 		Render(text)
+	rendered = wrapStyledTextOnWhitespace(rendered, width)
+	rendered = reapplyWrappedLineBaseStyle(rendered, textColor, bgSoftColor)
+	rendered = fillStyledLinesBackground(rendered, width, bgSoftColor)
 
 	return prefixLines(rendered, strings.Repeat(" ", indent))
+}
+
+func reapplyWrappedLineBaseStyle(content string, fg, bg lipgloss.Color) string {
+	styleStart, ok := ansiBaseStylePrefix(fg, bg)
+	if !ok || content == "" {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		line = strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+styleStart)
+		line = strings.ReplaceAll(line, ansi.ResetStyle, ansi.ResetStyle+styleStart)
+		lines[i] = styleStart + line
+	}
+	return strings.Join(lines, "\n")
+}
+
+func ansiBaseStylePrefix(fg, bg lipgloss.Color) (string, bool) {
+	fgRGB, ok := parseHexColor(string(fg))
+	if !ok {
+		return "", false
+	}
+	bgRGB, ok := parseHexColor(string(bg))
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%d;48;2;%d;%d;%dm",
+		clampChannel(fgRGB.r), clampChannel(fgRGB.g), clampChannel(fgRGB.b),
+		clampChannel(bgRGB.r), clampChannel(bgRGB.g), clampChannel(bgRGB.b)), true
+}
+
+func fillStyledLinesBackground(content string, width int, bg lipgloss.Color) string {
+	if width <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	padStyle := lipgloss.NewStyle().Background(bg)
+
+	for i, line := range lines {
+		w := lipgloss.Width(line)
+		if w < width {
+			lines[i] = line + padStyle.Render(strings.Repeat(" ", width-w))
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func wrapStyledTextOnWhitespace(s string, limit int) string {
+	if limit < 1 {
+		return s
+	}
+
+	var (
+		cluster    []byte
+		buf        bytes.Buffer
+		word       bytes.Buffer
+		space      bytes.Buffer
+		curWidth   int
+		wordWidth  int
+		spaceWidth int
+		pstate     = parser.GroundState
+		b          = []byte(s)
+	)
+
+	addSpace := func() {
+		if curWidth == 0 || (spaceWidth == 0 && space.Len() == 0) {
+			space.Reset()
+			spaceWidth = 0
+			return
+		}
+		curWidth += spaceWidth
+		buf.Write(space.Bytes())
+		space.Reset()
+		spaceWidth = 0
+	}
+
+	addWord := func() {
+		if word.Len() == 0 {
+			return
+		}
+		addSpace()
+		curWidth += wordWidth
+		buf.Write(word.Bytes())
+		word.Reset()
+		wordWidth = 0
+	}
+
+	addNewline := func() {
+		buf.WriteByte('\n')
+		curWidth = 0
+		space.Reset()
+		spaceWidth = 0
+	}
+
+	i := 0
+	for i < len(b) {
+		state, action := parser.Table.Transition(pstate, b[i])
+		if state == parser.Utf8State {
+			var width int
+			cluster, width = ansi.FirstGraphemeCluster(b[i:], ansi.GraphemeWidth)
+			i += len(cluster)
+
+			r, _ := utf8.DecodeRune(cluster)
+			switch {
+			case r == '\n':
+				addWord()
+				addNewline()
+			case r != utf8.RuneError && unicode.IsSpace(r) && r != 0xA0:
+				addWord()
+				space.Write(cluster)
+				spaceWidth += width
+			default:
+				word.Write(cluster)
+				wordWidth += width
+				if curWidth > 0 && curWidth+spaceWidth+wordWidth > limit {
+					addNewline()
+				}
+			}
+
+			pstate = parser.GroundState
+			continue
+		}
+
+		switch action {
+		case parser.PrintAction, parser.ExecuteAction:
+			r := rune(b[i])
+			switch {
+			case r == '\n':
+				addWord()
+				addNewline()
+			case unicode.IsSpace(r):
+				addWord()
+				space.WriteByte(b[i])
+				if action == parser.PrintAction {
+					spaceWidth++
+				}
+			default:
+				word.WriteByte(b[i])
+				if action == parser.PrintAction {
+					wordWidth++
+				}
+				if curWidth > 0 && curWidth+spaceWidth+wordWidth > limit {
+					addNewline()
+				}
+			}
+		default:
+			word.WriteByte(b[i])
+		}
+
+		if pstate != parser.Utf8State {
+			pstate = state
+		}
+		i++
+	}
+
+	addWord()
+	return buf.String()
 }
 
 func prefixLines(text, prefix string) string {

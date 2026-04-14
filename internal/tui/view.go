@@ -1917,11 +1917,12 @@ func fillWidthBackground(content string, width int, bg lipgloss.Color) string {
 	}
 
 	lines := strings.Split(content, "\n")
-	padStyle := lipgloss.NewStyle().Background(bg)
 
 	for i, line := range lines {
 		trimmed := strings.TrimRight(line, " ")
 		w := lipgloss.Width(trimmed)
+		lineBg := leadingLineBackground(trimmed, bg)
+		padStyle := lipgloss.NewStyle().Background(lineBg)
 		if w < width {
 			lines[i] = trimmed + padStyle.Render(strings.Repeat(" ", width-w))
 		} else {
@@ -1930,6 +1931,42 @@ func fillWidthBackground(content string, width int, bg lipgloss.Color) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func leadingLineBackground(line string, fallback lipgloss.Color) lipgloss.Color {
+	if lineHasLeadingBackground(line, selectedBgColor) {
+		return selectedBgColor
+	}
+	return fallback
+}
+
+func lineHasLeadingBackground(line string, bg lipgloss.Color) bool {
+	param, ok := ansiBackgroundParam(bg)
+	if !ok {
+		return false
+	}
+	end := 0
+	inEsc := false
+	for i := 0; i < len(line); i++ {
+		ch := line[i]
+		if inEsc {
+			end = i + 1
+			if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') {
+				inEsc = false
+			}
+			continue
+		}
+		if ch == 0x1b {
+			inEsc = true
+			end = i + 1
+			continue
+		}
+		break
+	}
+	if end == 0 {
+		return false
+	}
+	return strings.Contains(line[:end], param)
 }
 
 func (m Model) leftPanelTitle() string {

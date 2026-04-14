@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 
 	"atbuy/noteui/internal/config"
@@ -1741,17 +1742,81 @@ func TestRebuildPreviewLinksFindsMultipleLinksOnOneLine(t *testing.T) {
 		"second link should have a higher column than the first")
 }
 
-func TestRebuildPreviewLinksStoresMatchLen(t *testing.T) {
+func TestRebuildPreviewLinksStoresRendLen(t *testing.T) {
 	m := newTestModel(t)
 	m.previewContent = "[[Hello World]]"
 	m.rebuildPreviewLinks()
 	require.Len(t, m.previewLinks, 1)
-	require.Equal(t, len("[[Hello World]]"), m.previewLinks[0].matchLen)
+	require.Equal(t, len("[[Hello World]]"), m.previewLinks[0].rendLen)
+}
+
+func TestRebuildPreviewLinksFindsWrappedWikilink(t *testing.T) {
+	m := newTestModel(t)
+	// Simulate glamour soft-wrapping [[A Long\nTitle]] across two lines.
+	m.previewContent = "intro\nsee [[A Long\nTitle]]\nmore"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1, "wrapped wikilink should be found")
+	link := m.previewLinks[0]
+	require.Equal(t, 1, link.rendLine, "link should start on line 1 (the 'see' line)")
+	require.Equal(t, "A Long Title", link.target,
+		"target should have newline normalized to a space")
+	require.Equal(t, true, link.isWikilink)
+	// rendLen must not cross the newline: only "[[A Long" portion is on line 1.
+	require.Equal(t, len("[[A Long"), link.rendLen,
+		"rendLen should cover only the portion on the starting line")
+	require.Equal(t, 2, link.rendEndLine)
+	require.Equal(t, len("Title]]"), link.rendEndCol)
+}
+
+func TestRebuildPreviewLinksFindsWrappedExternalLink(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "intro\nsee (https://example.com/very/long\n/path)\nmore"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1, "wrapped external link should be found")
+	link := m.previewLinks[0]
+	require.Equal(t, 1, link.rendLine, "link should start on the wrapped line")
+	require.Equal(t, "https://example.com/very/long/path", link.target,
+		"target should have soft-wrap whitespace removed")
+	require.False(t, link.isWikilink)
+	require.Equal(t, len("(https://example.com/very/long"), link.rendLen,
+		"rendLen should stop at the first wrapped line")
+	require.Equal(t, 2, link.rendEndLine)
+	require.Equal(t, len("/path)"), link.rendEndCol)
+}
+
+func TestRebuildPreviewLinksFindsWrappedExternalLinkWithRenderedPadding(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "intro\nsee (https://example.com/very/long   \n    /path#frag)\nmore"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1, "wrapped external link with rendered padding should be found")
+	link := m.previewLinks[0]
+	require.Equal(t, "https://example.com/very/long/path#frag", link.target,
+		"target should ignore wrap padding and keep the full URL")
+	require.False(t, link.isWikilink)
+	require.Equal(t, 2, link.rendEndLine)
+	require.Equal(t, len("    /path#frag)"), link.rendEndCol)
+}
+
+func TestApplyLinkSpanHighlightHighlightsWrappedLinkAcrossLines(t *testing.T) {
+	content := "see (https://example.com/very/long\n/path)\nend"
+	link := previewLinkItem{
+		rendLine:    0,
+		rendCol:     4,
+		rendLen:     len("(https://example.com/very/long"),
+		rendEndLine: 1,
+		rendEndCol:  len("/path)"),
+		target:      "https://example.com/very/long/path",
+	}
+	result := applyLinkSpanHighlight(content, link)
+
+	require.Equal(t, content, stripANSI(result))
+	require.Contains(t, result, lipgloss.NewStyle().Background(selectedBgColor).Foreground(selectedFgColor).Bold(true).Render("(https://example.com/very/long"))
+	require.Contains(t, result, lipgloss.NewStyle().Background(selectedBgColor).Foreground(selectedFgColor).Bold(true).Render("/path)"))
 }
 
 func TestApplyLinkSpanHighlightOnlyHighlightsLinkText(t *testing.T) {
 	content := "prefix [[My Note]] suffix"
-	link := previewLinkItem{rendLine: 0, rendCol: 7, matchLen: len("[[My Note]]"), target: "My Note", isWikilink: true}
+	link := previewLinkItem{rendLine: 0, rendCol: 7, rendLen: len("[[My Note]]"), target: "My Note", isWikilink: true}
 	result := applyLinkSpanHighlight(content, link)
 
 	// Visible text must be preserved exactly.
@@ -1794,6 +1859,34 @@ func TestRebuildPreviewLinksFindsExternalLinks(t *testing.T) {
 	require.Len(t, m.previewLinks, 1)
 	require.Equal(t, 1, m.previewLinks[0].rendLine)
 	require.Equal(t, "https://example.com", m.previewLinks[0].target)
+	require.False(t, m.previewLinks[0].isWikilink)
+}
+
+func TestRebuildPreviewLinksFindsBareExternalLinkWithFragment(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "see https://pypi.org#test for details"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, 0, m.previewLinks[0].rendLine)
+	require.Equal(t, "https://pypi.org#test", m.previewLinks[0].target)
+	require.False(t, m.previewLinks[0].isWikilink)
+}
+
+func TestRebuildPreviewLinksFindsWrappedBareExternalLinkWithRenderedPadding(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "see https://example.com/very/long   \n    /path#frag for details"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, "https://example.com/very/long/path#frag", m.previewLinks[0].target)
+	require.False(t, m.previewLinks[0].isWikilink)
+}
+
+func TestRebuildPreviewLinksDoesNotDuplicateParenthesizedExternalLink(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "see (https://example.com/docs#frag)"
+	m.rebuildPreviewLinks()
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, "https://example.com/docs#frag", m.previewLinks[0].target)
 	require.False(t, m.previewLinks[0].isWikilink)
 }
 
