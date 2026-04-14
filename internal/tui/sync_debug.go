@@ -361,6 +361,7 @@ func renderSyncDebugPane(title, subtitle, body string, width int, selected bool)
 		Background(modalBgColor).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderColor).
+		BorderBackground(modalBgColor).
 		Padding(0, 1).
 		Render(content)
 }
@@ -394,6 +395,15 @@ func (m Model) renderConflictResolutionModal(details *syncDebugDetails) string {
 	rightBody := truncateModalContent(readSyncDebugFile(conflictPath), maxLines)
 	leftPane := renderSyncDebugPane("Keep local", filepath.ToSlash(note.RelPath), leftBody, paneWidth, m.conflictResolutionChoice == conflictResolutionKeepLocal)
 	rightPane := renderSyncDebugPane("Keep remote", filepath.ToSlash(details.ConflictCopyPath), rightBody, paneWidth, m.conflictResolutionChoice == conflictResolutionKeepRemote)
+	paneHeight := max(strings.Count(leftPane, "\n"), strings.Count(rightPane, "\n")) + 1
+	gapLines := make([]string, paneHeight)
+	gapLine := lipgloss.NewStyle().Width(paneGap).Background(modalBgColor).Render(strings.Repeat(" ", paneGap))
+	for i := range gapLines {
+		gapLines[i] = gapLine
+	}
+	panesRow := lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(
+		lipgloss.JoinHorizontal(lipgloss.Top, leftPane, strings.Join(gapLines, "\n"), rightPane),
+	)
 	content := lipgloss.NewStyle().
 		Width(innerWidth).
 		Background(modalBgColor).
@@ -406,7 +416,7 @@ func (m Model) renderConflictResolutionModal(details *syncDebugDetails) string {
 				m.renderModalBlank(innerWidth),
 				lipgloss.NewStyle().Width(innerWidth).Background(modalBgColor).Render(m.renderPreviewMarkdown("<sync-debug-meta>", renderSyncDebugMetadata(details))),
 				m.renderModalBlank(innerWidth),
-				lipgloss.JoinHorizontal(lipgloss.Top, leftPane, lipgloss.NewStyle().Width(paneGap).Background(modalBgColor).Render(strings.Repeat(" ", paneGap)), rightPane),
+				panesRow,
 				m.renderModalBlank(innerWidth),
 				m.renderModalFooter("left/right or h/l choose • Enter apply • Esc close", innerWidth),
 			),
