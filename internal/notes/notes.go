@@ -27,6 +27,8 @@ type Note struct {
 	Category  string
 	Preview   string
 	ModTime   time.Time
+	CreatedAt time.Time
+	Size      int64
 	Tags      []string
 	Encrypted bool
 	SyncClass string
@@ -336,6 +338,11 @@ func DiscoverTemporary(root string) ([]Note, error) {
 			return err
 		}
 
+		createdAt := parseFrontMatterDate(fm)
+		if createdAt.IsZero() {
+			createdAt = info.ModTime()
+		}
+
 		out = append(out, Note{
 			Root:      tempRoot,
 			Path:      path,
@@ -345,6 +352,8 @@ func DiscoverTemporary(root string) ([]Note, error) {
 			Category:  category,
 			Preview:   preview,
 			ModTime:   info.ModTime(),
+			CreatedAt: createdAt,
+			Size:      info.Size(),
 			Tags:      tags,
 			Encrypted: encrypted,
 			SyncClass: SyncClassLocal,
@@ -440,6 +449,11 @@ func Discover(root string) ([]Note, error) {
 			return err
 		}
 
+		createdAt := parseFrontMatterDate(fm)
+		if createdAt.IsZero() {
+			createdAt = info.ModTime()
+		}
+
 		out = append(out, Note{
 			Root:      root,
 			Path:      path,
@@ -449,6 +463,8 @@ func Discover(root string) ([]Note, error) {
 			Category:  category,
 			Preview:   preview,
 			ModTime:   info.ModTime(),
+			CreatedAt: createdAt,
+			Size:      info.Size(),
 			Tags:      tags,
 			Encrypted: encrypted,
 			SyncClass: syncClass,
@@ -1011,4 +1027,21 @@ func UpdateTodoDueDate(path string, lineIdx int, dueDate string) error {
 
 	lines[lineIdx] = indent + trimmed[:6] + strings.TrimSpace(strings.Join(kept, " "))
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+func parseFrontMatterDate(fm FrontMatter) time.Time {
+	for _, key := range []string{"date", "created", "created-at"} {
+		if v := strings.TrimSpace(fm[key]); v != "" {
+			for _, layout := range []string{
+				"2006-01-02",
+				"2006-01-02T15:04:05",
+				"2006-01-02 15:04:05",
+			} {
+				if t, err := time.Parse(layout, v); err == nil {
+					return t
+				}
+			}
+		}
+	}
+	return time.Time{}
 }

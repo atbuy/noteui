@@ -153,20 +153,35 @@ func (m Model) directChildNotes(parent string) []notes.Note {
 			out = append(out, n)
 		}
 	}
-
-	sort.SliceStable(out, func(i, j int) bool {
-		pi := m.isPinnedNote(out[i].RelPath)
-		pj := m.isPinnedNote(out[j].RelPath)
-		if pi != pj {
-			return pi
-		}
-		if m.sortByModTime {
-			return out[i].ModTime.After(out[j].ModTime)
-		}
-		return out[i].RelPath < out[j].RelPath
-	})
-
+	sortNotes(out, m.sortMethod, m.sortReverse, m.isPinnedNote)
 	return out
+}
+
+func sortNotes(out []notes.Note, method string, reverse bool, isPinned func(string) bool) {
+	sort.SliceStable(out, func(i, j int) bool {
+		if isPinned != nil {
+			pi := isPinned(out[i].RelPath)
+			pj := isPinned(out[j].RelPath)
+			if pi != pj {
+				return pi
+			}
+		}
+		var less bool
+		switch method {
+		case sortModified:
+			less = out[i].ModTime.After(out[j].ModTime)
+		case sortCreated:
+			less = out[i].CreatedAt.After(out[j].CreatedAt)
+		case sortSize:
+			less = out[i].Size > out[j].Size
+		default:
+			less = out[i].RelPath < out[j].RelPath
+		}
+		if reverse {
+			return !less
+		}
+		return less
+	})
 }
 
 func (m Model) directChildRemoteNotes(parent string) []notesync.RemoteNoteMeta {

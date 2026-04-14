@@ -49,7 +49,12 @@ type keyMap struct {
 	UndoDelete               key.Binding
 	TogglePreviewPrivacy     key.Binding
 	TogglePreviewLineNumbers key.Binding
-	SortToggle               key.Binding
+	SortKey                  key.Binding
+	SortByName               key.Binding
+	SortByModified           key.Binding
+	SortByCreated            key.Binding
+	SortBySize               key.Binding
+	SortReverse              key.Binding
 	ScrollHalfPageUp         key.Binding
 	ScrollHalfPageDown       key.Binding
 	NextMatch                key.Binding
@@ -237,9 +242,29 @@ var keys = keyMap{
 		key.WithKeys("Z"),
 		key.WithHelp("Z", "Undo last trash operation"),
 	),
-	SortToggle: key.NewBinding(
+	SortKey: key.NewBinding(
 		key.WithKeys("s"),
-		key.WithHelp("s", "Toggle sort order"),
+		key.WithHelp("s", "Sort"),
+	),
+	SortByName: key.NewBinding(
+		key.WithKeys("n"),
+		key.WithHelp("n", "Sort by name"),
+	),
+	SortByModified: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "Sort by modified"),
+	),
+	SortByCreated: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "Sort by created"),
+	),
+	SortBySize: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "Sort by size"),
+	),
+	SortReverse: key.NewBinding(
+		key.WithKeys("r"),
+		key.WithHelp("r", "Reverse sort order"),
 	),
 	ScrollHalfPageUp: key.NewBinding(
 		key.WithKeys("ctrl+u"),
@@ -418,7 +443,12 @@ func ApplyConfigKeys(cfg config.KeysConfig) {
 	apply(&keys.UndoDelete, cfg.UndoDelete)
 	apply(&keys.TogglePreviewPrivacy, cfg.TogglePreviewPrivacy)
 	apply(&keys.TogglePreviewLineNumbers, cfg.TogglePreviewLineNumbers)
-	apply(&keys.SortToggle, cfg.SortToggle)
+	apply(&keys.SortKey, cfg.SortKey)
+	apply(&keys.SortByName, cfg.SortByName)
+	apply(&keys.SortByModified, cfg.SortByModified)
+	apply(&keys.SortByCreated, cfg.SortByCreated)
+	apply(&keys.SortBySize, cfg.SortBySize)
+	apply(&keys.SortReverse, cfg.SortReverse)
 	apply(&keys.ScrollHalfPageUp, cfg.ScrollHalfPageUp)
 	apply(&keys.ScrollHalfPageDown, cfg.ScrollHalfPageDown)
 	apply(&keys.NextMatch, cfg.NextMatch)
@@ -501,7 +531,7 @@ func ValidateKeyCollisions() []string {
 		{"undo_delete", &keys.UndoDelete},
 		{"toggle_preview_privacy", &keys.TogglePreviewPrivacy},
 		{"toggle_preview_line_numbers", &keys.TogglePreviewLineNumbers},
-		{"sort_toggle", &keys.SortToggle},
+		{"sort_key", &keys.SortKey},
 		{"scroll_half_page_up", &keys.ScrollHalfPageUp},
 		{"scroll_half_page_down", &keys.ScrollHalfPageDown},
 		{"move_up", &keys.MoveUp},

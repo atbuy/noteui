@@ -55,7 +55,7 @@ func TestDirectChildSortingAndMatching(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected pinned note first in child notes, got %#v", children)
 	}
 
-	m.sortByModTime = true
+	m.sortMethod = sortModified
 	children = m.directChildNotes("work")
 	if children[0].RelPath != "work/b.md" || children[1].RelPath != "work/a.md" {
 		require.Failf(t, "assertion failed", "expected pinned note first and remaining notes by mod time, got %#v", children)

@@ -189,7 +189,8 @@ func (m *Model) syncStateFromExpanded() {
 func (m *Model) syncStateForSave() {
 	m.syncStateFromPins()
 	m.syncStateFromExpanded()
-	m.workspaceState.SortByModTime = m.sortByModTime
+	m.workspaceState.SortMethod = m.sortMethod
+	m.workspaceState.SortReverse = m.sortReverse
 	m.workspaceState.RecentCommands = normalizePaletteRecentCommands(m.workspaceState.RecentCommands)
 	m.state.SetWorkspace(m.workspaceStateKey(), m.workspaceState)
 }

@@ -14,7 +14,9 @@ type WorkspaceState struct {
 	PinnedCategories    []string `json:"pinned_categories,omitempty"`
 	CollapsedCategories []string `json:"collapsed_categories,omitempty"`
 	RecentCommands      []string `json:"recent_commands,omitempty"`
-	SortByModTime       bool     `json:"sort_by_mod_time,omitempty"`
+	SortMethod          string   `json:"sort_method,omitempty"`
+	SortReverse         bool     `json:"sort_reverse,omitempty"`
+	SortByModTime       bool     `json:"sort_by_mod_time,omitempty"` // legacy: migrated to SortMethod on load
 }
 
 type State struct {
@@ -58,13 +60,18 @@ func Load() (State, error) {
 	}
 
 	s.Workspaces = persisted.Workspaces
+	migrateSortMethod(s.Workspaces)
 	if len(s.Workspaces) == 0 {
+		sortMethod := ""
+		if persisted.SortByModTime {
+			sortMethod = "modified"
+		}
 		legacy := WorkspaceState{
 			PinnedNotes:         persisted.PinnedNotes,
 			PinnedCategories:    persisted.PinnedCategories,
 			CollapsedCategories: persisted.CollapsedCategories,
 			RecentCommands:      persisted.RecentCommands,
-			SortByModTime:       persisted.SortByModTime,
+			SortMethod:          sortMethod,
 		}
 		if !isZeroWorkspaceState(legacy) {
 			s.Workspaces = map[string]WorkspaceState{defaultWorkspaceKey: legacy}
@@ -145,7 +152,19 @@ func isZeroWorkspaceState(ws WorkspaceState) bool {
 		len(ws.PinnedCategories) == 0 &&
 		len(ws.CollapsedCategories) == 0 &&
 		len(ws.RecentCommands) == 0 &&
+		ws.SortMethod == "" &&
+		!ws.SortReverse &&
 		!ws.SortByModTime
+}
+
+func migrateSortMethod(workspaces map[string]WorkspaceState) {
+	for key, ws := range workspaces {
+		if ws.SortMethod == "" && ws.SortByModTime {
+			ws.SortMethod = "modified"
+			ws.SortByModTime = false
+			workspaces[key] = ws
+		}
+	}
 }
 
 func statePath() (string, error) {

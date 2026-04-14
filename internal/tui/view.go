@@ -2134,10 +2134,19 @@ func dashboardSummaryLine(label, value string, width int) string {
 }
 
 func (m Model) renderSortSegment() string {
-	if m.sortByModTime {
-		return "sort: modified"
+	label := map[string]string{
+		sortAlpha:    "alpha",
+		sortModified: "modified",
+		sortCreated:  "created",
+		sortSize:     "size",
+	}[m.sortMethod]
+	if label == "" {
+		label = "alpha"
 	}
-	return "sort: alpha"
+	if m.sortReverse {
+		label += " ↑"
+	}
+	return "sort: " + label
 }
 
 // placeOverlay composites the modal string centered over the base string using

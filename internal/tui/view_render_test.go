@@ -233,16 +233,24 @@ func TestRenderSearchBarActive(t *testing.T) {
 }
 
 func TestRenderSortSegmentModified(t *testing.T) {
-	m := Model{sortByModTime: true}
+	m := Model{sortMethod: sortModified}
 	if got := m.renderSortSegment(); got != "sort: modified" {
 		require.Failf(t, "assertion failed", "expected 'sort: modified', got %q", got)
 	}
 }
 
 func TestRenderSortSegmentAlpha(t *testing.T) {
-	m := Model{sortByModTime: false}
+	m := Model{sortMethod: sortAlpha}
 	if got := m.renderSortSegment(); got != "sort: alpha" {
 		require.Failf(t, "assertion failed", "expected 'sort: alpha', got %q", got)
+	}
+}
+
+func TestRenderSortSegmentReverse(t *testing.T) {
+	m := Model{sortMethod: sortModified, sortReverse: true}
+	got := m.renderSortSegment()
+	if !strings.Contains(got, "modified") || !strings.Contains(got, "↑") {
+		require.Failf(t, "assertion failed", "expected 'modified' and reverse marker in segment, got %q", got)
 	}
 }
 

@@ -41,7 +41,7 @@ This page documents the default keybindings that most users care about first.
 
 - `p`: pin current item or marked notes
 - `P`: show pinned items
-- `s`: toggle sort order
+- `s`: open sort menu; then `n`=name, `m`=modified, `c`=created, `s`=size, `r`=reverse order, `esc`=cancel
 
 ## Temporary lifecycle
 

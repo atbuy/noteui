@@ -415,7 +415,7 @@ func TestFilteredTempNotesSortByModTime(t *testing.T) {
 		{RelPath: "old.md", Name: "old.md", TitleText: "Old", ModTime: now.Add(-time.Hour)},
 		{RelPath: "new.md", Name: "new.md", TitleText: "New", ModTime: now},
 	}
-	m.sortByModTime = true
+	m.sortMethod = sortModified
 	m.searchInput.SetValue("")
 	sorted := m.filteredTempNotes()
 	if len(sorted) != 2 || sorted[0].TitleText != "New" {

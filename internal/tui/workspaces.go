@@ -93,7 +93,9 @@ func (m *Model) loadCurrentWorkspaceState() {
 	m.pinnedNotes = map[string]bool{}
 	m.pinnedCats = map[string]bool{}
 	m.expanded = map[string]bool{"": true}
-	m.sortByModTime = false
+	m.sortMethod = sortAlpha
+	m.sortReverse = false
+	m.pendingSort = false
 
 	if strings.TrimSpace(m.rootDir) == "" {
 		m.syncRecords = map[string]notesync.NoteRecord{}
@@ -104,7 +106,11 @@ func (m *Model) loadCurrentWorkspaceState() {
 	ws := m.state.Workspace(m.workspaceStateKey())
 	ws.RecentCommands = normalizePaletteRecentCommands(ws.RecentCommands)
 	m.workspaceState = ws
-	m.sortByModTime = ws.SortByModTime
+	m.sortMethod = ws.SortMethod
+	if m.sortMethod == "" {
+		m.sortMethod = sortAlpha
+	}
+	m.sortReverse = ws.SortReverse
 
 	for _, p := range ws.PinnedNotes {
 		m.pinnedNotes[filepath.ToSlash(strings.TrimSpace(p))] = true

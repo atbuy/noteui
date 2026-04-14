@@ -205,6 +205,21 @@ Marked notes let the existing note actions work on a batch:
 - `A`: add tags to marked notes
 - `d`: trash marked notes after the same confirmation step
 
+## Sorting
+
+Press `s` to open the sort menu. The status bar shows the available sub-keys:
+
+- `n`: sort alphabetically by path (default)
+- `m`: sort by modification time, newest first
+- `c`: sort by creation date (reads `date:`, `created:`, or `created-at:` from frontmatter; falls back to modification time), newest first
+- `s`: sort by file size, largest first
+- `r`: toggle ascending/descending order
+- `esc`: cancel without changing the sort
+
+The current sort method is shown in the footer. When reverse order is active, a `^` indicator appears next to the method name. Sort preference is stored per workspace in local state and persists across restarts.
+
+Sort methods can also be applied from the command palette ("Sort by Name", "Sort by Modified", "Sort by Created", "Sort by Size", "Reverse Sort Order").
+
 ## Pins
 
 - `p`: pin the current note or category

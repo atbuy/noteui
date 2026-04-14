@@ -72,7 +72,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 				PinnedCategories:    []string{"inbox", "work/projects"},
 				CollapsedCategories: []string{"archive"},
 				RecentCommands:      []string{"show_help", "refresh"},
-				SortByModTime:       true,
+				SortMethod:          "modified",
 			},
 		},
 	}
@@ -90,7 +90,7 @@ func TestSaveAndLoadRoundTrip(t *testing.T) {
 		`"pinned_categories"`,
 		`"collapsed_categories"`,
 		`"recent_commands"`,
-		`"sort_by_mod_time": true`,
+		`"sort_method": "modified"`,
 	} {
 		require.Contains(t, text, fragment)
 	}
@@ -122,7 +122,7 @@ func TestLoadMigratesLegacyFlatState(t *testing.T) {
 		PinnedCategories:    []string{"work"},
 		CollapsedCategories: []string{"archive"},
 		RecentCommands:      []string{"refresh"},
-		SortByModTime:       true,
+		SortMethod:          "modified",
 	}, got.Workspace("default"))
 }
 

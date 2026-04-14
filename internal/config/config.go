@@ -167,7 +167,12 @@ type KeysConfig struct {
 	UndoDelete               []string `toml:"undo_delete"`
 	TogglePreviewPrivacy     []string `toml:"toggle_preview_privacy"`
 	TogglePreviewLineNumbers []string `toml:"toggle_preview_line_numbers"`
-	SortToggle               []string `toml:"sort_toggle"`
+	SortKey                  []string `toml:"sort_key"`
+	SortByName               []string `toml:"sort_by_name"`
+	SortByModified           []string `toml:"sort_by_modified"`
+	SortByCreated            []string `toml:"sort_by_created"`
+	SortBySize               []string `toml:"sort_by_size"`
+	SortReverse              []string `toml:"sort_reverse"`
 	ScrollHalfPageUp         []string `toml:"scroll_half_page_up"`
 	ScrollHalfPageDown       []string `toml:"scroll_half_page_down"`
 	NextMatch                []string `toml:"next_match"`

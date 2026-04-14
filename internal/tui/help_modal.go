@@ -87,7 +87,7 @@ func (m Model) helpEntries() []helpEntry {
 		{section: "Filter", key: "#tag", desc: "Filter by tag in search"},
 		{section: "Filter", key: "esc", desc: "Leave search, then clear on second press"},
 		{section: "Global", key: keys.Focus.Help().Key, desc: "Switch focused pane"},
-		{section: "Global", key: keys.SortToggle.Help().Key, desc: "Toggle sort (alpha / modified)"},
+		{section: "Global", key: keys.SortKey.Help().Key, desc: "Sort menu (name / modified / created / size / reverse)"},
 		{section: "Global", key: keys.Refresh.Help().Key, desc: "Refresh"},
 		{section: "Global", key: keys.Delete.Help().Key + keys.DeleteConfirm.Help().Key, desc: "Trash note/category"},
 		{section: "Global", key: "esc", desc: "Close help"},

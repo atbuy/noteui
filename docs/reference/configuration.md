@@ -579,8 +579,24 @@ trash_browser = ["X"]
   Default: `["ctrl+t"]`
 - `select_workspace`
   Default: `["W"]`
-- `sort_toggle`
+- `sort_key`
   Default: `["s"]`
+  Opens the sort menu. Follow with a sub-key to pick a method.
+- `sort_by_name`
+  Default: `["n"]`
+  Active only inside the sort menu. Sorts alphabetically by path.
+- `sort_by_modified`
+  Default: `["m"]`
+  Active only inside the sort menu. Sorts by modification time, newest first.
+- `sort_by_created`
+  Default: `["c"]`
+  Active only inside the sort menu. Sorts by creation date (frontmatter `date:`/`created:`/`created-at:`, falling back to modification time), newest first.
+- `sort_by_size`
+  Default: `["s"]`
+  Active only inside the sort menu. Sorts by file size, largest first.
+- `sort_reverse`
+  Default: `["r"]`
+  Active only inside the sort menu. Toggles ascending/descending order.
 
 ### Preview and help
 

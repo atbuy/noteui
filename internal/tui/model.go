@@ -39,6 +39,13 @@ const (
 )
 
 const (
+	sortAlpha    = "alpha"
+	sortModified = "modified"
+	sortCreated  = "created"
+	sortSize     = "size"
+)
+
+const (
 	pinItemCategory pinItemKind = iota
 	pinItemNote
 	pinItemTemporaryNote
@@ -407,7 +414,9 @@ type Model struct {
 	startupError string
 
 	sessionToken             int
-	sortByModTime            bool
+	sortMethod               string
+	sortReverse              bool
+	pendingSort              bool
 	syncDebounceToken        int
 	syncRunning              bool
 	syncSpinnerFrame         int
@@ -2761,8 +2770,35 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-		if key.Matches(msg, keys.SortToggle) {
-			m.toggleSortOrder()
+		if m.pendingSort {
+			m.pendingSort = false
+			switch {
+			case key.Matches(msg, keys.SortByName):
+				m.applySortMethod(sortAlpha)
+			case key.Matches(msg, keys.SortByModified):
+				m.applySortMethod(sortModified)
+			case key.Matches(msg, keys.SortByCreated):
+				m.applySortMethod(sortCreated)
+			case key.Matches(msg, keys.SortBySize), key.Matches(msg, keys.SortKey):
+				m.applySortMethod(sortSize)
+			case key.Matches(msg, keys.SortReverse):
+				m.sortReverse = !m.sortReverse
+				_ = m.saveTreeState()
+				m.rebuildTree()
+				dir := "descending"
+				if m.sortReverse {
+					dir = "ascending"
+				}
+				m.status = "sort order: " + dir
+			case msg.String() == "esc":
+				m.status = "sort cancelled"
+			}
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.SortKey) {
+			m.pendingSort = true
+			m.status = "sort: [n]ame  [m]odified  [c]reated  [s]ize  [r]everse  esc=cancel"
 			return m, nil
 		}
 

@@ -16,7 +16,7 @@ func TestRenderSortSegment(t *testing.T) {
 	if got := (Model{}).renderSortSegment(); got != "sort: alpha" {
 		require.Failf(t, "assertion failed", "expected alpha sort segment, got %q", got)
 	}
-	if got := (Model{sortByModTime: true}).renderSortSegment(); got != "sort: modified" {
+	if got := (Model{sortMethod: sortModified}).renderSortSegment(); got != "sort: modified" {
 		require.Failf(t, "assertion failed", "expected modified sort segment, got %q", got)
 	}
 }

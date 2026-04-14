@@ -770,3 +770,39 @@ func TestFindNoteByWikilink(t *testing.T) {
 		require.Failf(t, "assertion failed", "expected nil for nonexistent target, got %v", n)
 	}
 }
+
+func TestDiscoverNotePopulatesSize(t *testing.T) {
+	root := t.TempDir()
+	content := "hello world"
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notes, err := Discover(root)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	require.Equal(t, int64(len(content)), notes[0].Size)
+}
+
+func TestDiscoverNoteCreatedAtFromFrontmatter(t *testing.T) {
+	root := t.TempDir()
+	content := "---\ndate: 2024-03-15\n---\nbody"
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notes, err := Discover(root)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	want := time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC)
+	require.Equal(t, want, notes[0].CreatedAt)
+}
+
+func TestDiscoverNoteCreatedAtFallsBackToModTime(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	notes, err := Discover(root)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	require.Equal(t, notes[0].ModTime, notes[0].CreatedAt)
+}

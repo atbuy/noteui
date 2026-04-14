@@ -47,7 +47,11 @@ const (
 	cmdPromoteTemporary      = "promote_temporary"
 	cmdArchiveTemporary      = "archive_temporary"
 	cmdMoveToTemporary       = "move_to_temporary"
-	cmdToggleSort            = "toggle_sort"
+	cmdSortByName            = "sort_by_name"
+	cmdSortByModified        = "sort_by_modified"
+	cmdSortByCreated         = "sort_by_created"
+	cmdSortBySize            = "sort_by_size"
+	cmdSortReverse           = "sort_reverse"
 	cmdRefresh               = "refresh"
 	cmdTogglePrivacy         = "toggle_privacy"
 	cmdToggleLineNumbers     = "toggle_line_numbers"
@@ -194,7 +198,11 @@ func paletteCommands(m Model) []paletteCommand {
 	cmds := []paletteCommand{
 		{name: "New Note", desc: "Create a note in the current location", category: "notes", action: cmdNewNote},
 		{name: "New Temporary Note", desc: "Create a temporary note", category: "notes", action: cmdNewTemporaryNote},
-		{name: "Toggle Sort", desc: "Switch between alphabetical and modified sorting", category: "view", action: cmdToggleSort},
+		{name: "Sort by Name", desc: "Sort notes alphabetically", category: "view", action: cmdSortByName},
+		{name: "Sort by Modified", desc: "Sort notes by modification time", category: "view", action: cmdSortByModified},
+		{name: "Sort by Created", desc: "Sort notes by creation date", category: "view", action: cmdSortByCreated},
+		{name: "Sort by Size", desc: "Sort notes by file size", category: "view", action: cmdSortBySize},
+		{name: "Reverse Sort Order", desc: "Toggle ascending/descending sort", category: "view", action: cmdSortReverse},
 		{name: "Refresh", desc: "Refresh notes and sync state", category: "app", action: cmdRefresh},
 		{name: "Toggle Preview Privacy", desc: "Toggle preview privacy", category: "preview", action: cmdTogglePrivacy},
 		{name: "Toggle Preview Line Numbers", desc: "Toggle preview line numbers", category: "preview", action: cmdToggleLineNumbers},
@@ -862,15 +870,17 @@ func (m *Model) openHelpModal() {
 	m.status = "help"
 }
 
-func (m *Model) toggleSortOrder() {
-	m.sortByModTime = !m.sortByModTime
+func (m *Model) applySortMethod(method string) {
+	m.sortMethod = method
 	_ = m.saveTreeState()
 	m.rebuildTree()
-	if m.sortByModTime {
-		m.status = "sorting by modified time"
-	} else {
-		m.status = "sorting alphabetically"
-	}
+	label := map[string]string{
+		sortAlpha:    "alphabetically",
+		sortModified: "by modified time",
+		sortCreated:  "by created time",
+		sortSize:     "by size",
+	}[method]
+	m.status = "sorted " + label
 }
 
 func (m *Model) startRefresh() tea.Cmd {
@@ -1269,8 +1279,22 @@ func (m *Model) executePaletteCommand(action string) tea.Cmd {
 		return m.archiveTemporarySelection()
 	case cmdMoveToTemporary:
 		return m.moveSelectionToTemporary()
-	case cmdToggleSort:
-		m.toggleSortOrder()
+	case cmdSortByName:
+		m.applySortMethod(sortAlpha)
+		return nil
+	case cmdSortByModified:
+		m.applySortMethod(sortModified)
+		return nil
+	case cmdSortByCreated:
+		m.applySortMethod(sortCreated)
+		return nil
+	case cmdSortBySize:
+		m.applySortMethod(sortSize)
+		return nil
+	case cmdSortReverse:
+		m.sortReverse = !m.sortReverse
+		_ = m.saveTreeState()
+		m.rebuildTree()
 		return nil
 	case cmdRefresh:
 		return m.startRefresh()

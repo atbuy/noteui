@@ -303,17 +303,12 @@ func TestSyncImportCurrentKeyOnLocalNoteShowsStatus(t *testing.T) {
 	require.Contains(t, m.status, "single-note import only works on remote notes")
 }
 
-func TestSortToggleFlipsSortByModTime(t *testing.T) {
+func TestSortKeyEntersSortMode(t *testing.T) {
 	m := newTestModel(t)
-	initial := m.sortByModTime
+	require.False(t, m.pendingSort)
 	m = updateModel(m, keyMsg("s"))
-	if m.sortByModTime == initial {
-		require.FailNow(t, "expected sortByModTime to flip after sort key")
-	}
-	m = updateModel(m, keyMsg("s"))
-	if m.sortByModTime != initial {
-		require.FailNow(t, "expected sortByModTime to return to original after second sort key")
-	}
+	require.True(t, m.pendingSort)
+	require.Contains(t, m.status, "sort:")
 }
 
 func TestNextMatchInPreviewTodoNavTracksMatchingTodo(t *testing.T) {
@@ -693,16 +688,77 @@ func TestPinsModeToggle(t *testing.T) {
 }
 
 func TestSortStatusMessage(t *testing.T) {
+	// s enters sort mode; m applies modified; status shows "sorted by modified time"
 	m := newTestModel(t)
-	m.sortByModTime = false
 	m = updateModel(m, keyMsg("s"))
-	if !strings.Contains(m.status, "modified") {
-		require.Failf(t, "assertion failed", "expected 'modified' in status when switching to modtime sort, got %q", m.status)
-	}
+	require.True(t, m.pendingSort)
+	m = updateModel(m, keyMsg("m"))
+	require.False(t, m.pendingSort)
+	require.Equal(t, sortModified, m.sortMethod)
+	require.Contains(t, m.status, "modified")
+
+	// s then n returns to alpha
 	m = updateModel(m, keyMsg("s"))
-	if !strings.Contains(m.status, "alpha") {
-		require.Failf(t, "assertion failed", "expected 'alpha' in status when switching back, got %q", m.status)
+	m = updateModel(m, keyMsg("n"))
+	require.Equal(t, sortAlpha, m.sortMethod)
+	require.Contains(t, m.status, "alpha")
+}
+
+func TestSortModeSubKeys(t *testing.T) {
+	tests := []struct {
+		key    string
+		method string
+	}{
+		{"n", sortAlpha},
+		{"m", sortModified},
+		{"c", sortCreated},
 	}
+	for _, tt := range tests {
+		m := newTestModel(t)
+		m = updateModel(m, keyMsg("s"))
+		m = updateModel(m, keyMsg(tt.key))
+		require.False(t, m.pendingSort, "pendingSort should clear after %q", tt.key)
+		require.Equal(t, tt.method, m.sortMethod, "key %q should set method %q", tt.key, tt.method)
+	}
+}
+
+func TestSortModeSizeViaSS(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, keyMsg("s")) // enter sort mode
+	m = updateModel(m, keyMsg("s")) // s in sort mode = sort by size
+	require.False(t, m.pendingSort)
+	require.Equal(t, sortSize, m.sortMethod)
+}
+
+func TestSortModeReverseToggle(t *testing.T) {
+	m := newTestModel(t)
+	require.False(t, m.sortReverse)
+	m = updateModel(m, keyMsg("s"))
+	m = updateModel(m, keyMsg("r"))
+	require.True(t, m.sortReverse)
+	require.Contains(t, m.status, "ascending")
+
+	m = updateModel(m, keyMsg("s"))
+	m = updateModel(m, keyMsg("r"))
+	require.False(t, m.sortReverse)
+}
+
+func TestSortModeEscCancels(t *testing.T) {
+	m := newTestModel(t)
+	m.sortMethod = sortModified
+	m = updateModel(m, keyMsg("s"))
+	require.True(t, m.pendingSort)
+	m = updateModel(m, keyMsg("esc"))
+	require.False(t, m.pendingSort)
+	require.Equal(t, sortModified, m.sortMethod) // unchanged
+}
+
+func TestSortModeUnknownKeyExits(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, keyMsg("s"))
+	require.True(t, m.pendingSort)
+	m = updateModel(m, keyMsg("x"))
+	require.False(t, m.pendingSort)
 }
 
 func TestCreateCategoryKeyOpensModal(t *testing.T) {

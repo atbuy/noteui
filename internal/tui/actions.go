@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -463,10 +462,10 @@ func (m Model) filteredTempNotes() []notes.Note {
 	if query == "" {
 		out = make([]notes.Note, len(m.tempNotes))
 		copy(out, m.tempNotes)
-		if m.sortByModTime {
-			sort.SliceStable(out, func(i, j int) bool {
-				return out[i].ModTime.After(out[j].ModTime)
-			})
+		if m.sortMethod != sortAlpha {
+			sortNotes(out, m.sortMethod, m.sortReverse, nil)
+		} else if m.sortReverse {
+			sortNotes(out, sortAlpha, true, nil)
 		}
 	} else {
 		out = filterAndScoreNotes(m.tempNotes, query)
