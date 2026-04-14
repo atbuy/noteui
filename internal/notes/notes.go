@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
+
+	"atbuy/noteui/internal/notes/meta"
+	"atbuy/noteui/internal/notes/todo"
 )
 
 const PreviewBytes = 16 * 1024
@@ -208,47 +209,12 @@ func OpenOrCreateDailyNote(root, relDir, templatePath string, now time.Time) (pa
 	return path, true, nil
 }
 
-var wikilinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
-
 // WikilinkURLPrefix is the synthetic URL prefix used to mark wikilink destinations.
-const WikilinkURLPrefix = "#wikilink:"
+const WikilinkURLPrefix = meta.WikilinkURLPrefix
 
-// RewriteWikilinks replaces [[target]] patterns with [target](#wikilink:encoded)
-// so the standard markdown parser treats them as links. The target is
-// percent-encoded so the URL is valid (spaces and other chars are encoded).
-func RewriteWikilinks(content string) string {
-	return wikilinkRe.ReplaceAllStringFunc(content, func(match string) string {
-		inner := match[2 : len(match)-2]
-		encoded := url.PathEscape(inner)
-		return "[" + inner + "](#wikilink:" + encoded + ")"
-	})
-}
-
-// DecodeWikilinkTarget decodes a percent-encoded wikilink target extracted
-// from a #wikilink: URL. Returns the raw target string.
-func DecodeWikilinkTarget(encoded string) string {
-	decoded, err := url.PathUnescape(encoded)
-	if err != nil {
-		return encoded
-	}
-	return decoded
-}
-
-// ExtractWikilinks returns a deduplicated, ordered list of wikilink targets
-// found in content.
-func ExtractWikilinks(content string) []string {
-	matches := wikilinkRe.FindAllStringSubmatch(content, -1)
-	seen := make(map[string]bool, len(matches))
-	out := make([]string, 0, len(matches))
-	for _, m := range matches {
-		target := m[1]
-		if !seen[target] {
-			seen[target] = true
-			out = append(out, target)
-		}
-	}
-	return out
-}
+func RewriteWikilinks(content string) string     { return meta.RewriteWikilinks(content) }
+func DecodeWikilinkTarget(encoded string) string { return meta.DecodeWikilinkTarget(encoded) }
+func ExtractWikilinks(content string) []string   { return meta.ExtractWikilinks(content) }
 
 // FindNoteByWikilink searches notes for one whose title or filename matches
 // target (case-insensitive). It checks exact title match first, then exact
@@ -851,182 +817,20 @@ func ReadingTimeMinutes(wordCount int) int {
 	return max(1, (wordCount+wordsPerMinute-1)/wordsPerMinute)
 }
 
-func CreateTodoNote(root, relDir string) (string, error) {
-	relDir = strings.TrimSpace(relDir)
-	if relDir == "." {
-		relDir = ""
-	}
-
-	targetDir := root
-	if relDir != "" {
-		targetDir = filepath.Join(root, relDir)
-	}
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return "", err
-	}
-
-	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
-	path := filepath.Join(targetDir, name)
-
-	template := "# Todo\n\n- [ ] \n"
-	if err := os.WriteFile(path, []byte(template), 0o644); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-func ToggleTodoLine(path string, lineIdx int) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(string(content), "\n")
-	if lineIdx < 0 || lineIdx >= len(lines) {
-		return fmt.Errorf("line index %d out of range", lineIdx)
-	}
-	line := lines[lineIdx]
-	trimmed := strings.TrimLeft(line, " \t")
-	indent := line[:len(line)-len(trimmed)]
-
-	switch {
-	case strings.HasPrefix(trimmed, "- [ ] "):
-		lines[lineIdx] = indent + "- [x] " + trimmed[6:]
-	case strings.HasPrefix(trimmed, "- [x] "), strings.HasPrefix(trimmed, "- [X] "):
-		lines[lineIdx] = indent + "- [ ] " + trimmed[6:]
-	default:
-		return fmt.Errorf("line %d is not a todo item", lineIdx)
-	}
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
-}
-
-func AddTodoItem(path, text string) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	raw := string(content)
-	if !strings.HasSuffix(raw, "\n") {
-		raw += "\n"
-	}
-	raw += "- [ ] " + text + "\n"
-	return os.WriteFile(path, []byte(raw), 0o644)
-}
-
-func DeleteTodoLine(path string, lineIdx int) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(string(content), "\n")
-	if lineIdx < 0 || lineIdx >= len(lines) {
-		return fmt.Errorf("line index %d out of range", lineIdx)
-	}
-	lines = append(lines[:lineIdx], lines[lineIdx+1:]...)
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
-}
-
+func CreateTodoNote(root, relDir string) (string, error) { return todo.CreateNote(root, relDir) }
+func ToggleTodoLine(path string, lineIdx int) error      { return todo.ToggleLine(path, lineIdx) }
+func AddTodoItem(path, text string) error                { return todo.AddItem(path, text) }
+func DeleteTodoLine(path string, lineIdx int) error      { return todo.DeleteLine(path, lineIdx) }
 func EditTodoLine(path string, lineIdx int, newText string) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(string(content), "\n")
-	if lineIdx < 0 || lineIdx >= len(lines) {
-		return fmt.Errorf("line index %d out of range", lineIdx)
-	}
-	line := lines[lineIdx]
-	trimmed := strings.TrimLeft(line, " \t")
-	indent := line[:len(line)-len(trimmed)]
-
-	prefix := "- [ ] "
-	if strings.HasPrefix(trimmed, "- [x] ") || strings.HasPrefix(trimmed, "- [X] ") {
-		prefix = "- [x] "
-	}
-	lines[lineIdx] = indent + prefix + newText
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+	return todo.EditLine(path, lineIdx, newText)
 }
 
 func UpdateTodoPriority(path string, lineIdx int, priority string) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(string(content), "\n")
-	if lineIdx < 0 || lineIdx >= len(lines) {
-		return fmt.Errorf("line index %d out of range", lineIdx)
-	}
-	line := lines[lineIdx]
-	trimmed := strings.TrimLeft(line, " 	")
-	indent := line[:len(line)-len(trimmed)]
-
-	if !strings.HasPrefix(trimmed, "- [ ] ") && !strings.HasPrefix(trimmed, "- [x] ") && !strings.HasPrefix(trimmed, "- [X] ") {
-		return fmt.Errorf("line %d is not a todo item", lineIdx)
-	}
-
-	priority = strings.TrimSpace(strings.TrimPrefix(strings.ToLower(priority), "p"))
-	if priority != "" {
-		if _, ok := parseTodoPriorityToken("[p" + priority + "]"); !ok {
-			return fmt.Errorf("invalid priority %q: expected a positive number", priority)
-		}
-	}
-
-	body := trimmed[6:]
-	fields := strings.Fields(body)
-	kept := make([]string, 0, len(fields)+1)
-	for _, field := range fields {
-		if _, ok := parseTodoPriorityToken(field); ok {
-			continue
-		}
-		kept = append(kept, field)
-	}
-	if priority != "" {
-		kept = append(kept, "[p"+priority+"]")
-	}
-
-	lines[lineIdx] = indent + trimmed[:6] + strings.TrimSpace(strings.Join(kept, " "))
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+	return todo.UpdatePriority(path, lineIdx, priority)
 }
 
 func UpdateTodoDueDate(path string, lineIdx int, dueDate string) error {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	lines := strings.Split(string(content), "\n")
-	if lineIdx < 0 || lineIdx >= len(lines) {
-		return fmt.Errorf("line index %d out of range", lineIdx)
-	}
-	line := lines[lineIdx]
-	trimmed := strings.TrimLeft(line, " 	")
-	indent := line[:len(line)-len(trimmed)]
-
-	if !strings.HasPrefix(trimmed, "- [ ] ") && !strings.HasPrefix(trimmed, "- [x] ") && !strings.HasPrefix(trimmed, "- [X] ") {
-		return fmt.Errorf("line %d is not a todo item", lineIdx)
-	}
-
-	dueDate = strings.TrimSpace(dueDate)
-	if dueDate != "" {
-		if _, err := time.Parse("2006-01-02", dueDate); err != nil {
-			return fmt.Errorf("invalid due date %q: expected YYYY-MM-DD", dueDate)
-		}
-	}
-
-	body := trimmed[6:]
-	fields := strings.Fields(body)
-	kept := make([]string, 0, len(fields)+1)
-	for _, field := range fields {
-		normalized := strings.ToLower(strings.TrimSpace(field))
-		if strings.HasPrefix(normalized, "[due:") && strings.HasSuffix(normalized, "]") {
-			continue
-		}
-		kept = append(kept, field)
-	}
-	if dueDate != "" {
-		kept = append(kept, "[due:"+dueDate+"]")
-	}
-
-	lines[lineIdx] = indent + trimmed[:6] + strings.TrimSpace(strings.Join(kept, " "))
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+	return todo.UpdateDueDate(path, lineIdx, dueDate)
 }
 
 func parseFrontMatterDate(fm FrontMatter) time.Time {

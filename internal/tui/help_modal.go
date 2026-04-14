@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"atbuy/noteui/internal/tui/shortcuts"
 )
 
 type helpEntry struct {
@@ -23,80 +25,12 @@ type helpSection struct {
 }
 
 func (m Model) helpEntries() []helpEntry {
-	bf := keys.BracketForward.Help().Key
-	bb := keys.BracketBackward.Help().Key
-	return []helpEntry{
-		{section: "Tree", key: keys.CommandPalette.Help().Key, desc: "Command palette: notes, actions, and workspace switch"},
-		{section: "Tree", key: keys.MoveDown.Help().Key + " / " + keys.MoveUp.Help().Key, desc: "Move up and down"},
-		{section: "Tree", key: keys.ScrollHalfPageUp.Help().Key + " / " + keys.ScrollHalfPageDown.Help().Key, desc: "Scroll half page up / down"},
-		{section: "Tree", key: keys.CollapseCategory.Help().Key + "/" + keys.ExpandCategory.Help().Key, desc: "Collapse/Expand category"},
-		{section: "Tree", key: keys.PendingG.Help().Key + keys.PendingG.Help().Key + " / " + keys.JumpBottom.Help().Key, desc: "Jump to top / bottom of list"},
-		{section: "Tree", key: keys.Open.Help().Key, desc: "Open note or jump from Pins"},
-		{section: "Tree", key: keys.Move.Help().Key, desc: "Move current item or marked batch"},
-		{section: "Tree", key: keys.ToggleSelect.Help().Key, desc: "Mark/unmark item for bulk actions"},
-		{section: "Tree", key: keys.Rename.Help().Key, desc: "Rename note/category"},
-		{section: "Tree", key: keys.AddTag.Help().Key, desc: "Add tags to selected note or marked notes"},
-		{section: "Tree", key: keys.Pin.Help().Key, desc: "Pin or unpin current item or marked notes"},
-		{section: "Tree", key: keys.ToggleSync.Help().Key, desc: "Toggle selected note sync"},
-		{section: "Tree", key: keys.MakeShared.Help().Key, desc: "Toggle shared status of selected note"},
-		{section: "Tree", key: keys.SelectWorkspace.Help().Key, desc: "Open the workspace picker"},
-		{section: "Tree", key: keys.SelectSyncProfile.Help().Key, desc: "Select default sync profile"},
-		{section: "Tree", key: keys.OpenConflictCopy.Help().Key, desc: "Resolve selected conflict"},
-		{section: "Tree", key: keys.ShowSyncDebug.Help().Key, desc: "Show sync details"},
-		{section: "Tree", key: keys.ShowSyncTimeline.Help().Key, desc: "View sync run history timeline"},
-		{section: "Tree", key: keys.DeleteRemoteKeepLocal.Help().Key, desc: "Delete remote copy, keep local note"},
-		{section: "Tree", key: keys.SyncImportCurrent.Help().Key, desc: "Import current remote note"},
-		{section: "Tree", key: keys.SyncImport.Help().Key, desc: "Import all missing synced notes"},
-		{section: "Tree", key: keys.UndoDelete.Help().Key, desc: "Undo last trash operation (restore from trash)"},
-		{section: "Tree", key: keys.CreateCategory.Help().Key, desc: "Create category"},
-		{section: "Tree", key: keys.NewTodoList.Help().Key, desc: "New todo list (tree focus)"},
-		{section: "Notes", key: keys.NewNote.Help().Key, desc: "New note in current view"},
-		{section: "Notes", key: keys.OpenDailyNote.Help().Key, desc: "Open or create today's daily note"},
-		{section: "Notes", key: keys.NewTemplate.Help().Key, desc: "New template in .templates/"},
-		{section: "Notes", key: keys.EditTemplates.Help().Key, desc: "Edit templates"},
-		{section: "Notes", key: keys.NewTemporaryNote.Help().Key, desc: "New temporary note"},
-		{section: "Notes", key: keys.ToggleTemporary.Help().Key, desc: "Toggle Notes / Temporary (tree focus)"},
-		{section: "Notes", key: keys.PromoteTemporary.Help().Key, desc: "Promote selected temporary note or marked batch"},
-		{section: "Notes", key: keys.ArchiveTemporary.Help().Key, desc: "Archive selected temporary note or marked batch"},
-		{section: "Notes", key: keys.MoveToTemporary.Help().Key, desc: "Move selected note or marked batch to temporary"},
-		{section: "Notes", key: keys.ClearMarks.Help().Key, desc: "Clear all current marks"},
-		{section: "Notes", key: keys.ShowPins.Help().Key, desc: "Toggle Pins view"},
-		{section: "Notes", key: keys.ShowTodos.Help().Key, desc: "Toggle global open todos view"},
-		{section: "Notes", key: keys.NoteHistory.Help().Key, desc: "Open version history for the selected note"},
-		{section: "Notes", key: keys.TrashBrowser.Help().Key, desc: "Open trash browser to restore trashed notes"},
-		{section: "Todos", key: keys.MoveDown.Help().Key + " / " + keys.MoveUp.Help().Key, desc: "Move through open tasks"},
-		{section: "Todos", key: keys.Open.Help().Key, desc: "Jump to the source note"},
-		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoKey.Help().Key, desc: "Toggle selected open task"},
-		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoAdd.Help().Key, desc: "Add a task to the selected note"},
-		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoDelete.Help().Key, desc: "Delete the selected open task"},
-		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoEdit.Help().Key, desc: "Edit the selected open task"},
-		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoDueDate.Help().Key, desc: "Set or clear the selected task due date"},
-		{section: "Todos", key: keys.TodoKey.Help().Key + keys.TodoPriority.Help().Key, desc: "Set or clear the selected task priority"},
-		{section: "Preview", key: keys.NextMatch.Help().Key + " / " + keys.PrevMatch.Help().Key, desc: "Next / previous match in preview"},
-		{section: "Preview", key: keys.PendingZ.Help().Key + keys.PendingZ.Help().Key, desc: "Center current match in preview"},
-		{section: "Preview", key: keys.TogglePreviewPrivacy.Help().Key, desc: "Toggle preview privacy"},
-		{section: "Preview", key: keys.TogglePreviewLineNumbers.Help().Key, desc: "Toggle preview line numbers"},
-		{section: "Preview", key: bf + keys.HeadingJumpKey.Help().Key + " / " + bb + keys.HeadingJumpKey.Help().Key, desc: "Next / prev heading in preview"},
-		{section: "Preview", key: bf + keys.TodoKey.Help().Key + " / " + bb + keys.TodoKey.Help().Key, desc: "Next / prev todo in preview"},
-		{section: "Preview", key: keys.PendingG.Help().Key + keys.PendingG.Help().Key + " / " + keys.JumpBottom.Help().Key, desc: "First / last todo in todo nav"},
-		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoKey.Help().Key, desc: "Toggle current todo checkbox"},
-		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoAdd.Help().Key, desc: "Add new todo item"},
-		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoDelete.Help().Key, desc: "Delete current todo item"},
-		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoEdit.Help().Key, desc: "Edit current todo item"},
-		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoDueDate.Help().Key, desc: "Set or clear current todo due date"},
-		{section: "Preview", key: keys.TodoKey.Help().Key + keys.TodoPriority.Help().Key, desc: "Set or clear current todo priority"},
-		{section: "Preview", key: keys.ToggleEncryption.Help().Key, desc: "Toggle note encryption"},
-		{section: "Filter", key: keys.Search.Help().Key, desc: "Search"},
-		{section: "Filter", key: "#tag", desc: "Filter by tag in search"},
-		{section: "Filter", key: "esc", desc: "Leave search, then clear on second press"},
-		{section: "Global", key: keys.ShowThemePicker.Help().Key, desc: "Open theme picker (live preview, esc to cancel)"},
-		{section: "Global", key: keys.Focus.Help().Key, desc: "Switch focused pane"},
-		{section: "Global", key: keys.SortKey.Help().Key, desc: "Sort menu (name / modified / created / size / reverse)"},
-		{section: "Global", key: keys.Refresh.Help().Key, desc: "Refresh"},
-		{section: "Global", key: keys.Delete.Help().Key + keys.DeleteConfirm.Help().Key, desc: "Trash note/category"},
-		{section: "Global", key: "esc", desc: "Close help"},
-		{section: "Global", key: keys.Quit.Help().Key, desc: "Quit"},
+	raw := shortcuts.HelpEntries(keys)
+	out := make([]helpEntry, len(raw))
+	for i, entry := range raw {
+		out[i] = helpEntry{section: entry.Section, key: entry.Key, desc: entry.Desc}
 	}
+	return out
 }
 
 func (m Model) filteredHelpSections() []helpSection {
