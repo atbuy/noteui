@@ -603,6 +603,126 @@ func builtinTheme(name string) themePalette {
 			HighlightBgColor: "#3A1F60",
 		}
 
+	case "rose-pine":
+		return themePalette{
+			BgColor:          "#191724",
+			PanelBgColor:     "#1F1D2E",
+			BorderColor:      "#26233A",
+			FocusBorderColor: "#EB6F92",
+			AccentColor:      "#EB6F92",
+			AccentSoftColor:  "#C4A7E7",
+			TextColor:        "#E0DEF4",
+			MutedColor:       "#908CAA",
+			SubtleColor:      "#26233A",
+			ChipBgColor:      "#2A2740",
+			MarkedItemColor:  "#F6C177",
+			ErrorColor:       "#EB6F92",
+			SuccessColor:     "#9CCFD8",
+			SelectedBgColor:  "#403D52",
+			SelectedFgColor:  "#E0DEF4",
+			HighlightBgColor: "#3A2D50",
+		}
+
+	case "monokai":
+		return themePalette{
+			BgColor:          "#272822",
+			PanelBgColor:     "#1E1F1C",
+			BorderColor:      "#3E3D32",
+			FocusBorderColor: "#A6E22E",
+			AccentColor:      "#A6E22E",
+			AccentSoftColor:  "#66D9EF",
+			TextColor:        "#F8F8F2",
+			MutedColor:       "#75715E",
+			SubtleColor:      "#3E3D32",
+			ChipBgColor:      "#2D2E27",
+			MarkedItemColor:  "#E6DB74",
+			ErrorColor:       "#F92672",
+			SuccessColor:     "#A6E22E",
+			SelectedBgColor:  "#49483E",
+			SelectedFgColor:  "#F8F8F2",
+			HighlightBgColor: "#3A4A20",
+		}
+
+	case "solarized-dark":
+		return themePalette{
+			BgColor:          "#002B36",
+			PanelBgColor:     "#073642",
+			BorderColor:      "#0D4050",
+			FocusBorderColor: "#268BD2",
+			AccentColor:      "#268BD2",
+			AccentSoftColor:  "#2AA198",
+			TextColor:        "#93A1A1",
+			MutedColor:       "#657B83",
+			SubtleColor:      "#0D4050",
+			ChipBgColor:      "#0D3E4A",
+			MarkedItemColor:  "#B58900",
+			ErrorColor:       "#DC322F",
+			SuccessColor:     "#859900",
+			SelectedBgColor:  "#0D4A5A",
+			SelectedFgColor:  "#EEE8D5",
+			HighlightBgColor: "#083C54",
+		}
+
+	case "ayu-dark":
+		return themePalette{
+			BgColor:          "#0D1017",
+			PanelBgColor:     "#131721",
+			BorderColor:      "#1D2433",
+			FocusBorderColor: "#E6B450",
+			AccentColor:      "#E6B450",
+			AccentSoftColor:  "#39BAE6",
+			TextColor:        "#BFBDB6",
+			MutedColor:       "#626A73",
+			SubtleColor:      "#1D2433",
+			ChipBgColor:      "#161D2A",
+			MarkedItemColor:  "#E6B450",
+			ErrorColor:       "#F26D78",
+			SuccessColor:     "#7FD962",
+			SelectedBgColor:  "#1E2A40",
+			SelectedFgColor:  "#E6E1CF",
+			HighlightBgColor: "#1E2E40",
+		}
+
+	case "material":
+		return themePalette{
+			BgColor:          "#212121",
+			PanelBgColor:     "#292929",
+			BorderColor:      "#3C3C3C",
+			FocusBorderColor: "#82AAFF",
+			AccentColor:      "#82AAFF",
+			AccentSoftColor:  "#89DDFF",
+			TextColor:        "#EEFFFF",
+			MutedColor:       "#717CB4",
+			SubtleColor:      "#3C3C3C",
+			ChipBgColor:      "#303030",
+			MarkedItemColor:  "#FFCB6B",
+			ErrorColor:       "#F07178",
+			SuccessColor:     "#C3E88D",
+			SelectedBgColor:  "#2D3A5A",
+			SelectedFgColor:  "#EEFFFF",
+			HighlightBgColor: "#263250",
+		}
+
+	case "nightfox":
+		return themePalette{
+			BgColor:          "#192330",
+			PanelBgColor:     "#212E3F",
+			BorderColor:      "#29394F",
+			FocusBorderColor: "#719CD6",
+			AccentColor:      "#719CD6",
+			AccentSoftColor:  "#9D79D6",
+			TextColor:        "#CDCECF",
+			MutedColor:       "#738091",
+			SubtleColor:      "#29394F",
+			ChipBgColor:      "#253446",
+			MarkedItemColor:  "#DBC074",
+			ErrorColor:       "#C94F6D",
+			SuccessColor:     "#81B29A",
+			SelectedBgColor:  "#223549",
+			SelectedFgColor:  "#CDCECF",
+			HighlightBgColor: "#1E3A50",
+		}
+
 	default:
 		return themePalette{
 			BgColor:          "#1E1E1E",
@@ -661,6 +781,12 @@ func BuiltinThemes() []BuiltinThemeEntry {
 		{"carbonfox", nil, "Sleek dark theme with IBM Carbon design aesthetics"},
 		{"crimson", nil, "Deep dark theme with rich crimson and wine-red accents"},
 		{"dusk", nil, "Dark theme with twilight purples evoking the last light of day"},
+		{"rose-pine", []string{"rosepine", "rose_pine"}, "Dark theme with dusty rose and muted purple tones (Rosé Pine)"},
+		{"monokai", nil, "Classic dark theme with vivid green, pink, and cyan accents"},
+		{"solarized-dark", []string{"solarized"}, "Dark counterpart to Solarized using the same precise palette"},
+		{"ayu-dark", []string{"ayu"}, "Minimal dark theme with a warm golden accent (Ayu Dark)"},
+		{"material", []string{"material-dark"}, "Dark theme inspired by Google's Material Design color system"},
+		{"nightfox", nil, "Soft navy dark theme with blue and purple tones (Nightfox)"},
 	}
 	result := make([]BuiltinThemeEntry, len(entries))
 	for i, e := range entries {
@@ -680,6 +806,14 @@ func normalizeThemeName(name string) string {
 		return "catppuccin"
 	case "catppuccin-latte":
 		return "latte"
+	case "rosepine", "rose_pine":
+		return "rose-pine"
+	case "ayu":
+		return "ayu-dark"
+	case "solarized":
+		return "solarized-dark"
+	case "material-dark":
+		return "material"
 	default:
 		return strings.ToLower(strings.TrimSpace(name))
 	}

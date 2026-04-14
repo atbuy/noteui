@@ -10,7 +10,7 @@ func TestPrintHelpContainsExpectedSections(t *testing.T) {
 	printHelp(&buf)
 	out := buf.String()
 
-	for _, want := range []string{"USAGE", "FLAGS", "ENVIRONMENT", "EXAMPLES", "--help", "--version", "--demo", "NOTES_ROOT", "NOTEUI_CONFIG"} {
+	for _, want := range []string{"USAGE", "FLAGS", "ENVIRONMENT", "EXAMPLES", "--help", "--version", "--demo", "+themes", "NOTES_ROOT", "NOTEUI_CONFIG"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("printHelp output missing %q", want)
 		}
@@ -27,6 +27,30 @@ func TestPrintHelpContainsBanner(t *testing.T) {
 	}
 	if !strings.Contains(out, "keyboard-driven terminal notes") {
 		t.Error("printHelp output missing tagline")
+	}
+}
+
+func TestPrintThemesContainsAllBuiltinThemes(t *testing.T) {
+	var buf strings.Builder
+	printThemes(&buf)
+	out := buf.String()
+
+	for _, name := range []string{
+		"default", "nord", "gruvbox", "catppuccin", "latte", "solarized-light", "paper",
+		"onedark", "kanagawa", "dracula", "everforest", "tokyo-night-storm", "github-light",
+		"github-dark", "carbonfox", "crimson", "dusk",
+		"rose-pine", "monokai", "solarized-dark", "ayu-dark", "material", "nightfox",
+	} {
+		if !strings.Contains(out, name) {
+			t.Errorf("printThemes output missing theme %q", name)
+		}
+	}
+
+	if !strings.Contains(out, "THEMES") {
+		t.Error("printThemes output missing THEMES header")
+	}
+	if !strings.Contains(out, "config.toml") {
+		t.Error("printThemes output missing config.toml usage hint")
 	}
 }
 

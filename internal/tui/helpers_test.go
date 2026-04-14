@@ -223,7 +223,10 @@ func TestBulletListItemHasNoExtraSpaceBetweenMarkerAndText(t *testing.T) {
 }
 
 func TestNewThemesLoadWithoutPanic(t *testing.T) {
-	for _, name := range []string{"crimson", "dusk"} {
+	for _, name := range []string{
+		"crimson", "dusk",
+		"rose-pine", "monokai", "solarized-dark", "ayu-dark", "material", "nightfox",
+	} {
 		cfg := config.Default()
 		cfg.Theme.Name = name
 		ApplyTheme(cfg)
@@ -245,6 +248,18 @@ func TestThemeAndColorHelpers(t *testing.T) {
 	}
 	if got := normalizeThemeName("dusk"); got != "dusk" {
 		require.Failf(t, "assertion failed", "expected 'dusk' to pass through unchanged, got %q", got)
+	}
+	if got := normalizeThemeName("rosepine"); got != "rose-pine" {
+		require.Failf(t, "assertion failed", "expected rosepine alias to normalize to rose-pine, got %q", got)
+	}
+	if got := normalizeThemeName("ayu"); got != "ayu-dark" {
+		require.Failf(t, "assertion failed", "expected ayu alias to normalize to ayu-dark, got %q", got)
+	}
+	if got := normalizeThemeName("solarized"); got != "solarized-dark" {
+		require.Failf(t, "assertion failed", "expected solarized alias to normalize to solarized-dark, got %q", got)
+	}
+	if got := normalizeThemeName("material-dark"); got != "material" {
+		require.Failf(t, "assertion failed", "expected material-dark alias to normalize to material, got %q", got)
 	}
 
 	if _, ok := parseHexColor("#AABBCC"); !ok {
@@ -284,6 +299,33 @@ func TestThemeAndColorHelpers(t *testing.T) {
 	normalized := normalizePaletteAccessibility(p)
 	if normalized.TextColor == p.TextColor {
 		require.FailNow(t, "expected accessibility normalization to adjust low-contrast text color")
+	}
+}
+
+func TestBuiltinThemesListIsComplete(t *testing.T) {
+	themes := BuiltinThemes()
+	require.NotEmpty(t, themes)
+	for _, entry := range themes {
+		require.NotEmpty(t, entry.Name, "theme entry must have a name")
+		require.NotEmpty(t, entry.Description, "theme %q must have a description", entry.Name)
+		require.NotEmpty(t, entry.Palette.AccentColor, "theme %q must have an AccentColor", entry.Name)
+		require.NotEmpty(t, entry.Palette.BgColor, "theme %q must have a BgColor", entry.Name)
+		require.NotEmpty(t, entry.Palette.TextColor, "theme %q must have a TextColor", entry.Name)
+	}
+
+	names := make(map[string]bool, len(themes))
+	for _, entry := range themes {
+		require.False(t, names[entry.Name], "duplicate theme name %q in BuiltinThemes", entry.Name)
+		names[entry.Name] = true
+	}
+
+	for _, name := range []string{
+		"default", "nord", "gruvbox", "catppuccin", "latte", "solarized-light", "paper",
+		"onedark", "kanagawa", "dracula", "everforest", "tokyo-night-storm", "github-light",
+		"github-dark", "carbonfox", "crimson", "dusk",
+		"rose-pine", "monokai", "solarized-dark", "ayu-dark", "material", "nightfox",
+	} {
+		require.True(t, names[name], "BuiltinThemes missing expected theme %q", name)
 	}
 }
 
