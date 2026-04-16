@@ -81,10 +81,7 @@ func (c WebDAVClient) PullIndex(ctx context.Context, profile config.SyncProfile,
 		if err != nil {
 			continue
 		}
-		noteRev := strings.Trim(noteEtag, `"`)
-		if noteRev == "" {
-			noteRev = contentHash(noteBody)
-		}
+		noteRev := buildWebDAVRevision(noteEtag, noteBody)
 		title := notes.ExtractTitle(string(noteBody))
 		if title == "" {
 			title = path.Base(mapping.RelPath)
@@ -121,10 +118,7 @@ func (c WebDAVClient) FetchNote(ctx context.Context, profile config.SyncProfile,
 	if err != nil {
 		return resp, fmt.Errorf("webdav fetch note content: %w", err)
 	}
-	rev := strings.Trim(etag, `"`)
-	if rev == "" {
-		rev = contentHash(body)
-	}
+	rev := buildWebDAVRevision(etag, body)
 	title := notes.ExtractTitle(string(body))
 	if title == "" {
 		title = path.Base(mapping.RelPath)
@@ -153,10 +147,7 @@ func (c WebDAVClient) RegisterNote(ctx context.Context, profile config.SyncProfi
 	if err != nil {
 		return resp, fmt.Errorf("webdav register note: %w", err)
 	}
-	rev := strings.Trim(etag, `"`)
-	if rev == "" {
-		rev = contentHash([]byte(req.Content))
-	}
+	rev := buildWebDAVRevision(etag, []byte(req.Content))
 
 	mapping := webdavNoteMapping{
 		ID:        id,
@@ -182,17 +173,13 @@ func (c WebDAVClient) PushNote(ctx context.Context, profile config.SyncProfile, 
 	}
 
 	noteURL := baseURL + "/" + escapePath(mapping.RelPath)
-	_, currentEtag, err := c.getFile(ctx, profile, noteURL)
+	currentBody, currentEtag, err := c.getFile(ctx, profile, noteURL)
 	if err != nil {
 		return resp, fmt.Errorf("webdav push: fetch current: %w", err)
 	}
 
-	currentRev := strings.Trim(currentEtag, `"`)
-	if currentRev == "" {
-		body, _, _ := c.getFile(ctx, profile, noteURL)
-		currentRev = contentHash(body)
-	}
-	if req.ExpectedRevision != "" && currentRev != req.ExpectedRevision {
+	currentRev := buildWebDAVRevision(currentEtag, currentBody)
+	if req.ExpectedRevision != "" && !sameRevision(currentRev, req.ExpectedRevision) {
 		return resp, &RPCError{Code: ErrCodeConflict, Message: "revision mismatch"}
 	}
 
@@ -210,10 +197,7 @@ func (c WebDAVClient) PushNote(ctx context.Context, profile config.SyncProfile, 
 	if err != nil {
 		return resp, fmt.Errorf("webdav push note: %w", err)
 	}
-	rev := strings.Trim(etag, `"`)
-	if rev == "" {
-		rev = contentHash([]byte(req.Content))
-	}
+	rev := buildWebDAVRevision(etag, []byte(req.Content))
 
 	mapping.Encrypted = req.Encrypted
 	if err := c.saveNoteMapping(ctx, profile, baseURL, mapping); err != nil {
@@ -234,16 +218,12 @@ func (c WebDAVClient) UpdateNotePath(ctx context.Context, profile config.SyncPro
 	}
 
 	noteURL := baseURL + "/" + escapePath(mapping.RelPath)
-	_, currentEtag, err := c.getFile(ctx, profile, noteURL)
+	currentBody, currentEtag, err := c.getFile(ctx, profile, noteURL)
 	if err != nil {
 		return resp, fmt.Errorf("webdav update path: fetch current: %w", err)
 	}
-	currentRev := strings.Trim(currentEtag, `"`)
-	if currentRev == "" {
-		body, _, _ := c.getFile(ctx, profile, noteURL)
-		currentRev = contentHash(body)
-	}
-	if req.ExpectedRevision != "" && currentRev != req.ExpectedRevision {
+	currentRev := buildWebDAVRevision(currentEtag, currentBody)
+	if req.ExpectedRevision != "" && !sameRevision(currentRev, req.ExpectedRevision) {
 		return resp, &RPCError{Code: ErrCodeConflict, Message: "revision mismatch"}
 	}
 
@@ -258,11 +238,7 @@ func (c WebDAVClient) UpdateNotePath(ctx context.Context, profile config.SyncPro
 	if err != nil {
 		return resp, fmt.Errorf("webdav update path: fetch new: %w", err)
 	}
-	rev := strings.Trim(newEtag, `"`)
-	if rev == "" {
-		body, _, _ := c.getFile(ctx, profile, newURL)
-		rev = contentHash(body)
-	}
+	rev := buildWebDAVRevision(newEtag, currentBody)
 
 	mapping.RelPath = req.RelPath
 	if err := c.saveNoteMapping(ctx, profile, baseURL, mapping); err != nil {

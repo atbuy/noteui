@@ -3,6 +3,7 @@ package sync
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,6 +56,20 @@ func testSyncConfig(remoteRoot string) config.SyncConfig {
 				SSHHost:    "localhost",
 				RemoteRoot: remoteRoot,
 				RemoteBin:  "noteui-sync",
+			},
+		},
+	}
+}
+
+func testWebDAVSyncConfig(serverURL string) config.SyncConfig {
+	return config.SyncConfig{
+		DefaultProfile: "cloud",
+		Profiles: map[string]config.SyncProfile{
+			"cloud": {
+				Kind:       config.SyncKindWebDAV,
+				WebDAVURL:  serverURL,
+				RemoteRoot: "/noteui",
+				Auth:       config.SyncAuthNone,
 			},
 		},
 	}
@@ -189,6 +204,60 @@ Remote change
 	require.Contains(t, string(data), "Remote change")
 }
 
+func TestWebDAVSyncRootPullsRemoteChangeWhenETagStaysStale(t *testing.T) {
+	root := t.TempDir()
+	notePath := filepath.Join(root, "note.md")
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: synced
+---
+original
+`), 0o644))
+
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+	cfg := testWebDAVSyncConfig(srv.URL)
+
+	_, err := SyncRoot(context.Background(), root, "", cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	var rec NoteRecord
+	for _, candidate := range records {
+		rec = candidate
+	}
+
+	noteKey := "/noteui/note.md"
+	staleEtag := store.files[noteKey].etag
+	store.files[noteKey] = memFile{
+		body: []byte(`---
+sync: synced
+---
+edited remotely
+`),
+		etag: staleEtag,
+	}
+
+	result, err := SyncRoot(context.Background(), root, "", cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.True(t, result.NotesChanged)
+
+	data, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(data), "edited remotely")
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.NotEmpty(t, rec.RemoteRev)
+	require.NotEqual(t, staleEtag, rec.RemoteRev)
+	require.Empty(t, rec.LastSyncError)
+}
+
 func TestSyncRootCreatesAndClearsConflictCopy(t *testing.T) {
 	root := t.TempDir()
 	remote := t.TempDir()
@@ -286,6 +355,70 @@ Merged body
 	})
 	require.NoError(t, err)
 	require.Contains(t, fetched.Note.Content, "Merged body")
+}
+
+func TestWebDAVSyncRootCreatesConflictWhenRemoteAndLocalChangeWithStaleETag(t *testing.T) {
+	root := t.TempDir()
+	notePath := filepath.Join(root, "plan.md")
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: synced
+---
+original
+`), 0o644))
+
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+	cfg := testWebDAVSyncConfig(srv.URL)
+
+	_, err := SyncRoot(context.Background(), root, "", cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	var rec NoteRecord
+	for _, candidate := range records {
+		rec = candidate
+	}
+
+	noteKey := "/noteui/plan.md"
+	staleEtag := store.files[noteKey].etag
+	store.files[noteKey] = memFile{
+		body: []byte(`---
+sync: synced
+---
+remote edit
+`),
+		etag: staleEtag,
+	}
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: synced
+---
+local edit
+`), 0o644))
+
+	result, err := SyncRoot(context.Background(), root, "", cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Conflicts)
+
+	localRaw, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(localRaw), "local edit")
+	require.NotContains(t, string(localRaw), "remote edit")
+
+	records, err = LoadNoteRecords(root)
+	require.NoError(t, err)
+	rec = records[rec.ID]
+	require.NotNil(t, rec.Conflict)
+	require.Equal(t, "conflict", rec.LastSyncError)
+
+	conflictCopyPath := filepath.Join(root, filepath.FromSlash(rec.Conflict.CopyPath))
+	conflictRaw, err := os.ReadFile(conflictCopyPath)
+	require.NoError(t, err)
+	require.Contains(t, string(conflictRaw), "remote edit")
 }
 
 func TestSyncRootPreservesRemoteIdentityForUnchangedLocalMove(t *testing.T) {
@@ -1063,6 +1196,59 @@ func TestSyncRootSharedNoteAlwaysPullsRemoteOnDivergence(t *testing.T) {
 	require.NoError(t, err)
 	for _, e := range entries {
 		require.NotContains(t, e.Name(), ".conflict-", "expected no conflict copy file")
+	}
+}
+
+func TestWebDAVSyncRootSharedNotePullsRemoteOnDivergenceWithStaleETag(t *testing.T) {
+	root := t.TempDir()
+	notePath := filepath.Join(root, "shared.md")
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: shared
+---
+original
+`), 0o644))
+
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+	cfg := testWebDAVSyncConfig(srv.URL)
+
+	_, err := SyncRoot(context.Background(), root, "", cfg, nil, nil, client)
+	require.NoError(t, err)
+
+	noteKey := "/noteui/shared.md"
+	staleEtag := store.files[noteKey].etag
+	store.files[noteKey] = memFile{
+		body: []byte(`---
+sync: shared
+---
+remote edit
+`),
+		etag: staleEtag,
+	}
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: shared
+---
+local edit
+`), 0o644))
+
+	result, err := SyncRoot(context.Background(), root, "", cfg, nil, nil, client)
+	require.NoError(t, err)
+	require.Zero(t, result.Conflicts)
+	require.True(t, result.NotesChanged)
+
+	content, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	require.Contains(t, string(content), "remote edit")
+	require.NotContains(t, string(content), "local edit")
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	for _, rec := range records {
+		require.Nil(t, rec.Conflict)
+		require.Empty(t, rec.LastSyncError)
 	}
 }
 

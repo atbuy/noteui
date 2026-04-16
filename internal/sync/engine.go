@@ -114,13 +114,14 @@ func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.S
 			return result, err
 		}
 		localHash := HashContent(raw)
+		remoteChanged := remoteContentChanged(rec, remoteMeta.Revision)
 		switch {
-		case rec.RemoteRev != remoteMeta.Revision && rec.LastSyncedHash == localHash:
+		case remoteChanged && rec.LastSyncedHash == localHash:
 			if err := applyRemoteNote(ctx, client, profile, root, rec, remoteMeta, &result); err != nil {
 				_ = recordSyncFailure(root, rec, err)
 				return result, err
 			}
-		case rec.RemoteRev != remoteMeta.Revision && rec.LastSyncedHash != localHash:
+		case remoteChanged && rec.LastSyncedHash != localHash:
 			if localNote.SyncClass == notes.SyncClassShared {
 				if err := applyRemoteNote(ctx, client, profile, root, rec, remoteMeta, &result); err != nil {
 					_ = recordSyncFailure(root, rec, err)

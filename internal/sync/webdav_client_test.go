@@ -414,8 +414,9 @@ func TestWebDAVExternalEditDetected(t *testing.T) {
 
 	// Simulate external edit via Nextcloud (direct file write)
 	noteKey := "/noteui/ext.md"
+	staleEtag := store.files[noteKey].etag
 	newContent := []byte("edited externally")
-	store.files[noteKey] = memFile{body: newContent, etag: contentHash(newContent)}
+	store.files[noteKey] = memFile{body: newContent, etag: staleEtag}
 
 	fetched, err := client.FetchNote(ctx, profile, FetchNoteRequest{
 		RemoteRoot: "/noteui",
