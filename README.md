@@ -12,71 +12,6 @@ It is built for people who want a keyboard-driven notes workflow without giving 
 
 ![noteui demo](demo/noteui-demo.gif)
 
-## Table of contents
-
-- [Try it in 30 seconds](#try-it-in-30-seconds)
-- [Documentation](#documentation)
-- [Highlights](#highlights)
-- [Install](#install)
-- [Quick start](#quick-start)
-- [Key features](#key-features)
-  - [Notes and organization](#notes-and-organization)
-  - [Themes](#themes)
-  - [Sync](#sync)
-  - [Todos](#todos)
-  - [Encryption](#encryption)
-- [CLI options](#cli-options)
-- [Sync setup](#sync-setup)
-- [Build from source](#build-from-source)
-
----
-
-## Try it in 30 seconds
-
-Already installed noteui? Run:
-
-```sh
-noteui --demo
-```
-
-This launches the UI against a bundled set of sample notes copied into a throwaway temporary directory. Your real notes root is not touched, sync is disabled for the session, and the temp directory is cleaned up automatically when you quit. See [Demo mode](https://atbuy.github.io/noteui/guide/usage/#demo-mode) for details.
-
-## Documentation
-
-Full documentation is published at:
-
-<https://atbuy.github.io/noteui/>
-
-Recommended entry points:
-
-- [Getting started](https://atbuy.github.io/noteui/tutorial/getting-started/)
-- [Installation](https://atbuy.github.io/noteui/tutorial/installation/)
-- [Usage guide](https://atbuy.github.io/noteui/guide/usage/)
-- [Keybindings](https://atbuy.github.io/noteui/guide/keybindings/)
-- [Configuration reference](https://atbuy.github.io/noteui/reference/configuration/)
-- [Environment variables](https://atbuy.github.io/noteui/reference/environment/)
-- [FAQ](https://atbuy.github.io/noteui/faq/)
-
-## Highlights
-
-- browse notes and categories in a tree view
-- preview notes directly in the terminal with search highlighting
-- search by title, path, content preview, and tags
-- create, rename, move, and delete notes or categories
-- keep temporary notes separate from your main notes
-- create and manage todo notes, with a global open-tasks view
-- promote, archive, and batch-process temporary notes
-- pin important notes and categories
-- automatic version history for every note, with an in-app rollback modal (`H`)
-- live theme picker with instant full-UI preview (`ctrl+y`), 20+ built-in themes
-- optional SSH-based sync for `sync: synced` notes with tree sync markers
-- per-workspace `sync_remote_root` keeps multiple workspaces isolated on the remote
-- encrypted note bodies, with atomic writes and history-based recovery
-- customize theme, preview behavior, icons, and keybindings
-- keep your notes as regular files on disk
-- switch between named workspaces with isolated local UI state
-- command palette (`ctrl+p`) for quick access to every action
-
 ## Install
 
 Quick install examples:
@@ -97,9 +32,9 @@ The easiest manual install path is still the pre-built release archives:
 
 <https://github.com/atbuy/noteui/releases>
 
-Linux and macOS releases are published as `.tar.gz` archives. Windows releases are published as `.zip` archives. Each release archive includes both `noteui` and `noteui-sync`.
+Linux and macOS releases are published as `.tar.gz` archives. Windows releases are published as `.zip` archives. Each release archive includes both `noteui` and `noteui-sync` (the sync helper).
 
-## Quick start
+## Quickstart
 
 1. Download the right release archive for your platform from the releases page.
 2. Extract it.
@@ -112,6 +47,60 @@ By default, `noteui`:
 - stores temporary notes under `.tmp` inside the notes root
 - opens notes with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`
 - stores local UI state under `$HOME/.local/state/noteui/state.json`
+
+## Jump to
+
+- [Try it in 30 seconds](#try-it-in-30-seconds)
+- [Highlights](#highlights)
+- [Documentation](#documentation)
+- [Sync setup](#sync-setup)
+- [Build from source](#build-from-source)
+
+## Try it in 30 seconds
+
+Already installed noteui? Run:
+
+```sh
+noteui --demo
+```
+
+This launches the UI against a bundled set of sample notes copied into a throwaway temporary directory. Your real notes root is not touched, sync is disabled for the session, and the temp directory is cleaned up automatically when you quit. See [Demo mode](https://atbuy.github.io/noteui/guide/usage/#demo-mode) for details.
+
+## Highlights
+
+- browse notes and categories in a tree view
+- preview notes directly in the terminal with search highlighting
+- search by title, path, content preview, and tags
+- create, rename, move, and delete notes or categories
+- keep temporary notes separate from your main notes
+- create and manage todo notes, with a global open-tasks view
+- promote, archive, and batch-process temporary notes
+- pin important notes and categories
+- automatic version history for every note, with an in-app rollback modal (`H`)
+- live theme picker with instant full-UI preview (`ctrl+y`), 20+ built-in themes
+- optional SSH and WebDAV sync for `sync: synced` notes with tree sync markers
+- per-workspace `sync_remote_root` keeps multiple workspaces isolated on the remote
+- encrypted note bodies, with atomic writes and history-based recovery
+- customize theme, preview behavior, icons, and keybindings
+- keep your notes as regular files on disk
+- switch between named workspaces with isolated local UI state
+- command palette (`ctrl+p`) for quick access to every action
+
+## Documentation
+
+Full documentation is published at:
+
+<https://atbuy.github.io/noteui/>
+
+Recommended entry points:
+
+- [Getting started](https://atbuy.github.io/noteui/tutorial/getting-started/)
+- [Installation](https://atbuy.github.io/noteui/tutorial/installation/)
+- [Usage guide](https://atbuy.github.io/noteui/guide/usage/)
+- [Keybindings](https://atbuy.github.io/noteui/guide/keybindings/)
+- [Configuration reference](https://atbuy.github.io/noteui/reference/configuration/)
+- [Environment variables](https://atbuy.github.io/noteui/reference/environment/)
+- [FAQ](https://atbuy.github.io/noteui/faq/)
 
 ## Key features
 
@@ -143,7 +132,12 @@ noteui +themes
 
 ### Sync
 
-noteui has optional SSH-based sync. Mark a note with `sync: synced` in its frontmatter and noteui will replicate it to a configured remote host using a small helper binary (`noteui-sync`). See [Sync setup](#sync-setup) below.
+noteui has optional sync with two backends:
+
+- SSH, using the `noteui-sync` sync helper on a remote machine
+- WebDAV, for Nextcloud and other WebDAV-capable servers
+
+Mark a note with `sync: synced` in its frontmatter and noteui will replicate it to the configured remote. See [Sync setup](#sync-setup) below.
 
 ### Todos
 
@@ -175,7 +169,9 @@ Environment variables:
 
 ## Sync setup
 
-Sync is optional and SSH-based.
+Sync is optional. noteui supports both SSH and WebDAV backends.
+
+### SSH quick start
 
 1. Build or install both binaries:
    - `noteui`
@@ -193,6 +189,38 @@ ssh_host = "notes-prod"
 remote_root = "/srv/noteui"
 remote_bin = "/usr/local/bin/noteui-sync"
 ```
+
+### WebDAV quick start
+
+For Nextcloud and similar servers:
+
+```toml
+[sync]
+default_profile = "cloud"
+
+[sync.profiles.cloud]
+kind = "webdav"
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+remote_root = "/Notes"
+auth = "basic"
+username_env = "NOTEUI_NEXTCLOUD_USERNAME"
+password_env = "NOTEUI_NEXTCLOUD_PASSWORD"
+```
+
+Start `noteui` from the same environment where the credentials are exported:
+
+```sh
+export NOTEUI_NEXTCLOUD_USERNAME="alice"
+export NOTEUI_NEXTCLOUD_PASSWORD="app-password-here"
+noteui
+```
+
+For WebDAV, remember:
+
+- `webdav_url` points to the user endpoint
+- `remote_root` points to the notes directory under that endpoint
+
+noteui creates the remote directory and its `.noteui-sync/` metadata directory automatically on first successful upload.
 
 5. Mark any note you want synced with frontmatter:
 
@@ -216,6 +244,8 @@ Press `S` on a selected local note to toggle `sync: local` and `sync: synced`. P
 If you use multiple workspaces, add `sync_remote_root` to each workspace config to give it a dedicated remote directory. Without this, every workspace syncs to the same remote path and notes cross-contaminate across workspaces.
 
 On another machine, noteui refreshes remote note metadata automatically but does not auto-download missing note bodies. Synced notes that exist on the server but not locally appear in the tree as muted `x` placeholder rows, show an import message in the preview, and cannot be edited until imported. Press `i` to import the selected remote-only note, or `I` to import all missing synced notes. This also works as recovery inside an existing notes root: if you delete a synced note locally, `I` will restore it from the server as long as the target path is free. noteui skips collisions instead of overwriting existing local files.
+
+For the full sync guide, including WebDAV details, per-workspace isolation, conflict resolution, and troubleshooting, see [docs/guide/sync.md](docs/guide/sync.md).
 
 ## Build from source
 

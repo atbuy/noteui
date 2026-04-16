@@ -64,7 +64,7 @@ The manual install and build-from-source options are documented below if you pre
 - macOS: `.tar.gz`
 - Windows: `.zip`
 
-Each release archive includes both `noteui` and `noteui-sync`. Most users only need to run `noteui`; `noteui-sync` is used when you configure SSH-based sync.
+Each release archive includes both `noteui` and `noteui-sync`. Most users only need to run `noteui`; `noteui-sync` is only needed when you configure the SSH sync backend.
 
 !!! tip
 

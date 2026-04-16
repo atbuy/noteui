@@ -52,9 +52,14 @@ type SyncConfig struct {
 }
 
 type SyncProfile struct {
-	SSHHost    string `toml:"ssh_host"`
-	RemoteRoot string `toml:"remote_root"`
-	RemoteBin  string `toml:"remote_bin"`
+	Kind        string `toml:"kind"`
+	SSHHost     string `toml:"ssh_host"`
+	RemoteRoot  string `toml:"remote_root"`
+	RemoteBin   string `toml:"remote_bin"`
+	WebDAVURL   string `toml:"webdav_url"`
+	Auth        string `toml:"auth"`
+	UsernameEnv string `toml:"username_env"`
+	PasswordEnv string `toml:"password_env"`
 }
 
 type ThemeConfig struct {
@@ -333,14 +338,8 @@ func Validate(cfg Config) error {
 		if strings.TrimSpace(name) == "" {
 			return errors.New("sync profile name cannot be empty")
 		}
-		if strings.TrimSpace(profile.SSHHost) == "" {
-			return fmt.Errorf("sync profile %q is missing ssh_host", name)
-		}
-		if strings.TrimSpace(profile.RemoteRoot) == "" {
-			return fmt.Errorf("sync profile %q is missing remote_root", name)
-		}
-		if strings.TrimSpace(profile.RemoteBin) == "" {
-			return fmt.Errorf("sync profile %q is missing remote_bin", name)
+		if err := validateSyncProfile(name, profile); err != nil {
+			return err
 		}
 	}
 
@@ -467,6 +466,64 @@ func ValidThemeNames() []string {
 func IsValidThemeName(name string) bool {
 	name = strings.ToLower(strings.TrimSpace(name))
 	return slices.Contains(ValidThemeNames(), name)
+}
+
+const (
+	SyncKindSSH    = "ssh"
+	SyncKindWebDAV = "webdav"
+	SyncAuthBasic  = "basic"
+	SyncAuthNone   = "none"
+)
+
+func ResolvedKind(p SyncProfile) string {
+	kind := strings.ToLower(strings.TrimSpace(p.Kind))
+	if kind == "" {
+		return SyncKindSSH
+	}
+	return kind
+}
+
+func validateSyncProfile(name string, p SyncProfile) error {
+	kind := ResolvedKind(p)
+	switch kind {
+	case SyncKindSSH:
+		if strings.TrimSpace(p.SSHHost) == "" {
+			return fmt.Errorf("sync profile %q is missing ssh_host", name)
+		}
+		if strings.TrimSpace(p.RemoteRoot) == "" {
+			return fmt.Errorf("sync profile %q is missing remote_root", name)
+		}
+		if strings.TrimSpace(p.RemoteBin) == "" {
+			return fmt.Errorf("sync profile %q is missing remote_bin", name)
+		}
+	case SyncKindWebDAV:
+		if strings.TrimSpace(p.WebDAVURL) == "" {
+			return fmt.Errorf("sync profile %q is missing webdav_url", name)
+		}
+		u := strings.TrimSpace(p.WebDAVURL)
+		if !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+			return fmt.Errorf("sync profile %q webdav_url must start with http:// or https://", name)
+		}
+		auth := strings.ToLower(strings.TrimSpace(p.Auth))
+		if auth == "" {
+			auth = SyncAuthBasic
+		}
+		switch auth {
+		case SyncAuthBasic:
+			if strings.TrimSpace(p.UsernameEnv) == "" {
+				return fmt.Errorf("sync profile %q is missing username_env (required for basic auth)", name)
+			}
+			if strings.TrimSpace(p.PasswordEnv) == "" {
+				return fmt.Errorf("sync profile %q is missing password_env (required for basic auth)", name)
+			}
+		case SyncAuthNone:
+		default:
+			return fmt.Errorf("sync profile %q has unknown auth mode %q (valid: basic, none)", name, auth)
+		}
+	default:
+		return fmt.Errorf("sync profile %q has unknown kind %q (valid: ssh, webdav)", name, kind)
+	}
+	return nil
 }
 
 func isValidBorderStyle(name string) bool {

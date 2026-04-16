@@ -21,16 +21,14 @@ func ImportRemoteNote(ctx context.Context, root, remoteRootOverride string, cfg 
 
 func importRemoteNotes(ctx context.Context, root, remoteRootOverride string, cfg config.SyncConfig, client Client, onlyNoteID string) (SyncResult, error) {
 	var result SyncResult
-	if client == nil {
-		client = SSHClient{}
-	}
 	profile, profileName, err := ActiveProfile(cfg, root)
 	if err != nil {
 		return result, err
 	}
-	if remoteRootOverride != "" {
-		profile.RemoteRoot = remoteRootOverride
+	if client == nil {
+		client = NewClient(profile)
 	}
+	profile.RemoteRoot = resolvedRemoteRoot(profile, root, remoteRootOverride)
 	rootCfg, err := EnsureRootConfig(root, cfg)
 	if err != nil {
 		return result, err

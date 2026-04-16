@@ -177,6 +177,140 @@ func TestValidateRejectsIncompleteSyncProfile(t *testing.T) {
 	require.Contains(t, err.Error(), `sync profile "homebox" is missing remote_root`)
 }
 
+func TestValidateMissingKindDefaultsToSSH(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "srv"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"srv": {SSHHost: "host", RemoteRoot: "/notes", RemoteBin: "noteui-sync"},
+	}
+	require.NoError(t, Validate(cfg))
+	require.Equal(t, SyncKindSSH, ResolvedKind(cfg.Sync.Profiles["srv"]))
+}
+
+func TestValidateAcceptsWebDAVProfileWithBasicAuth(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:        "webdav",
+			WebDAVURL:   "https://cloud.example.com/dav",
+			Auth:        "basic",
+			UsernameEnv: "DAV_USER",
+			PasswordEnv: "DAV_PASS",
+		},
+	}
+	require.NoError(t, Validate(cfg))
+}
+
+func TestValidateAcceptsWebDAVProfileWithNoAuth(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "local"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"local": {
+			Kind:      "webdav",
+			WebDAVURL: "http://192.168.1.50/dav",
+			Auth:      "none",
+		},
+	}
+	require.NoError(t, Validate(cfg))
+}
+
+func TestValidateWebDAVDefaultsAuthToBasic(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:      "webdav",
+			WebDAVURL: "https://cloud.example.com/dav",
+		},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing username_env")
+}
+
+func TestValidateRejectsWebDAVMissingURL(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {Kind: "webdav", Auth: "none"},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing webdav_url")
+}
+
+func TestValidateRejectsWebDAVBadURLScheme(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {Kind: "webdav", WebDAVURL: "ftp://example.com", Auth: "none"},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must start with http:// or https://")
+}
+
+func TestValidateRejectsUnknownBackendKind(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "x"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"x": {Kind: "ftp"},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `unknown kind "ftp"`)
+}
+
+func TestValidateRejectsUnknownAuthMode(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "x"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"x": {Kind: "webdav", WebDAVURL: "https://x.com/dav", Auth: "oauth"},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `unknown auth mode "oauth"`)
+}
+
+func TestLoadWebDAVProfileFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := strings.Join([]string{
+		"[sync]",
+		`default_profile = "cloud"`,
+		"",
+		"[sync.profiles.cloud]",
+		`kind = "webdav"`,
+		`webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"`,
+		`remote_root = "/noteui/personal"`,
+		`auth = "basic"`,
+		`username_env = "NOTEUI_WEBDAV_USER"`,
+		`password_env = "NOTEUI_WEBDAV_PASSWORD"`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "cloud", cfg.Sync.DefaultProfile)
+
+	p := cfg.Sync.Profiles["cloud"]
+	require.Equal(t, "webdav", p.Kind)
+	require.Equal(t, "https://cloud.example.com/remote.php/dav/files/alice", p.WebDAVURL)
+	require.Equal(t, "/noteui/personal", p.RemoteRoot)
+	require.Equal(t, "basic", p.Auth)
+	require.Equal(t, "NOTEUI_WEBDAV_USER", p.UsernameEnv)
+	require.Equal(t, "NOTEUI_WEBDAV_PASSWORD", p.PasswordEnv)
+}
+
+func TestResolvedKindDefaultsToSSH(t *testing.T) {
+	require.Equal(t, SyncKindSSH, ResolvedKind(SyncProfile{}))
+	require.Equal(t, SyncKindSSH, ResolvedKind(SyncProfile{Kind: "ssh"}))
+	require.Equal(t, SyncKindSSH, ResolvedKind(SyncProfile{Kind: "SSH"}))
+	require.Equal(t, SyncKindWebDAV, ResolvedKind(SyncProfile{Kind: "webdav"}))
+}
+
 func TestLoadReturnsDefaultOnParseError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

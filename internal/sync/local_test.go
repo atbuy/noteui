@@ -117,6 +117,28 @@ func TestActiveProfile(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestResolvedRemoteRootIgnoresWebDAVOverrideThatMatchesLocalRoot(t *testing.T) {
+	profile := config.SyncProfile{
+		Kind:       config.SyncKindWebDAV,
+		WebDAVURL:  "https://cloud.example.com/remote.php/dav/files/alice",
+		RemoteRoot: "/Notes",
+	}
+
+	got := resolvedRemoteRoot(profile, "/home/alice/notes", "/home/alice/notes")
+	require.Equal(t, "/Notes", got)
+}
+
+func TestResolvedRemoteRootKeepsDistinctWebDAVOverride(t *testing.T) {
+	profile := config.SyncProfile{
+		Kind:       config.SyncKindWebDAV,
+		WebDAVURL:  "https://cloud.example.com/remote.php/dav/files/alice",
+		RemoteRoot: "/Notes",
+	}
+
+	got := resolvedRemoteRoot(profile, "/home/alice/notes", "/Projects/Shared")
+	require.Equal(t, "/Projects/Shared", got)
+}
+
 func TestSaveAndLoadRootConfig(t *testing.T) {
 	root := t.TempDir()
 

@@ -244,7 +244,11 @@ func (m Model) renderSyncProfilePickerModal() string {
 		if i == m.syncProfileCursor {
 			prefix = "› "
 		}
-		detail := name
+		kindTag := ""
+		if p, ok := m.cfg.Sync.Profiles[name]; ok {
+			kindTag = " [" + config.ResolvedKind(p) + "]"
+		}
+		detail := name + kindTag
 		if name == current {
 			detail += " (current default)"
 		}

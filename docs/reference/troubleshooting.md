@@ -55,11 +55,13 @@ Check:
 
 - that `[sync]` exists in the config
 - that `default_profile` matches a real entry under `sync.profiles`
-- that every configured profile includes `ssh_host`, `remote_root`, and `remote_bin`
+- that every configured profile includes the required fields for its backend kind:
+  - SSH (`kind = "ssh"` or omitted): `ssh_host`, `remote_root`, `remote_bin`
+  - WebDAV (`kind = "webdav"`): `webdav_url`, and `username_env`/`password_env` when `auth = "basic"`
 
 See the [Sync guide](../guide/sync.md) for the expected config shape.
 
-## Remote sync command fails
+## SSH remote sync command fails
 
 If noteui cannot run the remote helper, verify:
 
@@ -69,6 +71,70 @@ If noteui cannot run the remote helper, verify:
 - the remote machine has the `noteui-sync` binary version you expect
 
 If you installed only `noteui` and not `noteui-sync`, remote sync will not work.
+
+## WebDAV sync fails
+
+When WebDAV sync fails, first confirm the effective remote path:
+
+- `webdav_url` should point to the WebDAV user endpoint
+- `remote_root` should point to the directory under that endpoint where noteui should sync
+
+For Nextcloud, the most common working pattern is:
+
+```toml
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+remote_root = "/Notes"
+```
+
+That means noteui syncs into:
+
+```text
+https://cloud.example.com/remote.php/dav/files/alice/Notes
+```
+
+Check these in order:
+
+- verify the `webdav_url` is reachable
+- verify `remote_root` is a remote directory under that endpoint, not a local filesystem path
+- if using `sync_remote_root`, verify it also uses WebDAV-style remote paths such as `/Notes/work`
+- check that the environment variables named in `username_env` and `password_env` are set in the same environment that launches `noteui`
+- if using Nextcloud, prefer an app password instead of your normal account password
+- `http://` URLs are accepted but `https://` is recommended for anything outside a trusted LAN
+
+Manual check with the exact same target noteui uses:
+
+```sh
+curl -u "$NOTEUI_NEXTCLOUD_USERNAME:$NOTEUI_NEXTCLOUD_PASSWORD" \
+  -X PROPFIND \
+  -H 'Depth: 1' \
+  https://cloud.example.com/remote.php/dav/files/alice/Notes
+```
+
+How to interpret common failures:
+
+- `401 Unauthorized`: the credentials are missing from the `noteui` process environment, or the values are rejected by the server
+- `404` or similar "could not be located": the effective path is wrong, or the server does not allow access to that path
+- sync succeeds locally but notes do not appear where expected: double-check the combined `webdav_url + remote_root` path rather than either field in isolation
+
+An empty or brand-new remote root is valid. noteui creates the target directory and its `.noteui-sync/` metadata directory on first successful upload.
+
+## WebDAV sync feels slow
+
+WebDAV usually takes more round trips than SSH sync.
+
+This is normal when:
+
+- the remote root is new and noteui is creating directories and metadata
+- the sync run needs to read remote mappings and note bodies
+- the connection to the server has noticeable latency
+
+In practice:
+
+- the first sync to a new WebDAV root is usually the slowest
+- later syncs are faster once the remote layout exists
+- SSH sync is still the lower-latency backend when both are available
+
+If WebDAV feels unusually slow even on a local network, compare noteui with a manual `curl` against the same WebDAV endpoint to rule out server-side latency.
 
 ## Notes show up as remote-only placeholders
 
@@ -85,7 +151,9 @@ If imports are skipped, check whether a local file already exists at the target 
 
 Previously healthy synced notes start green from their saved local sync record. If they turn red after startup, the background sync found a real problem.
 
-Press `ctrl+e` on the affected note to open the sync details modal. It shows the exact issue category, how long ago the note was last successfully synced, and a suggested recovery step. From the modal you can press `r` to retry the sync immediately, or `u` to unlink the note locally if its remote copy is gone.
+Press `ctrl+e` on the affected note to open the sync details modal. It shows the exact issue category, how long ago the note was last successfully synced, and a suggested recovery step. From the modal you can press `r` to retry the sync immediately, or `u` to unlink the note locally if you want to stop syncing that note.
+
+If the issue is "Remote copy missing", sync again first. noteui now recreates the remote copy when the local synced note still exists and the remote copy is gone.
 
 To see a history of recent sync runs and when the problem first appeared, press `Y` to open the sync timeline.
 

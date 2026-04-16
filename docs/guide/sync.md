@@ -1,6 +1,6 @@
 # Sync guide
 
-This guide explains how noteui's SSH-based sync works in practice.
+This guide explains how noteui sync works in practice. noteui supports two sync backends: SSH (the original backend) and WebDAV (for syncing through Nextcloud or any WebDAV-capable server).
 
 ## What sync does
 
@@ -14,14 +14,21 @@ Sync is not a full bidirectional live filesystem mirror. noteui refreshes remote
 
 ## Requirements
 
-You need:
+### SSH backend
 
 - `noteui` on the local machine
 - `noteui-sync` available on the remote machine
 - SSH access from the local machine to the remote machine
 - a writable remote storage directory for noteui sync data
 
-## Basic setup
+### WebDAV backend
+
+- `noteui` on the local machine
+- a WebDAV server (Nextcloud, ownCloud, Apache with mod_dav, etc.)
+- HTTP(S) access from the local machine to the server
+- a writable directory on the WebDAV server
+
+## SSH setup
 
 1. Install or build both binaries.
 2. Put `noteui-sync` on the remote machine somewhere callable over SSH.
@@ -33,12 +40,153 @@ You need:
 default_profile = "homebox"
 
 [sync.profiles.homebox]
+kind = "ssh"
 ssh_host = "notes-prod"
 remote_root = "/srv/noteui"
 remote_bin = "/usr/local/bin/noteui-sync"
 ```
 
 5. Start noteui with that config.
+
+The `kind` field is optional for SSH profiles; it defaults to `"ssh"` when omitted, so existing configs work without changes.
+
+## WebDAV setup
+
+For most users, there are only two path rules to remember:
+
+- `webdav_url` points to your WebDAV user endpoint, not the final notes directory
+- `remote_root` points to the directory under that endpoint where noteui should store synced notes
+
+For Nextcloud, the endpoint format is usually:
+
+```text
+https://<host>/remote.php/dav/files/<username>
+```
+
+If you want synced notes to live in a Nextcloud folder named `Notes`, configure:
+
+- `webdav_url = "https://<host>/remote.php/dav/files/<username>"`
+- `remote_root = "/Notes"`
+
+Do not append the notes folder directly to `webdav_url`. noteui combines `webdav_url` and `remote_root` for you.
+
+1. Find your WebDAV user endpoint.
+2. Choose a remote directory under that endpoint, such as `/Notes` or `/Notes/personal`.
+3. Add a sync profile:
+
+```toml
+[sync]
+default_profile = "cloud"
+
+[sync.profiles.cloud]
+kind = "webdav"
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+remote_root = "/Notes"
+auth = "basic"
+username_env = "NOTEUI_NEXTCLOUD_USERNAME"
+password_env = "NOTEUI_NEXTCLOUD_PASSWORD"
+```
+
+4. Export the environment variables before starting noteui:
+
+```sh
+export NOTEUI_NEXTCLOUD_USERNAME="alice"
+export NOTEUI_NEXTCLOUD_PASSWORD="app-password-here"
+noteui
+```
+
+5. Mark the notes you want synced with `sync: synced`, then run sync from noteui.
+
+`remote_root` defaults to `"/noteui"` when omitted for WebDAV profiles.
+
+### WebDAV path model
+
+This is the exact relationship between the two path fields:
+
+- `webdav_url` is the base endpoint for one authenticated WebDAV user
+- `remote_root` is the subdirectory noteui uses under that endpoint
+- `sync_remote_root` is a per-workspace override for `remote_root`; for WebDAV it uses the same semantics as `remote_root`
+
+Examples:
+
+| Goal | `webdav_url` | `remote_root` |
+|------|--------------|---------------|
+| Store notes in `Notes` | `https://cloud.example.com/remote.php/dav/files/alice` | `/Notes` |
+| Store notes in `Notes/personal` | `https://cloud.example.com/remote.php/dav/files/alice` | `/Notes/personal` |
+| Use the default noteui directory | `https://cloud.example.com/remote.php/dav/files/alice` | omit the field |
+
+For WebDAV workspaces, `sync_remote_root` should also be a remote directory such as `/Notes/work`. It must not be a local filesystem path like `/home/alice/notes/work`.
+
+### WebDAV auth modes
+
+| Mode | Description |
+|------|-------------|
+| `basic` (default) | HTTP Basic Auth; `username_env` and `password_env` required |
+| `none` | No authentication; for trusted LAN or pre-authenticated endpoints |
+
+`username_env` and `password_env` hold environment variable names, not the credentials themselves.
+
+Environment variables are resolved at sync time, not at config load. This means CI or headless environments can load the config even when credentials are not yet set, but it also means the variables must exist in the same environment that launches `noteui`.
+
+In practice:
+
+- exporting variables in one shell does not help if you start `noteui` from another shell, a desktop launcher, or a user service that does not inherit them
+- for Nextcloud, an app password is usually the safest choice instead of your normal login password
+- if noteui reports a missing WebDAV credential env var, verify the variable is exported before `noteui` starts
+
+### How WebDAV storage works
+
+The WebDAV backend stores real Markdown files at `<remote_root>/<rel_path>` on the server. This means:
+
+- synced notes are viewable and editable through Nextcloud, ownCloud, or any WebDAV client
+- noteui keeps its own metadata in `<remote_root>/.noteui-sync/` (note mappings and pins)
+- the desktop noteui experience remains unchanged
+
+More specifically:
+
+- note bodies are stored as normal files at paths such as `<remote_root>/work/plan.md`
+- note mappings are stored in `<remote_root>/.noteui-sync/notes/<id>.json`
+- pinned-note metadata is stored in `<remote_root>/.noteui-sync/pins.json`
+- noteui creates `remote_root` and `.noteui-sync/` automatically on first successful upload when they do not already exist
+- an empty or newly created remote directory is valid; noteui does not require `.noteui-sync/` to exist before the first sync
+
+Conflict copies are kept local-only, matching SSH behavior.
+
+### WebDAV performance note
+
+WebDAV is more request-heavy than SSH sync. A single sync run may need multiple HTTP requests for remote indexing, note content, metadata, and directory creation.
+
+What to expect:
+
+- the first sync to a new WebDAV `remote_root` is usually slower because noteui has to create the remote directory structure and metadata files
+- later syncs are faster once that structure exists
+- high-latency networks make WebDAV feel slower than SSH because WebDAV uses more round trips
+
+If lowest latency matters more than WebDAV compatibility, the SSH backend is still the leaner option.
+
+### Multiple backends in one config
+
+You can define both SSH and WebDAV profiles in the same config. The profile picker (`F`) shows a `[ssh]` or `[webdav]` badge next to each profile name.
+
+```toml
+[sync]
+default_profile = "cloud"
+
+[sync.profiles.cloud]
+kind = "webdav"
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+auth = "basic"
+username_env = "NOTEUI_WEBDAV_USER"
+password_env = "NOTEUI_WEBDAV_PASSWORD"
+
+[sync.profiles.backup]
+kind = "ssh"
+ssh_host = "backup-host"
+remote_root = "/srv/noteui-backup"
+remote_bin = "noteui-sync"
+```
+
+Only one profile is active per workspace at a time.
 
 If `sync.default_profile` is empty, noteui does not attempt network sync.
 
@@ -186,6 +334,20 @@ sync_remote_root = "/srv/noteui/personal"
 
 `sync_remote_root` overrides the profile's `remote_root` for all sync operations originating from that workspace: push, pull, import, conflict resolution, and remote delete. The remote directories do not need to exist in advance; they are created on first sync.
 
+For WebDAV profiles, `sync_remote_root` is still a remote directory under `webdav_url`, not a local directory on your machine. Example:
+
+```toml
+[workspaces.work]
+root = "/home/alice/notes/work"
+label = "Work"
+sync_remote_root = "/Notes/work"
+
+[workspaces.personal]
+root = "/home/alice/notes/personal"
+label = "Personal"
+sync_remote_root = "/Notes/personal"
+```
+
 The workspace picker displays the effective remote path under each workspace entry so you can confirm the isolation before switching.
 
 ## How sync interacts with encrypted notes
@@ -204,6 +366,6 @@ For the encryption workflow itself, see [Encrypted notes](../advanced/encryption
 - If the remote command fails, verify `remote_bin` points to a real `noteui-sync` path on the remote host.
 - If SSH works manually but sync still fails, confirm the remote user can write to `remote_root`.
 - If notes appear as remote-only placeholders, import them with `i` or `I`.
-- If a note shows "Remote copy missing", press `ctrl+e` and then `u` to unlink it locally, or sync again to recreate the remote copy.
+- If a note shows "Remote copy missing", sync again to recreate the remote copy. Use `ctrl+e` and then `u` only when you want to stop syncing that note and keep it local-only.
 
 For more debugging steps, see [Troubleshooting](../reference/troubleshooting.md).

@@ -11,16 +11,14 @@ import (
 )
 
 func DeleteRemoteNoteAndKeepLocal(ctx context.Context, root, path, remoteRootOverride string, cfg config.SyncConfig, client Client) error {
-	if client == nil {
-		client = SSHClient{}
-	}
 	profile, profileName, err := ActiveProfile(cfg, root)
 	if err != nil {
 		return err
 	}
-	if remoteRootOverride != "" {
-		profile.RemoteRoot = remoteRootOverride
+	if client == nil {
+		client = NewClient(profile)
 	}
+	profile.RemoteRoot = resolvedRemoteRoot(profile, root, remoteRootOverride)
 	rootCfg, err := EnsureRootConfig(root, cfg)
 	if err != nil {
 		return err

@@ -24,16 +24,14 @@ func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.S
 		return result, nil
 	}
 	startTime := time.Now()
-	if client == nil {
-		client = SSHClient{}
-	}
 	profile, profileName, err := ActiveProfile(cfg, root)
 	if err != nil {
 		return result, err
 	}
-	if remoteRootOverride != "" {
-		profile.RemoteRoot = remoteRootOverride
+	if client == nil {
+		client = NewClient(profile)
 	}
+	profile.RemoteRoot = resolvedRemoteRoot(profile, root, remoteRootOverride)
 	rootCfg, err := EnsureRootConfig(root, cfg)
 	if err != nil {
 		return result, err
@@ -208,7 +206,58 @@ func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.S
 			}
 		}
 		if _, exists := remoteByID[rec.ID]; !exists {
-			continue
+			if remoteMeta, adoptable := remoteByRelPath[filepath.ToSlash(note.RelPath)]; adoptable {
+				oldID := rec.ID
+				rec.ID = remoteMeta.ID
+				rec.RelPath = filepath.ToSlash(note.RelPath)
+				rec.RemoteRev = remoteMeta.Revision
+				rec.Encrypted = note.Encrypted
+				rec.LastSyncAttemptAt = time.Now().UTC()
+				rec.LastSyncError = ""
+				if oldID != rec.ID {
+					if err := DeleteNoteRecord(root, oldID); err != nil {
+						return result, err
+					}
+				}
+				if err := SaveNoteRecord(root, rec); err != nil {
+					return result, err
+				}
+				recordsByRelPath[filepath.ToSlash(note.RelPath)] = rec
+			} else {
+				resp, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+					RemoteRoot: profile.RemoteRoot,
+					RelPath:    filepath.ToSlash(note.RelPath),
+					Content:    raw,
+					Encrypted:  note.Encrypted,
+				})
+				if err != nil {
+					_ = recordSyncFailure(root, rec, fmt.Errorf("remote note missing; re-register failed: %w", err))
+					return result, err
+				}
+				oldID := rec.ID
+				rec = NoteRecord{
+					ID:                resp.ID,
+					RelPath:           filepath.ToSlash(note.RelPath),
+					Class:             ClassSynced,
+					RemoteRev:         resp.Revision,
+					LastSyncedHash:    HashContent(raw),
+					Encrypted:         note.Encrypted,
+					LastSyncAt:        time.Now().UTC(),
+					LastSyncAttemptAt: time.Now().UTC(),
+				}
+				rec.LastSyncError = ""
+				if oldID != rec.ID {
+					if err := DeleteNoteRecord(root, oldID); err != nil {
+						return result, err
+					}
+				}
+				if err := SaveNoteRecord(root, rec); err != nil {
+					return result, err
+				}
+				recordsByRelPath[filepath.ToSlash(note.RelPath)] = rec
+				result.RegisteredNotes++
+				continue
+			}
 		}
 		localHash := HashContent(raw)
 		if filepath.ToSlash(rec.RelPath) != filepath.ToSlash(note.RelPath) && rec.LastSyncedHash == localHash {

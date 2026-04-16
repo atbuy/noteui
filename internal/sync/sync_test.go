@@ -889,14 +889,21 @@ Body
 
 	result, err = SyncRoot(context.Background(), root, "", cfg, nil, nil, client)
 	require.NoError(t, err)
-	require.Zero(t, result.RegisteredNotes)
+	require.Equal(t, 1, result.RegisteredNotes)
 	require.Zero(t, result.UpdatedNotes)
 
 	records, err = LoadNoteRecords(root)
 	require.NoError(t, err)
 	require.Len(t, records, 1)
-	rec = records[rec.ID]
-	require.Contains(t, rec.LastSyncError, "note missing on remote")
+	for _, candidate := range records {
+		rec = candidate
+	}
+	require.Empty(t, rec.LastSyncError)
+
+	remoteIndex, err := client.PullIndex(context.Background(), cfg.Profiles["local"], PullIndexRequest{RemoteRoot: remote})
+	require.NoError(t, err)
+	require.Len(t, remoteIndex.Notes, 1)
+	require.Equal(t, "work/plan.md", remoteIndex.Notes[0].RelPath)
 }
 
 func TestResolveConflictKeepRemoteReplacesLocalAndCleansUpConflict(t *testing.T) {

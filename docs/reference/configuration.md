@@ -96,9 +96,18 @@ line_numbers = true
 default_profile = "homebox"
 
 [sync.profiles.homebox]
+kind = "ssh"
 ssh_host = "notes-prod"
 remote_root = "/srv/noteui"
 remote_bin = "/usr/local/bin/noteui-sync"
+
+[sync.profiles.cloud]
+kind = "webdav"
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+remote_root = "/Notes"
+auth = "basic"
+username_env = "NOTEUI_WEBDAV_USER"
+password_env = "NOTEUI_WEBDAV_PASSWORD"
 
 [keys]
 toggle_sync = ["S"]
@@ -169,6 +178,10 @@ Supported keys per workspace:
 - `sync_remote_root`: optional path override that directs sync traffic for this workspace to a specific remote directory, instead of using the active sync profile's `remote_root`
 
 `sync_remote_root` is the key to preventing cross-workspace note contamination when multiple workspaces share the same sync profile. Without it, all workspaces upload to and download from the same remote directory, which means workspace A's notes appear as remote-only placeholders in workspace B.
+
+For SSH profiles, `sync_remote_root` is a normal remote filesystem path such as `/srv/noteui/work`.
+
+For WebDAV profiles, `sync_remote_root` is still a remote path, but it is relative to the configured `webdav_url`. In other words, use values such as `/Notes/work` or `/Notes/personal`, not local filesystem paths like `/home/alice/notes/work`.
 
 Example with per-workspace remote roots:
 
@@ -462,25 +475,58 @@ If set, it must match one of the names under `sync.profiles`.
 
 ### `sync.profiles.<name>`
 
-Each sync profile supports:
+Each sync profile has a `kind` field that selects the backend. When `kind` is omitted, it defaults to `"ssh"`.
 
-- `ssh_host`
-- `remote_root`
-- `remote_bin`
+#### SSH profiles (`kind = "ssh"`)
 
-All three are required when the profile exists.
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `kind` | no | `"ssh"` | Backend type |
+| `ssh_host` | yes | | SSH host to connect to |
+| `remote_root` | yes | | Remote directory for sync data |
+| `remote_bin` | no | `"noteui-sync"` | Path to `noteui-sync` on remote |
 
 Example:
 
 ```toml
-[sync]
-default_profile = "homebox"
-
 [sync.profiles.homebox]
+kind = "ssh"
 ssh_host = "notes-prod"
 remote_root = "/srv/noteui"
 remote_bin = "/usr/local/bin/noteui-sync"
 ```
+
+#### WebDAV profiles (`kind = "webdav"`)
+
+| Key | Required | Default | Description |
+|-----|----------|---------|-------------|
+| `kind` | yes | | Must be `"webdav"` |
+| `webdav_url` | yes | | Full URL to the authenticated WebDAV user endpoint (`http://` or `https://`) |
+| `remote_root` | no | `"/noteui"` | Remote directory under `webdav_url` where noteui stores notes and metadata |
+| `auth` | no | `"basic"` | Auth mode: `"basic"` or `"none"` |
+| `username_env` | when auth=basic | | Env var name holding the username value |
+| `password_env` | when auth=basic | | Env var name holding the password value |
+
+Example:
+
+```toml
+[sync.profiles.cloud]
+kind = "webdav"
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+remote_root = "/Notes/personal"
+auth = "basic"
+username_env = "NOTEUI_WEBDAV_USER"
+password_env = "NOTEUI_WEBDAV_PASSWORD"
+```
+
+Practical rules:
+
+- `webdav_url` should usually stop at the user endpoint. For Nextcloud that is typically `https://<host>/remote.php/dav/files/<username>`.
+- `remote_root` is joined under that endpoint. If you want noteui to sync into a Nextcloud folder named `Notes`, use `remote_root = "/Notes"`.
+- Do not append the notes folder to `webdav_url` and repeat it again in `remote_root`.
+- `username_env` and `password_env` are variable names, not the secrets themselves. The variables must be present in the same environment that launches `noteui`.
+- noteui creates `remote_root` and its `.noteui-sync/` metadata directory automatically on first successful upload.
+- if you use `sync_remote_root` with a WebDAV profile, it follows the same semantics as `remote_root`.
 
 For end-to-end sync setup, import flows, conflict resolution, and recovery behavior, see the [Sync guide](../guide/sync.md).
 

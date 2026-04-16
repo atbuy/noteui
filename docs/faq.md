@@ -54,7 +54,37 @@ Yes. That is one of the main reasons noteui uses normal files on disk.
 
 ## Where do I configure sync?
 
-In the `[sync]` section of your config file. See the [Sync guide](guide/sync.md) and the [Configuration reference](reference/configuration.md).
+In the `[sync]` section of your config file. noteui supports two sync backends: SSH (the original) and WebDAV (for Nextcloud or any WebDAV server). See the [Sync guide](guide/sync.md) and the [Configuration reference](reference/configuration.md).
+
+## Can I sync through Nextcloud or another WebDAV server?
+
+Yes. Set `kind = "webdav"` on a sync profile, provide the `webdav_url`, and configure authentication. Synced notes are stored as real Markdown files on the server, so you can view and edit them through Nextcloud or any WebDAV client.
+
+The simple rule is:
+
+- `webdav_url` points to your WebDAV user endpoint
+- `remote_root` points to the notes directory under that endpoint
+
+For example, to sync into a Nextcloud folder named `Notes`:
+
+```toml
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+remote_root = "/Notes"
+```
+
+Export the environment variables named by `username_env` and `password_env` before starting `noteui`. See the [Sync guide](guide/sync.md#webdav-setup) for the full setup.
+
+## Why is WebDAV sync slower than SSH?
+
+WebDAV usually needs more network round trips than SSH sync, especially on the first sync to a new remote root.
+
+That is expected because noteui has to:
+
+- inspect remote metadata
+- fetch note and mapping information
+- create the remote directory and `.noteui-sync/` structure when needed
+
+Later syncs are usually faster once the remote structure exists.
 
 ## Why does a note appear as remote-only?
 

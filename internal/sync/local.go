@@ -41,10 +41,31 @@ func ActiveProfile(cfg config.SyncConfig, root string) (config.SyncProfile, stri
 	if !ok {
 		return config.SyncProfile{}, "", errors.New("sync profile not found: " + name)
 	}
-	if strings.TrimSpace(profile.RemoteBin) == "" {
-		profile.RemoteBin = DefaultRemoteBin
+	switch config.ResolvedKind(profile) {
+	case config.SyncKindSSH:
+		if strings.TrimSpace(profile.RemoteBin) == "" {
+			profile.RemoteBin = DefaultRemoteBin
+		}
+	case config.SyncKindWebDAV:
+		if strings.TrimSpace(profile.RemoteRoot) == "" {
+			profile.RemoteRoot = "/noteui"
+		}
 	}
 	return profile, name, nil
+}
+
+func resolvedRemoteRoot(profile config.SyncProfile, localRoot, remoteRootOverride string) string {
+	override := strings.TrimSpace(remoteRootOverride)
+	if override == "" {
+		return strings.TrimSpace(profile.RemoteRoot)
+	}
+	if config.ResolvedKind(profile) == config.SyncKindWebDAV {
+		localRoot = strings.TrimSpace(localRoot)
+		if localRoot != "" && filepath.Clean(override) == filepath.Clean(localRoot) {
+			return strings.TrimSpace(profile.RemoteRoot)
+		}
+	}
+	return override
 }
 
 func EnsureRootConfig(root string, cfg config.SyncConfig) (RootConfig, error) {

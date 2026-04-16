@@ -21,10 +21,10 @@ It helps you browse, search, preview, organize, and edit notes without moving th
 
 ## Common tasks
 
-- Install noteui and the sync helper: [Installation](tutorial/installation.md)
+- Install noteui and, if needed, the sync helper (`noteui-sync`): [Installation](tutorial/installation.md)
 - Learn the core workflow: [Getting started](tutorial/getting-started.md)
 - Customize appearance, preview, and keys: [Configuration reference](reference/configuration.md)
-- Set up SSH-based sync: [Sync guide](guide/sync.md)
+- Set up sync with SSH or WebDAV: [Sync guide](guide/sync.md)
 - Isolate multiple workspaces from each other over sync: [Per-workspace sync isolation](guide/sync.md#per-workspace-sync-isolation)
 - Browse and restore note versions: [Note version history](guide/usage.md#note-version-history)
 - Understand encrypted notes: [Encrypted notes](advanced/encryption.md)

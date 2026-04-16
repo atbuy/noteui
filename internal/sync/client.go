@@ -23,6 +23,13 @@ type Client interface {
 	PinsPut(context.Context, config.SyncProfile, PinsPutRequest) (PinsPutResponse, error)
 }
 
+func NewClient(profile config.SyncProfile) Client {
+	if config.ResolvedKind(profile) == config.SyncKindWebDAV {
+		return WebDAVClient{dirCache: newWebDAVDirCache()}
+	}
+	return SSHClient{}
+}
+
 type Runner func(context.Context, []byte, string, ...string) ([]byte, error)
 
 type SSHClient struct{ Run Runner }
