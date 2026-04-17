@@ -162,7 +162,7 @@ func (m Model) renderThemePickerModal() string {
 		rowLines = append(rowLines, rowStyle.Render(cursorMark+nameField+" "+swatches))
 	}
 
-	footer := modalFooterStyle.Render("j/k: navigate   enter: apply   esc: cancel")
+	footer := modalFooterStyle.Render("j/k: navigate   enter: save theme.name   esc: cancel")
 
 	body := strings.Join([]string{
 		title,

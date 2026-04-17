@@ -213,7 +213,7 @@ Inside noteui:
 - `S` toggles the selected local note between `sync: local` and `sync: synced`
 - `ctrl+s` toggles the selected note between `sync: shared` and `sync: local`
 - synced notes are checked against the remote state after startup
-- `F` opens the in-app default sync profile picker
+- `F` opens the in-app default sync profile picker and updates only `sync.default_profile`
 
 ## Shared notes
 

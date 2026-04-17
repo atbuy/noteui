@@ -177,6 +177,6 @@ func TestRenderThemePickerModalContainsThemeNames(t *testing.T) {
 	// The hovered theme name should appear in the header.
 	require.Contains(t, rendered, BuiltinThemes()[m.themePickerCursor].Name)
 	// Footer hint.
-	require.Contains(t, rendered, "enter: apply")
+	require.Contains(t, rendered, "enter: save theme.name")
 	require.Contains(t, rendered, "esc: cancel")
 }

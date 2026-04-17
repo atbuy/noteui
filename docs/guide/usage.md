@@ -310,7 +310,7 @@ If sync is configured, noteui can mark local notes for sync, refresh remote meta
 Important behaviors:
 
 - `S` toggles the selected local note between `sync: local` and `sync: synced`
-- `F` changes the configured default sync profile from inside noteui
+- `F` changes the configured default sync profile from inside noteui by updating only `sync.default_profile`
 - `O` opens the generated conflict copy for the selected conflicted synced note
 - `U` deletes only the remote copy and keeps the local file
 - `i` imports the selected remote-only note

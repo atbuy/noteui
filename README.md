@@ -120,8 +120,8 @@ Notes are plain Markdown files. noteui adds no proprietary format - you can open
 
 noteui ships with 20+ built-in color themes. You can switch themes three ways:
 
-- **In-app theme picker** (`ctrl+y`): hover to preview the full UI live, `enter` to apply, `esc` to cancel
-- **CLI**: `noteui +set-theme <name>` switches the active theme without opening the UI
+- **In-app theme picker** (`ctrl+y`): hover to preview the full UI live, `enter` to save `theme.name`, `esc` to cancel
+- **CLI**: `noteui +set-theme <name>` switches the active theme without opening the UI and updates only `theme.name`
 - **Config**: set `theme.name` in `config.toml`
 
 To list all available themes with color swatches:

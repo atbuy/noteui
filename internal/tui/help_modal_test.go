@@ -54,6 +54,24 @@ func TestFilteredHelpSectionsFiltersQuery(t *testing.T) {
 	}
 }
 
+func TestHelpEntriesDescribeConfigWritesForThemeAndSyncProfile(t *testing.T) {
+	m := newTestModel(t)
+	entries := m.helpEntries()
+
+	var themeDesc, syncProfileDesc string
+	for _, entry := range entries {
+		switch {
+		case entry.key == keys.ShowThemePicker.Help().Key:
+			themeDesc = entry.desc
+		case entry.key == keys.SelectSyncProfile.Help().Key:
+			syncProfileDesc = entry.desc
+		}
+	}
+
+	require.Equal(t, "Open theme picker (live preview; saves theme.name only)", themeDesc)
+	require.Equal(t, "Select default sync profile (updates sync.default_profile only)", syncProfileDesc)
+}
+
 func TestFilteredHelpSectionsNoMatch(t *testing.T) {
 	m := newTestModel(t)
 	m.helpInput.SetValue("xyzzynotacommand")

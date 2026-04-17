@@ -269,7 +269,7 @@ func (m Model) renderSyncProfilePickerModal() string {
 			lipgloss.Left,
 			m.renderModalTitle("Select sync profile", innerWidth),
 			m.renderModalBlank(innerWidth),
-			m.renderModalHint("Choose the default sync profile from config.toml. Existing roots can stay bound to a different profile.", innerWidth),
+			m.renderModalHint("Choose the default sync profile from config.toml. noteui updates only sync.default_profile; existing roots can stay bound to a different profile.", innerWidth),
 			m.renderModalBlank(innerWidth),
 			lipgloss.JoinVertical(lipgloss.Left, lines...),
 			m.renderModalBlank(innerWidth),

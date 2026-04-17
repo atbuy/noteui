@@ -38,6 +38,30 @@ func TestPaletteCommandsIncludeSyncWithProfile(t *testing.T) {
 	require.True(t, actions[cmdImportAll])
 }
 
+func TestPaletteCommandsDescribeConfigWritesForThemeAndSyncProfile(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Sync.DefaultProfile = "main"
+	cfg.Sync.Profiles = map[string]config.SyncProfile{
+		"main": {SSHHost: "notes", RemoteRoot: "/srv/notes", RemoteBin: "noteui-sync"},
+	}
+	m := New(t.TempDir(), "", cfg, "test")
+
+	cmds := paletteCommands(m)
+	var themeDesc, syncProfileDesc string
+	for _, cmd := range cmds {
+		switch cmd.action {
+		case cmdOpenThemePicker:
+			themeDesc = cmd.desc
+		case cmdSelectSyncProfile:
+			syncProfileDesc = cmd.desc
+		}
+	}
+
+	require.Equal(t, "Open the live theme picker (esc to cancel, enter to save theme.name)", themeDesc)
+	require.Equal(t, "Choose the default sync profile (updates sync.default_profile only)", syncProfileDesc)
+}
+
 func TestPaletteCommandsIncludeDeleteRemoteWhenApplicable(t *testing.T) {
 	m := newTestModel(t)
 	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}

@@ -34,11 +34,11 @@ Check:
 
 See [Storage and state](storage-and-state.md) for the full storage layout.
 
-## Config changes are ignored or startup falls back to defaults
+## Config changes are ignored or startup warns about config errors
 
 If the config file is missing, noteui uses defaults.
 
-If the config file contains unknown keys or invalid values, noteui rejects that load and falls back to defaults.
+If the config file contains unknown keys or invalid values, noteui warns at startup and keeps the decoded portion of the file where possible instead of rewriting it.
 
 Check:
 
@@ -46,6 +46,9 @@ Check:
 - otherwise the default lookup path: `noteui/config.toml` inside your user config directory
 - field names against the [Configuration reference](configuration.md)
 - sync profile names, preview styles, border styles, and code styles for invalid values
+- that the specific key written from the UI is the one you expect:
+  - theme picker / `noteui +set-theme`: `theme.name`
+  - sync profile picker: `sync.default_profile`
 
 ## Sync does not start
 

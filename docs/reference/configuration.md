@@ -11,7 +11,18 @@ noteui loads configuration in this order:
 
 If the file does not exist, noteui uses defaults.
 
-If the file contains unknown keys or invalid values, noteui rejects that load and falls back to defaults.
+If the file contains unknown keys or invalid values, noteui warns at startup instead of regenerating the file. It keeps the decoded portion of the config where possible and continues to use code defaults for anything missing or invalid.
+
+## What noteui writes back
+
+Defaults live in code. noteui does not rewrite your `config.toml` with every default value.
+
+Today, in-app writes are intentionally narrow:
+
+- the theme picker and `noteui +set-theme` update only `theme.name`
+- the in-app sync profile picker updates only `sync.default_profile`
+
+When noteui writes one of those values, it patches that key in place and preserves the rest of the file where possible instead of reformatting the whole config.
 
 ## Minimal example
 

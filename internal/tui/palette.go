@@ -212,7 +212,7 @@ func paletteCommands(m Model) []paletteCommand {
 		{name: "Show Help", desc: "Open the help modal", category: "app", action: cmdShowHelp},
 		{name: "Show Pins", desc: "Toggle the pins view", category: "view", action: cmdShowPins},
 		{name: "Show Todos", desc: "Toggle the global open todos view", category: "view", action: cmdShowTodos},
-		{name: "Open Theme Picker", desc: "Open the live theme picker (esc to cancel, enter to apply)", category: "app", action: cmdOpenThemePicker},
+		{name: "Open Theme Picker", desc: "Open the live theme picker (esc to cancel, enter to save theme.name)", category: "app", action: cmdOpenThemePicker},
 		{name: "Open Daily Note", desc: "Open or create today's daily note", category: "notes", action: cmdOpenDailyNote},
 	}
 
@@ -257,7 +257,7 @@ func paletteCommands(m Model) []paletteCommand {
 	cmds = appendPaletteCommand(cmds, m.canToggleSharedCurrent(),
 		paletteCommand{name: "Toggle Note Shared", desc: "Toggle shared status of the selected note", category: "sync", action: cmdMakeShared})
 	cmds = appendPaletteCommand(cmds, m.canSelectSyncProfile(),
-		paletteCommand{name: "Select Sync Profile", desc: "Choose the default sync profile", category: "sync", action: cmdSelectSyncProfile})
+		paletteCommand{name: "Select Sync Profile", desc: "Choose the default sync profile (updates sync.default_profile only)", category: "sync", action: cmdSelectSyncProfile})
 	cmds = appendPaletteCommand(cmds, m.canShowSyncDetailsCurrent(),
 		paletteCommand{name: "Show Sync Details", desc: "Open sync details for the selected note", category: "sync", action: cmdShowSyncDetails})
 	cmds = appendPaletteCommand(cmds, m.canResolveConflictCurrent(),

@@ -413,6 +413,74 @@ func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
 	require.Equal(t, "backup-host", reloaded.Sync.Profiles["backup"].SSHHost)
 }
 
+func TestSaveDefaultSyncProfilePreservesCRLFCommentsAndSpacing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := strings.Join([]string{
+		"# leading comment",
+		"",
+		"[sync]",
+		`  default_profile = "homebox" # keep me`,
+		"",
+		"[sync.profiles.homebox]",
+		`ssh_host = "notes-prod"`,
+		`remote_root = "/srv/homebox"`,
+		`remote_bin = "noteui-sync"`,
+	}, "\r\n") + "\r\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	_, writtenPath, err := SaveDefaultSyncProfile("backup")
+	require.NoError(t, err)
+	require.Equal(t, path, writtenPath)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, strings.Join([]string{
+		"# leading comment",
+		"",
+		"[sync]",
+		`  default_profile = "backup" # keep me`,
+		"",
+		"[sync.profiles.homebox]",
+		`ssh_host = "notes-prod"`,
+		`remote_root = "/srv/homebox"`,
+		`remote_bin = "noteui-sync"`,
+	}, "\r\n")+"\r\n", string(raw))
+}
+
+func TestSaveDefaultSyncProfileRemovesDefaultKeyAndPrunesEmptySection(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := strings.Join([]string{
+		"[sync]",
+		`default_profile = "homebox"`,
+		"",
+		"[sync.profiles.homebox]",
+		`ssh_host = "notes-prod"`,
+		`remote_root = "/srv/homebox"`,
+		`remote_bin = "noteui-sync"`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, _, err := SaveDefaultSyncProfile("")
+	require.NoError(t, err)
+	require.Empty(t, cfg.Sync.DefaultProfile)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(raw)
+	require.NotContains(t, text, `[sync]`)
+	require.NotContains(t, text, `default_profile =`)
+	require.Contains(t, text, `[sync.profiles.homebox]`)
+
+	reloaded, err := Load()
+	require.NoError(t, err)
+	require.Empty(t, reloaded.Sync.DefaultProfile)
+	require.Equal(t, "notes-prod", reloaded.Sync.Profiles["homebox"].SSHHost)
+}
+
 func TestSaveThemeWritesNewThemeAndReturnsOld(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -447,6 +515,37 @@ func TestSaveThemeWritesNewThemeAndReturnsOld(t *testing.T) {
 	require.Equal(t, "dracula", reloaded.Theme.Name)
 }
 
+func TestSaveThemePreservesCRLFCommentsAndUnrelatedSections(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := strings.Join([]string{
+		"# keep this comment",
+		"",
+		"[theme]",
+		`name = "nord" # inline comment`,
+		"",
+		"[preview]",
+		`line_numbers = false`,
+	}, "\r\n") + "\r\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	_, _, err := SaveTheme("dracula")
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, strings.Join([]string{
+		"# keep this comment",
+		"",
+		"[theme]",
+		`name = "dracula" # inline comment`,
+		"",
+		"[preview]",
+		`line_numbers = false`,
+	}, "\r\n")+"\r\n", string(raw))
+}
+
 func TestSaveThemeReturnsDefaultWhenNoConfigExists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing.toml")
 	t.Setenv("NOTEUI_CONFIG", path)
@@ -460,35 +559,35 @@ func TestSaveThemeReturnsDefaultWhenNoConfigExists(t *testing.T) {
 	require.Equal(t, "[theme]\nname = \"nord\"\n", string(raw))
 }
 
-func TestSaveWritesSparseConfig(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
+func TestSaveThemeRemovesDefaultKeyAndPrunesEmptySection(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := strings.Join([]string{
+		"[theme]",
+		`name = "nord"`,
+		"",
+		"[preview]",
+		`line_numbers = false`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	t.Setenv("NOTEUI_CONFIG", path)
 
-	cfg := Default()
-	cfg.Dashboard = false
-	cfg.Theme.Name = "nord"
-	cfg.Sync.DefaultProfile = "homebox"
-	cfg.Sync.Profiles = map[string]SyncProfile{
-		"homebox": {
-			SSHHost:    "notes-prod",
-			RemoteRoot: "/srv/noteui",
-			RemoteBin:  "noteui-sync",
-		},
-	}
-
-	require.NoError(t, Save(cfg))
+	oldName, _, err := SaveTheme("default")
+	require.NoError(t, err)
+	require.Equal(t, "nord", oldName)
 
 	raw, err := os.ReadFile(path)
 	require.NoError(t, err)
 	text := string(raw)
-	require.Contains(t, text, "dashboard = false")
-	require.Contains(t, text, `[theme]`)
-	require.Contains(t, text, `name = "nord"`)
-	require.Contains(t, text, `[sync]`)
-	require.Contains(t, text, `[sync.profiles.homebox]`)
-	require.NotContains(t, text, `border_style = "rounded"`)
-	require.NotContains(t, text, `render_markdown = true`)
-	require.NotContains(t, text, `toggle_sync = ["S"]`)
+	require.NotContains(t, text, `[theme]`)
+	require.NotContains(t, text, `name =`)
+	require.Contains(t, text, `[preview]`)
+	require.Contains(t, text, `line_numbers = false`)
+
+	reloaded, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "default", reloaded.Theme.Name)
+	require.False(t, reloaded.Preview.LineNumbers)
 }
 
 func TestValidThemeNamesIncludesNewThemes(t *testing.T) {

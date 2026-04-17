@@ -19,7 +19,7 @@ This page documents the default keybindings that most users care about first.
 - `q`: quit
 - `?`: show help
 - `W`: open the workspace picker
-- `F`: select the default sync profile
+- `F`: select the default sync profile; noteui updates only `sync.default_profile`
 
 ## Create and organize
 
@@ -97,7 +97,7 @@ This page documents the default keybindings that most users care about first.
 
 ## Appearance
 
-- `ctrl+y`: open the theme picker; hover over themes to preview them live across the whole UI; `esc` restores the original theme, `enter` saves the selection
+- `ctrl+y`: open the theme picker; hover over themes to preview them live across the whole UI; `esc` restores the original theme, `enter` saves only `theme.name`
 
 ## Customizing keybindings
 
