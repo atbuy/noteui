@@ -619,6 +619,16 @@ func TestSaveThemeRemovesDefaultKeyAndPrunesEmptySection(t *testing.T) {
 	require.False(t, reloaded.Preview.LineNumbers)
 }
 
+func TestResolveSecretsPathUsesUserConfigDirAndIgnoresNoteuiConfigOverride(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("NOTEUI_CONFIG", filepath.Join(dir, "custom-config.toml"))
+
+	path, err := ResolveSecretsPath()
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(dir, "noteui", "secrets.toml"), path)
+}
+
 func TestValidThemeNamesIncludesNewThemes(t *testing.T) {
 	names := ValidThemeNames()
 	for _, want := range []string{

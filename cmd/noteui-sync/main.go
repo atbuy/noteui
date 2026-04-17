@@ -9,30 +9,35 @@ import (
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: noteui-sync <operation> [json-payload-via-argv-or-stdin]")
-		os.Exit(2)
+	os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr))
+}
+
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) < 2 {
+		_, _ = fmt.Fprintln(stderr, "usage: noteui-sync <operation> [json-payload-via-argv-or-stdin]")
+		return 2
 	}
 
 	var payload []byte
-	if len(os.Args) >= 3 {
-		payload = []byte(os.Args[2])
+	if len(args) >= 3 {
+		payload = []byte(args[2])
 	} else {
-		data, err := io.ReadAll(os.Stdin)
+		data, err := io.ReadAll(stdin)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "read error: %v\n", err)
-			os.Exit(1)
+			_, _ = fmt.Fprintf(stderr, "read error: %v\n", err)
+			return 1
 		}
 		payload = data
 	}
 
-	out, err := notesync.HandleRPC(os.Args[1], payload)
+	out, err := notesync.HandleRPC(args[1], payload)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sync rpc error: %v\n", err)
-		os.Exit(1)
+		_, _ = fmt.Fprintf(stderr, "sync rpc error: %v\n", err)
+		return 1
 	}
-	if _, err := os.Stdout.Write(out); err != nil {
-		fmt.Fprintf(os.Stderr, "write error: %v\n", err)
-		os.Exit(1)
+	if _, err := stdout.Write(out); err != nil {
+		_, _ = fmt.Fprintf(stderr, "write error: %v\n", err)
+		return 1
 	}
+	return 0
 }

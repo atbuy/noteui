@@ -246,3 +246,120 @@ func TestListTrashedName(t *testing.T) {
 	require.Equal(t, result.TrashFilePath, items[0].TrashFilePath)
 	require.Equal(t, result.TrashInfoPath, items[0].TrashInfoPath)
 }
+
+func TestTrashPathRejectsEmptyPath(t *testing.T) {
+	_, err := TrashPath("  ")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "path cannot be empty")
+}
+
+func TestTrashPathRemovesTrashInfoOnRenameFailure(t *testing.T) {
+	root := t.TempDir()
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+
+	missingPath := filepath.Join(root, "missing.md")
+	_, err := TrashPath(missingPath)
+	require.Error(t, err)
+
+	infoDir := filepath.Join(xdgData, "Trash", "info")
+	entries, readErr := os.ReadDir(infoDir)
+	require.NoError(t, readErr)
+	require.Empty(t, entries)
+}
+
+func TestRestoreFromTrashWithoutInfoPathCreatesParentDirs(t *testing.T) {
+	root := t.TempDir()
+	originalPath := filepath.Join(root, "nested", "note.md")
+	trashFile := filepath.Join(t.TempDir(), "trash-note.md")
+	require.NoError(t, os.WriteFile(trashFile, []byte("restored"), 0o600))
+
+	err := RestoreFromTrash(TrashResult{
+		OriginalPath:  originalPath,
+		TrashFilePath: trashFile,
+	})
+	require.NoError(t, err)
+
+	data, readErr := os.ReadFile(originalPath)
+	require.NoError(t, readErr)
+	require.Equal(t, "restored", string(data))
+
+	_, statErr := os.Stat(trashFile)
+	require.True(t, os.IsNotExist(statErr))
+}
+
+func TestRestoreFromTrashReturnsErrorWhenTrashedFileMissing(t *testing.T) {
+	root := t.TempDir()
+	infoPath := filepath.Join(t.TempDir(), "note.md.trashinfo")
+	require.NoError(t, os.WriteFile(infoPath, []byte("info"), 0o600))
+
+	err := RestoreFromTrash(TrashResult{
+		OriginalPath:  filepath.Join(root, "note.md"),
+		TrashFilePath: filepath.Join(root, "missing-trash-note.md"),
+		TrashInfoPath: infoPath,
+	})
+	require.Error(t, err)
+
+	_, statErr := os.Stat(infoPath)
+	require.NoError(t, statErr)
+}
+
+func TestListTrashedReturnsReadDirError(t *testing.T) {
+	xdgData := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgData)
+
+	trashRoot := filepath.Join(xdgData, "Trash")
+	require.NoError(t, os.MkdirAll(trashRoot, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(trashRoot, "info"), []byte("not a directory"), 0o600))
+
+	_, err := ListTrashed(t.TempDir())
+	require.Error(t, err)
+}
+
+func TestParseTrashedItemRejectsInvalidMetadata(t *testing.T) {
+	infoDir := t.TempDir()
+	filesDir := t.TempDir()
+
+	t.Run("invalid escape sequence", func(t *testing.T) {
+		infoPath := filepath.Join(infoDir, "bad-url.trashinfo")
+		content := "[Trash Info]\nPath=%zz\nDeletionDate=2025-01-01T12:00:00\n"
+		require.NoError(t, os.WriteFile(infoPath, []byte(content), 0o600))
+
+		_, ok := parseTrashedItem(infoPath, filesDir)
+		require.False(t, ok)
+	})
+
+	t.Run("invalid deletion date", func(t *testing.T) {
+		infoPath := filepath.Join(infoDir, "bad-date.trashinfo")
+		content := "[Trash Info]\nPath=/tmp/note.md\nDeletionDate=not-a-date\n"
+		require.NoError(t, os.WriteFile(infoPath, []byte(content), 0o600))
+
+		_, ok := parseTrashedItem(infoPath, filesDir)
+		require.False(t, ok)
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		_, ok := parseTrashedItem(filepath.Join(infoDir, "missing.trashinfo"), filesDir)
+		require.False(t, ok)
+	})
+}
+
+func TestUserTrashRootFallsBackToHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("HOME", home)
+
+	root, err := userTrashRoot()
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(home, ".local", "share", "Trash"), root)
+}
+
+func TestUniqueTrashNameWithoutExtension(t *testing.T) {
+	filesDir := t.TempDir()
+	infoDir := t.TempDir()
+
+	require.NoError(t, os.WriteFile(filepath.Join(filesDir, "note"), []byte("body"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(infoDir, "note-2.trashinfo"), []byte("info"), 0o600))
+
+	require.Equal(t, "note-3", uniqueTrashName(filesDir, infoDir, "note"))
+}
