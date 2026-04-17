@@ -1,3 +1,4 @@
+// Package fsutil provides small filesystem helpers shared across noteui.
 package fsutil
 
 import (

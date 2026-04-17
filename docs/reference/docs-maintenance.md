@@ -2,6 +2,16 @@
 
 This page is for contributors working on the documentation site itself.
 
+## Contributor setup
+
+From a git clone, run this once before you start editing:
+
+```bash
+make tools
+```
+
+That installs the shared Go formatter and lint tools, installs `pre-commit` via `uv`, and registers the repository hooks used by contributors.
+
 ## Local docs build
 
 Build the docs locally from the repository root:
@@ -53,6 +63,8 @@ The workflow uses the standard two-job GitHub Pages pattern:
 
 ## Common contributor checks
 
+- Run `make check` before sending a larger change. It covers lint, unit tests, race tests, and a full build.
+- If you are only touching docs, `make tools` plus `make docs-build` is usually the minimum local verification flow.
 - If a page is missing from the site, verify it is present in `zensical.toml` navigation.
 - If rendering differs between local and CI, compare the `zensical` version first.
 - If deployment succeeds but the live site still looks old, verify the latest workflow run is the active Pages deployment and rule out browser caching.

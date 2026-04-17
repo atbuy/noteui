@@ -254,8 +254,26 @@ make build
 ./bin/noteui
 ```
 
+If you are contributing from a git clone, run this once after cloning:
+
+```bash
+make tools
+```
+
+That installs `gofumpt`, `goimports-reviser`, `golangci-lint`, and installs `pre-commit` via `uv`, then registers the repository's pre-commit hooks.
+
 Run the test suite with:
 
 ```bash
 make test
 ```
+
+Other useful contributor checks:
+
+```bash
+make lint
+make test-race
+make check
+```
+
+`make check` runs lint, unit tests, race tests, and a full `go build -buildvcs=false ./...` verification pass.

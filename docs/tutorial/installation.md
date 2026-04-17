@@ -161,6 +161,14 @@ make build
 ./bin/noteui
 ```
 
+If you are contributing from a git clone, run this once first:
+
+```bash
+make tools
+```
+
+That installs the Go formatter and lint tools, installs `pre-commit` via `uv`, and registers the repository hooks used by contributors.
+
 Install both binaries from source:
 
 ```bash
@@ -171,6 +179,15 @@ Or run directly from source without installing:
 
 ```bash
 go run ./cmd/noteui
+```
+
+Useful contributor checks:
+
+```bash
+make lint
+make test
+make test-race
+make check
 ```
 
 ## Verify the version

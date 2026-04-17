@@ -207,6 +207,9 @@ func TestWebDAVPullIndexRequiresConfiguredEnvValues(t *testing.T) {
 	srv := httptest.NewServer(store)
 	defer srv.Close()
 
+	t.Setenv("NOTEUI_NEXTCLOUD_USERNAME", "")
+	t.Setenv("NOTEUI_NEXTCLOUD_PASSWORD", "")
+
 	profile := config.SyncProfile{
 		Kind:        config.SyncKindWebDAV,
 		WebDAVURL:   srv.URL,

@@ -21,6 +21,37 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Cache contributor tools
+        id: contributor-tools-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/bin
+            ~/.cache/uv
+            ~/.local/bin
+            ~/.local/share/uv/tools
+          key: ${{ runner.os }}-contributor-tools-${{ hashFiles('Makefile', '.golangci.yml', '.pre-commit-config.yaml', '.github/workflows/ci.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-contributor-tools-
+
+      - name: Install contributor tools
+        if: steps.contributor-tools-cache.outputs.cache-hit != 'true'
+        run: make tools
+
+      - name: Run linters
+        run: make lint
+
+      - name: Run race tests
+        run: go test -race ./...
+
       - name: Run unit tests with coverage
         run: go test -coverprofile=coverage.out ./...
 
@@ -54,6 +85,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+
+      - name: Cache pip downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-docs-pip-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-docs-pip-
 
       - name: Install Zensical
         run: pip install zensical
