@@ -514,9 +514,10 @@ remote_bin = "/usr/local/bin/noteui-sync"
 | `kind` | yes | | Must be `"webdav"` |
 | `webdav_url` | yes | | Full URL to the authenticated WebDAV user endpoint (`http://` or `https://`) |
 | `remote_root` | no | `"/noteui"` | Remote directory under `webdav_url` where noteui stores notes and metadata |
-| `auth` | no | `"basic"` | Auth mode: `"basic"` or `"none"` |
+| `auth` | no | `"basic"` | Auth mode: `"basic"`, `"bearer"`, or `"none"` |
 | `username_env` | when auth=basic | | Env var name holding the username value |
 | `password_env` | when auth=basic | | Env var name holding the password value |
+| `token_env` | when auth=bearer | | Env var name holding the bearer token value (e.g. a Nextcloud app token or OAuth access token) |
 
 Example:
 

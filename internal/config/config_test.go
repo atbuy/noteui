@@ -273,6 +273,35 @@ func TestValidateRejectsUnknownAuthMode(t *testing.T) {
 	require.Contains(t, err.Error(), `unknown auth mode "oauth"`)
 }
 
+func TestValidateAllowsBearerAuth(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:      SyncKindWebDAV,
+			WebDAVURL: "https://cloud.example.com/dav",
+			Auth:      SyncAuthBearer,
+			TokenEnv:  "NOTEUI_WEBDAV_TOKEN",
+		},
+	}
+	require.NoError(t, Validate(cfg))
+}
+
+func TestValidateRejectsBearerWithoutTokenEnv(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:      SyncKindWebDAV,
+			WebDAVURL: "https://cloud.example.com/dav",
+			Auth:      SyncAuthBearer,
+		},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "missing token_env")
+}
+
 func TestLoadWebDAVProfileFromTOML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

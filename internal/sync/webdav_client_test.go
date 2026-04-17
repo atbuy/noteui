@@ -254,6 +254,47 @@ func TestWebDAVPullIndexSendsBasicAuthFromEnv(t *testing.T) {
 	require.True(t, strings.HasPrefix(store.requests[0].authorization, "Basic "))
 }
 
+func TestWebDAVPullIndexSendsBearerTokenFromEnv(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	t.Setenv("NOTEUI_WEBDAV_TOKEN", "app-token-xyz")
+
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: srv.URL,
+		Auth:      config.SyncAuthBearer,
+		TokenEnv:  "NOTEUI_WEBDAV_TOKEN",
+	}
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.NoError(t, err)
+	require.NotEmpty(t, store.requests)
+	require.Equal(t, "Bearer app-token-xyz", store.requests[0].authorization)
+}
+
+func TestWebDAVPullIndexBearerAuthRequiresConfiguredTokenEnv(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	t.Setenv("NOTEUI_WEBDAV_TOKEN", "")
+
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: srv.URL,
+		Auth:      config.SyncAuthBearer,
+		TokenEnv:  "NOTEUI_WEBDAV_TOKEN",
+	}
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "webdav bearer auth token env NOTEUI_WEBDAV_TOKEN is not set")
+}
+
 func TestWebDAVPushNote(t *testing.T) {
 	store := newMemWebDAV()
 	srv := httptest.NewServer(store)

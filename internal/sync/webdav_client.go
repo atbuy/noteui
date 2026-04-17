@@ -806,20 +806,27 @@ func applyAuth(req *http.Request, profile config.SyncProfile) error {
 	if auth == "" {
 		auth = config.SyncAuthBasic
 	}
-	if auth != config.SyncAuthBasic {
-		return nil
+	switch auth {
+	case config.SyncAuthBasic:
+		usernameEnv := strings.TrimSpace(profile.UsernameEnv)
+		passwordEnv := strings.TrimSpace(profile.PasswordEnv)
+		user := os.Getenv(usernameEnv)
+		pass := os.Getenv(passwordEnv)
+		if user == "" {
+			return fmt.Errorf("webdav basic auth username env %s is not set", usernameEnv)
+		}
+		if pass == "" {
+			return fmt.Errorf("webdav basic auth password env %s is not set", passwordEnv)
+		}
+		req.SetBasicAuth(user, pass)
+	case config.SyncAuthBearer:
+		tokenEnv := strings.TrimSpace(profile.TokenEnv)
+		token := strings.TrimSpace(os.Getenv(tokenEnv))
+		if token == "" {
+			return fmt.Errorf("webdav bearer auth token env %s is not set", tokenEnv)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	usernameEnv := strings.TrimSpace(profile.UsernameEnv)
-	passwordEnv := strings.TrimSpace(profile.PasswordEnv)
-	user := os.Getenv(usernameEnv)
-	pass := os.Getenv(passwordEnv)
-	if user == "" {
-		return fmt.Errorf("webdav basic auth username env %s is not set", usernameEnv)
-	}
-	if pass == "" {
-		return fmt.Errorf("webdav basic auth password env %s is not set", passwordEnv)
-	}
-	req.SetBasicAuth(user, pass)
 	return nil
 }
 

@@ -122,9 +122,21 @@ For WebDAV workspaces, `sync_remote_root` should also be a remote directory such
 | Mode | Description |
 |------|-------------|
 | `basic` (default) | HTTP Basic Auth; `username_env` and `password_env` required |
+| `bearer` | HTTP Bearer token; `token_env` required. Use for Nextcloud app tokens or OAuth access tokens |
 | `none` | No authentication; for trusted LAN or pre-authenticated endpoints |
 
-`username_env` and `password_env` hold environment variable names, not the credentials themselves.
+`username_env`, `password_env`, and `token_env` hold environment variable names, not the credentials themselves.
+
+Example `bearer` profile:
+
+```toml
+[sync.profiles.cloud]
+kind = "webdav"
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+remote_root = "/Notes"
+auth = "bearer"
+token_env = "NOTEUI_WEBDAV_TOKEN"
+```
 
 Environment variables are resolved at sync time, not at config load. This means CI or headless environments can load the config even when credentials are not yet set, but it also means the variables must exist in the same environment that launches `noteui`.
 

@@ -60,6 +60,7 @@ type SyncProfile struct {
 	Auth        string `toml:"auth"`
 	UsernameEnv string `toml:"username_env"`
 	PasswordEnv string `toml:"password_env"`
+	TokenEnv    string `toml:"token_env"`
 }
 
 type ThemeConfig struct {
@@ -497,6 +498,7 @@ const (
 	SyncKindSSH    = "ssh"
 	SyncKindWebDAV = "webdav"
 	SyncAuthBasic  = "basic"
+	SyncAuthBearer = "bearer"
 	SyncAuthNone   = "none"
 )
 
@@ -541,9 +543,13 @@ func validateSyncProfile(name string, p SyncProfile) error {
 			if strings.TrimSpace(p.PasswordEnv) == "" {
 				return fmt.Errorf("sync profile %q is missing password_env (required for basic auth)", name)
 			}
+		case SyncAuthBearer:
+			if strings.TrimSpace(p.TokenEnv) == "" {
+				return fmt.Errorf("sync profile %q is missing token_env (required for bearer auth)", name)
+			}
 		case SyncAuthNone:
 		default:
-			return fmt.Errorf("sync profile %q has unknown auth mode %q (valid: basic, none)", name, auth)
+			return fmt.Errorf("sync profile %q has unknown auth mode %q (valid: basic, bearer, none)", name, auth)
 		}
 	default:
 		return fmt.Errorf("sync profile %q has unknown kind %q (valid: ssh, webdav)", name, kind)
