@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/fsutil"
 	"atbuy/noteui/internal/notes"
 )
 
@@ -30,7 +31,7 @@ func ResolveConflictKeepRemote(root string, rec NoteRecord) error {
 	if err := os.MkdirAll(filepath.Dir(notePath), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(notePath, raw, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(notePath, raw, 0o644); err != nil {
 		return err
 	}
 

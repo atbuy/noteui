@@ -282,9 +282,14 @@ func Load() (Config, error) {
 		return cfg, err
 	}
 
-	md, err := toml.DecodeFile(path, &cfg)
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return Default(), fmt.Errorf("config parse error: %w", err)
+		return cfg, err
+	}
+
+	md, err := toml.Decode(string(data), &cfg)
+	if err != nil {
+		return decodeValidPrefixConfig(data), fmt.Errorf("config parse error: %w", err)
 	}
 
 	if undecoded := md.Undecoded(); len(undecoded) > 0 {
@@ -293,14 +298,34 @@ func Load() (Config, error) {
 			keys = append(keys, k.String())
 		}
 		sort.Strings(keys)
-		return Default(), fmt.Errorf("unknown config key(s): %s", strings.Join(keys, ", "))
+		return cfg, fmt.Errorf("unknown config key(s): %s", strings.Join(keys, ", "))
 	}
 
 	if err := Validate(cfg); err != nil {
-		return Default(), err
+		return cfg, err
 	}
 
 	return cfg, nil
+}
+
+func decodeValidPrefixConfig(raw []byte) Config {
+	best := Default()
+	lines := strings.SplitAfter(string(raw), "\n")
+	if len(lines) == 0 {
+		return best
+	}
+
+	var prefix strings.Builder
+	for _, line := range lines {
+		prefix.WriteString(line)
+
+		cfg := Default()
+		if _, err := toml.Decode(prefix.String(), &cfg); err == nil {
+			best = cfg
+		}
+	}
+
+	return best
 }
 
 func Validate(cfg Config) error {

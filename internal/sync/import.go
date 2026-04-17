@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/fsutil"
 )
 
 func ImportRemoteNotes(ctx context.Context, root, remoteRootOverride string, cfg config.SyncConfig, client Client) (SyncResult, error) {
@@ -159,7 +160,7 @@ func writeImportedNote(path string, content string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), 0o644)
+	return fsutil.WriteFileAtomic(path, []byte(content), 0o644)
 }
 
 func reservedImportRelPaths(root string, records map[string]NoteRecord) map[string]string {

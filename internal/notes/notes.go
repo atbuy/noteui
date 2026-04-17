@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode"
 
+	"atbuy/noteui/internal/fsutil"
 	"atbuy/noteui/internal/notes/meta"
 	"atbuy/noteui/internal/notes/todo"
 )
@@ -134,7 +135,7 @@ func CreateTemplate(root string) (string, error) {
 	}
 	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte("# Template title\n\n"), 0o644); err != nil {
+	if err := atomicWriteFile(path, []byte("# Template title\n\n"), 0o644); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -166,7 +167,7 @@ func CreateNoteFromTemplate(root, relDir, templatePath string) (string, error) {
 	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
 	path := filepath.Join(targetDir, name)
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := atomicWriteFile(path, []byte(content), 0o644); err != nil {
 		return "", err
 	}
 
@@ -202,7 +203,7 @@ func OpenOrCreateDailyNote(root, relDir, templatePath string, now time.Time) (pa
 		content = "# " + now.Format("2006-01-02") + "\n\n"
 	}
 
-	if err = os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err = atomicWriteFile(path, []byte(content), 0o644); err != nil {
 		return "", false, err
 	}
 
@@ -527,25 +528,7 @@ func AppendCapture(root, relPath, text string) error {
 // target is never left in a partially-written state if the process is
 // interrupted or the disk runs out of space mid-write.
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".noteui-tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	// Always remove the temp file if we never reach the rename.
-	defer func() { _ = os.Remove(tmpPath) }()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return fsutil.WriteFileAtomic(path, data, perm)
 }
 
 func CreateNote(root, relDir string) (string, error) {
@@ -565,7 +548,7 @@ func CreateNote(root, relDir string) (string, error) {
 	name := ".new-" + time.Now().Format("20060102-150405") + ".md"
 	path := filepath.Join(targetDir, name)
 
-	if err := os.WriteFile(path, []byte(""), 0o644); err != nil {
+	if err := atomicWriteFile(path, []byte(""), 0o644); err != nil {
 		return "", err
 	}
 
@@ -686,7 +669,7 @@ func RenameNoteTitle(path, newTitle string) (string, bool, error) {
 	}
 
 	updated := replaceOrInsertRootTitle(content, newTitle)
-	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+	if err := atomicWriteFile(path, []byte(updated), 0o644); err != nil {
 		return "", false, err
 	}
 

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"atbuy/noteui/internal/fsutil"
 	"atbuy/noteui/internal/notes"
 )
 
@@ -272,10 +273,10 @@ func saveRemoteNote(root string, note remoteNoteFile, content string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(remoteMetaPath(root, note.ID), meta, 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(remoteMetaPath(root, note.ID), meta, 0o644); err != nil {
 		return err
 	}
-	return os.WriteFile(remoteContentPath(root, note.ID), []byte(content), 0o644)
+	return fsutil.WriteFileAtomic(remoteContentPath(root, note.ID), []byte(content), 0o644)
 }
 
 func loadRemotePins(root string) (Pins, error) {
@@ -312,7 +313,7 @@ func saveRemotePins(root string, pins Pins) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(root, "pins.json"), data, 0o644)
+	return fsutil.WriteFileAtomic(filepath.Join(root, "pins.json"), data, 0o644)
 }
 
 func titleFromContent(relPath, content string) string {

@@ -7,6 +7,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"atbuy/noteui/internal/fsutil"
 )
 
 type FrontMatter map[string]string
@@ -159,7 +161,7 @@ func AddTagsToNote(path string, tags []string) error {
 	}
 
 	updated := setFrontMatterField(normalizedRaw, body, "tags", "tags: "+strings.Join(merged, ", "))
-	return os.WriteFile(path, []byte(updated), 0o644)
+	return fsutil.WriteFileAtomic(path, []byte(updated), 0o644)
 }
 
 func SetNoteSyncClass(path, syncClass string) error {
@@ -183,7 +185,7 @@ func SetNoteSyncClass(path, syncClass string) error {
 	}
 
 	updated := setFrontMatterField(normalizedRaw, body, "sync", "sync: "+value)
-	return os.WriteFile(path, []byte(updated), 0o644)
+	return fsutil.WriteFileAtomic(path, []byte(updated), 0o644)
 }
 
 func ToggleNoteSyncClass(path string) (string, error) {

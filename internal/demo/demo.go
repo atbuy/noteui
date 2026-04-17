@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"atbuy/noteui/internal/fsutil"
 )
 
 //go:embed all:fixtures
@@ -37,7 +39,7 @@ func Setup() (root string, cleanup func(), err error) {
 		if readErr != nil {
 			return readErr
 		}
-		return os.WriteFile(dest, data, 0o644)
+		return fsutil.WriteFileAtomic(dest, data, 0o644)
 	})
 	if err != nil {
 		cleanup()

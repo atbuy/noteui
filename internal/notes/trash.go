@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"atbuy/noteui/internal/fsutil"
 )
 
 // TrashedItem describes a single entry in the system trash that came from a
@@ -144,7 +146,7 @@ func TrashPath(path string) (TrashResult, error) {
 
 	infoContent := buildTrashInfo(absPath)
 
-	if err := os.WriteFile(infoPath, []byte(infoContent), 0o600); err != nil {
+	if err := fsutil.WriteFileAtomic(infoPath, []byte(infoContent), 0o600); err != nil {
 		return TrashResult{}, err
 	}
 

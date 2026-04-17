@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"atbuy/noteui/internal/fsutil"
 )
 
 type WorkspaceState struct {
@@ -97,7 +99,7 @@ func Save(s State) error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	return fsutil.WriteFileAtomic(path, data, 0o644)
 }
 
 func (s State) Workspace(name string) WorkspaceState {

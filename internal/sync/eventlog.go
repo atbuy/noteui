@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"atbuy/noteui/internal/fsutil"
 )
 
 // SyncEventType describes the outcome of a sync run.
@@ -59,7 +61,7 @@ func AppendSyncEvent(root string, event SyncEvent) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(strings.Join(existing, "\n")+"\n"), 0o644)
+	return fsutil.WriteFileAtomic(path, []byte(strings.Join(existing, "\n")+"\n"), 0o644)
 }
 
 // LoadSyncEvents reads up to limit events from the log, newest first.

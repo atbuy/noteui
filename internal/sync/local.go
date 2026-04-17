@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/fsutil"
 	"atbuy/noteui/internal/notes"
 )
 
@@ -320,7 +321,7 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return fsutil.WriteFileAtomic(path, data, 0o644)
 }
 
 func sortedUnique(items []string) []string {

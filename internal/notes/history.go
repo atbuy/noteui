@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"atbuy/noteui/internal/fsutil"
 )
 
 const (
@@ -64,7 +66,7 @@ func SaveVersion(root, relPath, content string) error {
 	id := ts.Format("20060102-150405") + "-" + hash[:8]
 	path := versionPath(root, relPath, id)
 
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(path, []byte(content), 0o644); err != nil {
 		return fmt.Errorf("writing history version: %w", err)
 	}
 

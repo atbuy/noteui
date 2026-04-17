@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"atbuy/noteui/internal/config"
+	"atbuy/noteui/internal/fsutil"
 	"atbuy/noteui/internal/notes"
 )
 
@@ -365,7 +366,7 @@ func applyRemoteNote(ctx context.Context, client Client, profile config.SyncProf
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(targetPath, []byte(resp.Note.Content), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(targetPath, []byte(resp.Note.Content), 0o644); err != nil {
 		return err
 	}
 	if filepath.ToSlash(rec.RelPath) != filepath.ToSlash(meta.RelPath) && strings.TrimSpace(rec.RelPath) != "" {
@@ -407,7 +408,7 @@ func createConflict(ctx context.Context, client Client, profile config.SyncProfi
 	if err := os.MkdirAll(filepath.Dir(conflictPath), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(conflictPath, []byte(resp.Note.Content), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(conflictPath, []byte(resp.Note.Content), 0o644); err != nil {
 		return err
 	}
 	rec.Conflict = &ConflictInfo{CopyPath: filepath.ToSlash(conflictRelPath), OccurredAt: time.Now().UTC()}

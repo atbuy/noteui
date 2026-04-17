@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"atbuy/noteui/internal/fsutil"
 	"atbuy/noteui/internal/notes/meta"
 )
 
@@ -122,7 +123,7 @@ func CreateNote(root, relDir string) (string, error) {
 	path := filepath.Join(targetDir, name)
 
 	template := "# Todo\n\n- [ ] \n"
-	if err := os.WriteFile(path, []byte(template), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(path, []byte(template), 0o644); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -161,7 +162,7 @@ func AddItem(path, text string) error {
 		raw += "\n"
 	}
 	raw += "- [ ] " + text + "\n"
-	return os.WriteFile(path, []byte(raw), 0o644)
+	return fsutil.WriteFileAtomic(path, []byte(raw), 0o644)
 }
 
 func DeleteLine(path string, lineIdx int) error {
@@ -301,5 +302,5 @@ func readLines(path string) ([]string, error) {
 }
 
 func writeLines(path string, lines []string) error {
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644)
+	return fsutil.WriteFileAtomic(path, []byte(strings.Join(lines, "\n")), 0o644)
 }

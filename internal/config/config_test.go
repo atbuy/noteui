@@ -311,24 +311,31 @@ func TestResolvedKindDefaultsToSSH(t *testing.T) {
 	require.Equal(t, SyncKindWebDAV, ResolvedKind(SyncProfile{Kind: "webdav"}))
 }
 
-func TestLoadReturnsDefaultOnParseError(t *testing.T) {
+func TestLoadPreservesDecodedValuesOnParseError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	require.NoError(t, os.WriteFile(path, []byte("[theme\nname = \"nord\"\n"), 0o644))
+	content := strings.Join([]string{
+		"dashboard = false",
+		"",
+		"[theme",
+		`name = "nord"`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	t.Setenv("NOTEUI_CONFIG", path)
 
 	cfg, err := Load()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "config parse error")
-	require.Empty(t, cmp.Diff(Default(), cfg))
+	require.False(t, cfg.Dashboard)
+	require.Equal(t, Default().Theme.Name, cfg.Theme.Name)
 }
 
-func TestLoadRejectsUnknownKeys(t *testing.T) {
+func TestLoadPreservesDecodedValuesOnUnknownKeys(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	content := strings.Join([]string{
 		"[theme]",
-		`name = "default"`,
+		`name = "nord"`,
 		`unexpected = "value"`,
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
@@ -337,7 +344,30 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 	cfg, err := Load()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unknown config key(s): theme.unexpected")
-	require.Empty(t, cmp.Diff(Default(), cfg))
+	require.Equal(t, "nord", cfg.Theme.Name)
+}
+
+func TestLoadPreservesDecodedValuesOnValidationError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	content := strings.Join([]string{
+		"dashboard = false",
+		"",
+		"[theme]",
+		`name = "nord"`,
+		"",
+		"[preview]",
+		`style = "sepia"`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `invalid preview.style "sepia"`)
+	require.False(t, cfg.Dashboard)
+	require.Equal(t, "nord", cfg.Theme.Name)
+	require.Equal(t, "sepia", cfg.Preview.Style)
 }
 
 func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
@@ -367,6 +397,14 @@ func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
 	require.Equal(t, path, writtenPath)
 	require.Equal(t, "backup", cfg.Sync.DefaultProfile)
 
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(raw)
+	require.Contains(t, text, `default_profile = "backup"`)
+	require.Contains(t, text, `dashboard = false`)
+	require.NotContains(t, text, `[theme]`)
+	require.NotContains(t, text, `render_markdown`)
+
 	reloaded, err := Load()
 	require.NoError(t, err)
 	require.False(t, reloaded.Dashboard)
@@ -378,7 +416,16 @@ func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
 func TestSaveThemeWritesNewThemeAndReturnsOld(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	content := "[theme]\nname = \"nord\"\n"
+	content := strings.Join([]string{
+		"# keep this comment",
+		"",
+		"[theme]",
+		`name = "nord" # inline comment`,
+		`border_style = "double"`,
+		"",
+		"[preview]",
+		`line_numbers = false`,
+	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	t.Setenv("NOTEUI_CONFIG", path)
 
@@ -387,17 +434,61 @@ func TestSaveThemeWritesNewThemeAndReturnsOld(t *testing.T) {
 	require.Equal(t, "nord", oldName)
 	require.Equal(t, path, writtenPath)
 
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(raw)
+	require.Contains(t, text, `name = "dracula" # inline comment`)
+	require.Contains(t, text, `border_style = "double"`)
+	require.Contains(t, text, `line_numbers = false`)
+	require.NotContains(t, text, `render_markdown`)
+
 	reloaded, err := Load()
 	require.NoError(t, err)
 	require.Equal(t, "dracula", reloaded.Theme.Name)
 }
 
 func TestSaveThemeReturnsDefaultWhenNoConfigExists(t *testing.T) {
-	t.Setenv("NOTEUI_CONFIG", filepath.Join(t.TempDir(), "missing.toml"))
+	path := filepath.Join(t.TempDir(), "missing.toml")
+	t.Setenv("NOTEUI_CONFIG", path)
 
 	oldName, _, err := SaveTheme("nord")
 	require.NoError(t, err)
 	require.Equal(t, "default", oldName)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "[theme]\nname = \"nord\"\n", string(raw))
+}
+
+func TestSaveWritesSparseConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg := Default()
+	cfg.Dashboard = false
+	cfg.Theme.Name = "nord"
+	cfg.Sync.DefaultProfile = "homebox"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"homebox": {
+			SSHHost:    "notes-prod",
+			RemoteRoot: "/srv/noteui",
+			RemoteBin:  "noteui-sync",
+		},
+	}
+
+	require.NoError(t, Save(cfg))
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	text := string(raw)
+	require.Contains(t, text, "dashboard = false")
+	require.Contains(t, text, `[theme]`)
+	require.Contains(t, text, `name = "nord"`)
+	require.Contains(t, text, `[sync]`)
+	require.Contains(t, text, `[sync.profiles.homebox]`)
+	require.NotContains(t, text, `border_style = "rounded"`)
+	require.NotContains(t, text, `render_markdown = true`)
+	require.NotContains(t, text, `toggle_sync = ["S"]`)
 }
 
 func TestValidThemeNamesIncludesNewThemes(t *testing.T) {
