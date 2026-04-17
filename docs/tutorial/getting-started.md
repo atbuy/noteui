@@ -39,6 +39,7 @@ By default, noteui uses:
 - temporary notes: `$HOME/notes/.tmp`
 - state file: `$HOME/.local/state/noteui/state.json`
 - config file: your user config directory under `noteui/config.toml`
+- WebDAV credential fallback file: your user config directory under `noteui/secrets.toml`
 
 If the notes directory does not exist yet, noteui creates it when needed.
 

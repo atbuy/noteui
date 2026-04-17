@@ -12,8 +12,16 @@ import (
 )
 
 func ResolvePath() (string, error) {
+	return resolveConfigFile("config.toml")
+}
+
+func ResolveSecretsPath() (string, error) {
+	return resolveConfigFile("secrets.toml")
+}
+
+func resolveConfigFile(name string) (string, error) {
 	path := os.Getenv("NOTEUI_CONFIG")
-	if strings.TrimSpace(path) != "" {
+	if name == "config.toml" && strings.TrimSpace(path) != "" {
 		return path, nil
 	}
 
@@ -21,7 +29,7 @@ func ResolvePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(userCfgDir, "noteui", "config.toml"), nil
+	return filepath.Join(userCfgDir, "noteui", name), nil
 }
 
 // SaveTheme updates theme.name in the config file and returns the previous

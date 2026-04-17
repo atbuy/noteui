@@ -13,6 +13,12 @@ If the file does not exist, noteui uses defaults.
 
 If the file contains unknown keys or invalid values, noteui warns at startup instead of regenerating the file. It keeps the decoded portion of the config where possible and continues to use code defaults for anything missing or invalid.
 
+WebDAV credential values can also live outside `config.toml` in
+`noteui/secrets.toml` inside the user config directory. That file is separate
+from the config file, and `NOTEUI_CONFIG` does not change its location. See
+[Environment variables](environment.md#webdav-credential-fallback-file) for the
+full lookup and file-format rules.
+
 ## What noteui writes back
 
 Defaults live in code. noteui does not rewrite your `config.toml` with every default value.
@@ -536,7 +542,8 @@ Practical rules:
 - `webdav_url` should usually stop at the user endpoint. For Nextcloud that is typically `https://<host>/remote.php/dav/files/<username>`.
 - `remote_root` is joined under that endpoint. If you want noteui to sync into a Nextcloud folder named `Notes`, use `remote_root = "/Notes"`.
 - Do not append the notes folder to `webdav_url` and repeat it again in `remote_root`.
-- `username_env` and `password_env` are variable names, not the secrets themselves. The variables must be present in the same environment that launches `noteui`.
+- `username_env`, `password_env`, and `token_env` are variable names, not the secrets themselves. noteui checks those names in the current environment first, then in `noteui/secrets.toml` inside the user config directory if the env vars are empty or missing.
+- `NOTEUI_CONFIG` only changes `config.toml` lookup. It does not move `secrets.toml`.
 - noteui creates `remote_root` and its `.noteui-sync/` metadata directory automatically on first successful upload.
 - if you use `sync_remote_root` with a WebDAV profile, it follows the same semantics as `remote_root`.
 

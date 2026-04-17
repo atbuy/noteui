@@ -2,10 +2,13 @@ package sync
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -254,6 +257,40 @@ func TestWebDAVPullIndexSendsBasicAuthFromEnv(t *testing.T) {
 	require.True(t, strings.HasPrefix(store.requests[0].authorization, "Basic "))
 }
 
+func TestWebDAVPullIndexReadsBasicAuthFromSecretsFileWhenEnvUnset(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	t.Setenv("NOTEUI_NEXTCLOUD_USERNAME", "")
+	t.Setenv("NOTEUI_NEXTCLOUD_PASSWORD", "")
+	writeSecretsFile(t, strings.Join([]string{
+		`NOTEUI_NEXTCLOUD_USERNAME = "filip"`,
+		`NOTEUI_NEXTCLOUD_PASSWORD = "app-password"`,
+	}, "\n"))
+
+	profile := config.SyncProfile{
+		Kind:        config.SyncKindWebDAV,
+		WebDAVURL:   srv.URL,
+		Auth:        config.SyncAuthBasic,
+		UsernameEnv: "NOTEUI_NEXTCLOUD_USERNAME",
+		PasswordEnv: "NOTEUI_NEXTCLOUD_PASSWORD",
+	}
+	client := WebDAVClient{HTTP: srv.Client()}
+	client.dirCache = newWebDAVDirCache()
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.NoError(t, err)
+	require.NotEmpty(t, store.requests)
+
+	scheme, encoded, found := strings.Cut(store.requests[0].authorization, " ")
+	require.True(t, found)
+	require.Equal(t, "Basic", scheme)
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	require.NoError(t, err)
+	require.Equal(t, "filip:app-password", string(decoded))
+}
+
 func TestWebDAVPullIndexSendsBearerTokenFromEnv(t *testing.T) {
 	store := newMemWebDAV()
 	srv := httptest.NewServer(store)
@@ -275,6 +312,28 @@ func TestWebDAVPullIndexSendsBearerTokenFromEnv(t *testing.T) {
 	require.Equal(t, "Bearer app-token-xyz", store.requests[0].authorization)
 }
 
+func TestWebDAVPullIndexReadsBearerTokenFromSecretsFileWhenEnvUnset(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	t.Setenv("NOTEUI_WEBDAV_TOKEN", "")
+	writeSecretsFile(t, `NOTEUI_WEBDAV_TOKEN = "app-token-from-file"`)
+
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: srv.URL,
+		Auth:      config.SyncAuthBearer,
+		TokenEnv:  "NOTEUI_WEBDAV_TOKEN",
+	}
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.NoError(t, err)
+	require.NotEmpty(t, store.requests)
+	require.Equal(t, "Bearer app-token-from-file", store.requests[0].authorization)
+}
+
 func TestWebDAVPullIndexBearerAuthRequiresConfiguredTokenEnv(t *testing.T) {
 	store := newMemWebDAV()
 	srv := httptest.NewServer(store)
@@ -293,6 +352,28 @@ func TestWebDAVPullIndexBearerAuthRequiresConfiguredTokenEnv(t *testing.T) {
 	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "webdav bearer auth token env NOTEUI_WEBDAV_TOKEN is not set")
+}
+
+func TestWebDAVPullIndexReportsSecretsFileParseError(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	t.Setenv("NOTEUI_WEBDAV_TOKEN", "")
+	writeSecretsFile(t, `NOTEUI_WEBDAV_TOKEN = [`)
+
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: srv.URL,
+		Auth:      config.SyncAuthBearer,
+		TokenEnv:  "NOTEUI_WEBDAV_TOKEN",
+	}
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "fallback failed")
+	require.Contains(t, err.Error(), "secrets.toml")
 }
 
 func TestWebDAVPushNote(t *testing.T) {
@@ -328,6 +409,18 @@ func TestWebDAVPushNote(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "v2", fetched.Note.Content)
+}
+
+func writeSecretsFile(t *testing.T, content string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+
+	path := filepath.Join(dir, "noteui", "secrets.toml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+	return path
 }
 
 func TestWebDAVPushNoteRevisionMismatch(t *testing.T) {

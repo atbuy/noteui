@@ -95,6 +95,15 @@ export NOTEUI_NEXTCLOUD_PASSWORD="app-password-here"
 noteui
 ```
 
+   If you start `noteui` from a desktop launcher, menu entry, or user service that does not inherit your shell environment, put the same variable names in `noteui/secrets.toml` inside your user config directory instead. On Linux, that is usually `~/.config/noteui/secrets.toml`.
+
+   ```toml
+   NOTEUI_NEXTCLOUD_USERNAME = "alice"
+   NOTEUI_NEXTCLOUD_PASSWORD = "app-password-here"
+   ```
+
+   noteui checks the live environment first. If a configured credential variable is empty or missing, it falls back to that `secrets.toml` file.
+
 5. Mark the notes you want synced with `sync: synced`, then run sync from noteui.
 
 `remote_root` defaults to `"/noteui"` when omitted for WebDAV profiles.
@@ -138,13 +147,44 @@ auth = "bearer"
 token_env = "NOTEUI_WEBDAV_TOKEN"
 ```
 
-Environment variables are resolved at sync time, not at config load. This means CI or headless environments can load the config even when credentials are not yet set, but it also means the variables must exist in the same environment that launches `noteui`.
+Environment variables are resolved at sync time, not at config load. This means CI or headless environments can load the config even when credentials are not yet set. noteui checks the current process environment first and then falls back to `noteui/secrets.toml` inside the user config directory for the same variable names when a credential is empty or missing.
 
 In practice:
 
-- exporting variables in one shell does not help if you start `noteui` from another shell, a desktop launcher, or a user service that does not inherit them
+- exporting variables in one shell does not help if you start `noteui` from another shell, a desktop launcher, or a user service that does not inherit them; use `secrets.toml` for those launch paths
 - for Nextcloud, an app password is usually the safest choice instead of your normal login password
-- if noteui reports a missing WebDAV credential env var, verify the variable is exported before `noteui` starts
+- keep `secrets.toml` readable only by your user account because it stores plain-text credentials
+- if noteui reports a missing WebDAV credential env var, verify either the variable is exported before `noteui` starts or the same variable name exists in `secrets.toml`
+
+### WebDAV credential fallback file
+
+`secrets.toml` is optional. It exists for launch paths that do not preserve
+shell environment variables, such as desktop launchers, menu entries, and user
+services.
+
+Lookup rules:
+
+1. noteui reads the credential name from `username_env`, `password_env`, or `token_env`
+2. it checks the current process environment for that exact name
+3. if the env var is unset or empty, it checks `noteui/secrets.toml` inside the user config directory
+
+Format rules:
+
+- use a flat TOML file with top-level string keys
+- each key must exactly match the configured env var name
+- multiple sync profiles can share one file
+- `NOTEUI_CONFIG` does not move this file; it only changes `config.toml`
+
+Example:
+
+```toml
+NOTEUI_NEXTCLOUD_USERNAME = "alice"
+NOTEUI_NEXTCLOUD_PASSWORD = "app-password-here"
+NOTEUI_WEBDAV_TOKEN = "app-token-for-another-profile"
+```
+
+For the full platform-specific path rules and behavior details, see
+[Environment variables](../reference/environment.md#webdav-credential-fallback-file).
 
 ### How WebDAV storage works
 

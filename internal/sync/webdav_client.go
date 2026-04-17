@@ -12,7 +12,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"sort"
 	"strings"
@@ -810,8 +809,14 @@ func applyAuth(req *http.Request, profile config.SyncProfile) error {
 	case config.SyncAuthBasic:
 		usernameEnv := strings.TrimSpace(profile.UsernameEnv)
 		passwordEnv := strings.TrimSpace(profile.PasswordEnv)
-		user := os.Getenv(usernameEnv)
-		pass := os.Getenv(passwordEnv)
+		user, err := resolveCredentialValue(usernameEnv)
+		if err != nil {
+			return fmt.Errorf("webdav basic auth username env %s fallback failed: %w", usernameEnv, err)
+		}
+		pass, err := resolveCredentialValue(passwordEnv)
+		if err != nil {
+			return fmt.Errorf("webdav basic auth password env %s fallback failed: %w", passwordEnv, err)
+		}
 		if user == "" {
 			return fmt.Errorf("webdav basic auth username env %s is not set", usernameEnv)
 		}
@@ -821,7 +826,11 @@ func applyAuth(req *http.Request, profile config.SyncProfile) error {
 		req.SetBasicAuth(user, pass)
 	case config.SyncAuthBearer:
 		tokenEnv := strings.TrimSpace(profile.TokenEnv)
-		token := strings.TrimSpace(os.Getenv(tokenEnv))
+		token, err := resolveCredentialValue(tokenEnv)
+		if err != nil {
+			return fmt.Errorf("webdav bearer auth token env %s fallback failed: %w", tokenEnv, err)
+		}
+		token = strings.TrimSpace(token)
 		if token == "" {
 			return fmt.Errorf("webdav bearer auth token env %s is not set", tokenEnv)
 		}

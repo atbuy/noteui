@@ -36,6 +36,15 @@ They are moved to the user trash.
 
 If `NOTEUI_CONFIG` is not set, noteui looks in your user config directory under `noteui/config.toml`.
 
+## Where is the WebDAV credential fallback file?
+
+If you use `secrets.toml`, noteui looks for it in your user config directory
+under `noteui/secrets.toml`. On Linux that is usually
+`~/.config/noteui/secrets.toml`.
+
+This file is separate from `config.toml`. Setting `NOTEUI_CONFIG` does not move
+it.
+
 ## Where is noteui’s state stored?
 
 By default in:
@@ -72,7 +81,11 @@ webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
 remote_root = "/Notes"
 ```
 
-Export the environment variables named by `username_env` and `password_env` before starting `noteui`. See the [Sync guide](guide/sync.md#webdav-setup) for the full setup.
+Export the environment variables named by `username_env` and `password_env`
+before starting `noteui`, or put the same variable names in `noteui/secrets.toml`
+inside your user config directory if you launch noteui from a desktop
+environment that drops shell env vars. See the [Sync guide](guide/sync.md#webdav-setup)
+for the full setup.
 
 ## Why is WebDAV sync slower than SSH?
 

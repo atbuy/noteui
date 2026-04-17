@@ -100,7 +100,9 @@ Check these in order:
 - verify the `webdav_url` is reachable
 - verify `remote_root` is a remote directory under that endpoint, not a local filesystem path
 - if using `sync_remote_root`, verify it also uses WebDAV-style remote paths such as `/Notes/work`
-- check that the environment variables named in `username_env` and `password_env` are set in the same environment that launches `noteui`
+- check that the variable named in `token_env` or the variables named in `username_env` and `password_env` are set in the same environment that launches `noteui`, or that `noteui/secrets.toml` inside the user config directory contains those same variable names
+- if you use `NOTEUI_CONFIG`, remember that it does not move `secrets.toml`
+- if `secrets.toml` exists, verify it is valid TOML with flat top-level string keys
 - if using Nextcloud, prefer an app password instead of your normal account password
 - `http://` URLs are accepted but `https://` is recommended for anything outside a trusted LAN
 
@@ -115,9 +117,10 @@ curl -u "$NOTEUI_NEXTCLOUD_USERNAME:$NOTEUI_NEXTCLOUD_PASSWORD" \
 
 How to interpret common failures:
 
-- `401 Unauthorized`: the credentials are missing from the `noteui` process environment, or the values are rejected by the server
+- `401 Unauthorized`: the credentials are missing from the `noteui` process environment and `secrets.toml`, or the values are rejected by the server
 - `404` or similar "could not be located": the effective path is wrong, or the server does not allow access to that path
 - sync succeeds locally but notes do not appear where expected: double-check the combined `webdav_url + remote_root` path rather than either field in isolation
+- a WebDAV auth error that mentions `secrets.toml`: the fallback file exists but cannot be read or parsed
 - Nextcloud reports "Strict cookie not set" or intermittent connection resets on the first request: noteui keeps an HTTP cookie jar per sync client so the Nextcloud `nc_session_id` cookie set on the initial redirect is replayed on follow-up requests. If you still see this against an old build, update noteui
 
 An empty or brand-new remote root is valid. noteui creates the target directory and its `.noteui-sync/` metadata directory on first successful upload.
