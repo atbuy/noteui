@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +17,7 @@ import (
 )
 
 type memWebDAV struct {
+	mu       sync.Mutex
 	files    map[string]memFile
 	requests []memRequest
 }
@@ -36,6 +38,8 @@ func newMemWebDAV() *memWebDAV {
 }
 
 func (m *memWebDAV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	path := r.URL.Path
 	m.requests = append(m.requests, memRequest{
 		method:        r.Method,
@@ -589,6 +593,149 @@ func TestNewClientWebDAVPersistsSessionCookieAcrossRequests(t *testing.T) {
 	require.Equal(t, 1, cookieless, "only the very first request should lack the cookie")
 	require.Equal(t, 1, redirectsHit, "jar should avoid further redirect loops after first hit")
 	require.Greater(t, withCookie, 1, "jar should replay cookie on every follow-up request")
+}
+
+// newWebDAVHTTPClient must configure an overall request timeout and a cookie
+// jar. Without the timeout, sync hangs forever on a stalled VPN connection;
+// without the jar, Nextcloud treats every request as a fresh session. Verify
+// the wiring structurally so future refactors cannot silently drop either.
+func TestNewClientWebDAVHasTimeoutAndCookieJar(t *testing.T) {
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: "https://example.invalid/dav",
+		Auth:      "none",
+	}
+	client := NewClient(profile)
+
+	wc, ok := client.(WebDAVClient)
+	require.True(t, ok)
+	require.NotNil(t, wc.HTTP)
+	require.Greater(t, wc.HTTP.Timeout, time.Duration(0), "overall request timeout must be set")
+	require.NotNil(t, wc.HTTP.Jar, "cookie jar must be set")
+	require.NotNil(t, wc.HTTP.Transport, "transport must be configured for dial / TLS timeouts")
+}
+
+// When a WebDAV request fails with a non-2xx status, the returned error must
+// include the server's response body (e.g. Nextcloud XML diagnostics) so the
+// caller can see *why* the request was rejected, not merely the status code.
+func TestWebDAVErrorIncludesResponseBodySnippet(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(
+			"<?xml version=\"1.0\"?>\n" +
+				"<d:error xmlns:d=\"DAV:\">\n" +
+				"  <d:message>Strict cookie nc_session_id not found</d:message>\n" +
+				"</d:error>\n"))
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	profile := testWebDAVProfile(srv.URL)
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.Error(t, err)
+	msg := err.Error()
+	require.Contains(t, msg, "status 403")
+	require.Contains(t, msg, "Strict cookie nc_session_id not found")
+}
+
+// A single burst of 503s (common when Nextcloud is momentarily overloaded or
+// a VPN interrupts a TCP connection) must not fail the whole sync: the
+// retry helper should swallow a couple of transient failures and succeed on
+// the next attempt.
+func TestWebDAVRetriesTransientServerErrors(t *testing.T) {
+	store := newMemWebDAV()
+	var mu sync.Mutex
+	var propfindCalls int
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "PROPFIND" {
+			mu.Lock()
+			propfindCalls++
+			n := propfindCalls
+			mu.Unlock()
+			if n <= 2 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+		}
+		store.ServeHTTP(w, r)
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	profile := testWebDAVProfile(srv.URL)
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.GreaterOrEqual(t, propfindCalls, 3, "expected two failed PROPFINDs plus one success")
+}
+
+// 4xx responses (here 403) are a definitive answer from the server, not a
+// transient blip: retrying would only hammer the server. Verify the retry
+// helper hands them back immediately.
+func TestWebDAVDoesNotRetryNonTransientStatus(t *testing.T) {
+	var mu sync.Mutex
+	var calls int
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("denied"))
+	})
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	profile := testWebDAVProfile(srv.URL)
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+
+	_, err := client.PullIndex(context.Background(), profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.Error(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, 1, calls, "403 must not trigger retry")
+}
+
+// When the remote contains a corrupt mapping file (truncated write, manual
+// edit, etc), PullIndex must still return the notes it *could* load and
+// report the skipped count so the sync engine can surface a warning instead
+// of silently hiding the broken entry.
+func TestWebDAVPullIndexSkippedCountReportsBadMappings(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	profile := testWebDAVProfile(srv.URL)
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+	ctx := context.Background()
+
+	_, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui", RelPath: "notes/a.md", Content: "A",
+	})
+	require.NoError(t, err)
+	_, err = client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui", RelPath: "notes/b.md", Content: "B",
+	})
+	require.NoError(t, err)
+
+	store.files["/noteui/.noteui-sync/notes/corrupt.json"] = memFile{
+		body: []byte("{not json"),
+		etag: "corrupt",
+	}
+
+	idx, err := client.PullIndex(ctx, profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.NoError(t, err)
+	require.Len(t, idx.Notes, 2)
+	require.Equal(t, 1, idx.SkippedCount)
+	require.Equal(t, "notes/a.md", idx.Notes[0].RelPath)
+	require.Equal(t, "notes/b.md", idx.Notes[1].RelPath)
 }
 
 func TestWebDAVBaseURL(t *testing.T) {

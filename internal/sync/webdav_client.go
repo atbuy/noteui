@@ -7,14 +7,17 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/notes"
@@ -59,6 +62,7 @@ func (c WebDAVClient) PullIndex(ctx context.Context, profile config.SyncProfile,
 		return resp, fmt.Errorf("webdav pull index: %w", err)
 	}
 
+	candidates := make([]propfindEntry, 0, len(entries))
 	for _, entry := range entries {
 		if !strings.HasSuffix(entry.href, ".json") {
 			continue
@@ -66,34 +70,13 @@ func (c WebDAVClient) PullIndex(ctx context.Context, profile config.SyncProfile,
 		if !strings.Contains(entry.href, "/.noteui-sync/notes/") {
 			continue
 		}
-
-		mappingURL := resolveHref(serverBase, entry.href)
-		body, _, err := c.getFile(ctx, profile, mappingURL)
-		if err != nil {
-			continue
-		}
-		var mapping webdavNoteMapping
-		if err := json.Unmarshal(body, &mapping); err != nil {
-			continue
-		}
-		noteURL := baseURL + "/" + escapePath(mapping.RelPath)
-		noteBody, noteEtag, err := c.getFile(ctx, profile, noteURL)
-		if err != nil {
-			continue
-		}
-		noteRev := buildWebDAVRevision(noteEtag, noteBody)
-		title := notes.ExtractTitle(string(noteBody))
-		if title == "" {
-			title = path.Base(mapping.RelPath)
-		}
-		resp.Notes = append(resp.Notes, RemoteNoteMeta{
-			ID:        mapping.ID,
-			RelPath:   mapping.RelPath,
-			Title:     title,
-			Revision:  noteRev,
-			Encrypted: mapping.Encrypted,
-		})
+		candidates = append(candidates, entry)
 	}
+
+	notesOut, skipped := c.fetchNotesConcurrent(ctx, profile, baseURL, serverBase, candidates)
+	sort.Slice(notesOut, func(i, j int) bool { return notesOut[i].RelPath < notesOut[j].RelPath })
+	resp.Notes = notesOut
+	resp.SkippedCount = skipped
 
 	pinsURL := baseURL + "/.noteui-sync/pins.json"
 	pinsBody, _, err := c.getFile(ctx, profile, pinsURL)
@@ -102,6 +85,105 @@ func (c WebDAVClient) PullIndex(ctx context.Context, profile config.SyncProfile,
 	}
 
 	return resp, nil
+}
+
+// fetchNotesConcurrent fetches mapping + note body for each candidate entry
+// using a small worker pool. Concurrency is bounded on purpose: WebDAV
+// servers (Nextcloud especially) throttle hard when a single client opens
+// many simultaneous connections, so a handful of workers beats a flood.
+// Entries whose mapping or body fails are counted into skipped so the caller
+// can surface partial failures instead of silently dropping notes.
+func (c WebDAVClient) fetchNotesConcurrent(
+	ctx context.Context,
+	profile config.SyncProfile,
+	baseURL, serverBase string,
+	candidates []propfindEntry,
+) ([]RemoteNoteMeta, int) {
+	const workers = 4
+	if len(candidates) == 0 {
+		return nil, 0
+	}
+
+	jobs := make(chan propfindEntry)
+	type result struct {
+		note RemoteNoteMeta
+		ok   bool
+	}
+	results := make(chan result, len(candidates))
+
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for entry := range jobs {
+				if ctx.Err() != nil {
+					results <- result{}
+					continue
+				}
+				note, ok := c.fetchNote(ctx, profile, baseURL, serverBase, entry)
+				results <- result{note: note, ok: ok}
+			}
+		}()
+	}
+
+	go func() {
+		defer close(jobs)
+		for _, entry := range candidates {
+			select {
+			case <-ctx.Done():
+				return
+			case jobs <- entry:
+			}
+		}
+	}()
+
+	wg.Wait()
+	close(results)
+
+	out := make([]RemoteNoteMeta, 0, len(candidates))
+	skipped := 0
+	for r := range results {
+		if !r.ok {
+			skipped++
+			continue
+		}
+		out = append(out, r.note)
+	}
+	return out, skipped
+}
+
+func (c WebDAVClient) fetchNote(
+	ctx context.Context,
+	profile config.SyncProfile,
+	baseURL, serverBase string,
+	entry propfindEntry,
+) (RemoteNoteMeta, bool) {
+	mappingURL := resolveHref(serverBase, entry.href)
+	body, _, err := c.getFile(ctx, profile, mappingURL)
+	if err != nil {
+		return RemoteNoteMeta{}, false
+	}
+	var mapping webdavNoteMapping
+	if err := json.Unmarshal(body, &mapping); err != nil {
+		return RemoteNoteMeta{}, false
+	}
+	noteURL := baseURL + "/" + escapePath(mapping.RelPath)
+	noteBody, noteEtag, err := c.getFile(ctx, profile, noteURL)
+	if err != nil {
+		return RemoteNoteMeta{}, false
+	}
+	title := notes.ExtractTitle(string(noteBody))
+	if title == "" {
+		title = path.Base(mapping.RelPath)
+	}
+	return RemoteNoteMeta{
+		ID:        mapping.ID,
+		RelPath:   mapping.RelPath,
+		Title:     title,
+		Revision:  buildWebDAVRevision(noteEtag, noteBody),
+		Encrypted: mapping.Encrypted,
+	}, true
 }
 
 func (c WebDAVClient) FetchNote(ctx context.Context, profile config.SyncProfile, req FetchNoteRequest) (FetchNoteResponse, error) {
@@ -398,7 +480,7 @@ func (c WebDAVClient) propfindURL(ctx context.Context, profile config.SyncProfil
 		return nil, err
 	}
 
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +489,7 @@ func (c WebDAVClient) propfindURL(ctx context.Context, profile config.SyncProfil
 		return nil, nil
 	}
 	if resp.StatusCode != 207 {
-		return nil, fmt.Errorf("PROPFIND %s: status %d", dirURL, resp.StatusCode)
+		return nil, httpStatusError("PROPFIND", dirURL, resp)
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -466,7 +548,7 @@ func (c WebDAVClient) getFile(ctx context.Context, profile config.SyncProfile, f
 	if err := applyAuth(req, profile); err != nil {
 		return nil, "", err
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return nil, "", err
 	}
@@ -475,7 +557,7 @@ func (c WebDAVClient) getFile(ctx context.Context, profile config.SyncProfile, f
 		return nil, "", &RPCError{Code: ErrCodeNotFound, Message: "not found: " + fileURL}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", fmt.Errorf("GET %s: status %d", fileURL, resp.StatusCode)
+		return nil, "", httpStatusError("GET", fileURL, resp)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -497,7 +579,7 @@ func (c WebDAVClient) putFile(ctx context.Context, profile config.SyncProfile, f
 	if err := applyAuth(req, profile); err != nil {
 		return "", err
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -506,7 +588,7 @@ func (c WebDAVClient) putFile(ctx context.Context, profile config.SyncProfile, f
 		return "", &RPCError{Code: ErrCodeConflict, Message: "etag mismatch on PUT"}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("PUT %s: status %d", fileURL, resp.StatusCode)
+		return "", httpStatusError("PUT", fileURL, resp)
 	}
 	return resp.Header.Get("ETag"), nil
 }
@@ -519,7 +601,7 @@ func (c WebDAVClient) deleteFile(ctx context.Context, profile config.SyncProfile
 	if err := applyAuth(req, profile); err != nil {
 		return err
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -528,7 +610,7 @@ func (c WebDAVClient) deleteFile(ctx context.Context, profile config.SyncProfile
 		return nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("DELETE %s: status %d", fileURL, resp.StatusCode)
+		return httpStatusError("DELETE", fileURL, resp)
 	}
 	return nil
 }
@@ -543,13 +625,13 @@ func (c WebDAVClient) moveFile(ctx context.Context, profile config.SyncProfile, 
 	if err := applyAuth(req, profile); err != nil {
 		return err
 	}
-	resp, err := c.httpClient().Do(req)
+	resp, err := c.do(ctx, req)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("MOVE %s -> %s: status %d", srcURL, dstURL, resp.StatusCode)
+		return httpStatusError("MOVE", srcURL+" -> "+dstURL, resp)
 	}
 	return nil
 }
@@ -625,12 +707,98 @@ func (c WebDAVClient) mkcol(ctx context.Context, profile config.SyncProfile, dir
 	if err := applyAuth(mkReq, profile); err != nil {
 		return false
 	}
-	resp, err := c.httpClient().Do(mkReq)
+	resp, err := c.do(ctx, mkReq)
 	if err != nil {
 		return false
 	}
 	_ = resp.Body.Close()
 	return true
+}
+
+// do issues req through the configured HTTP client with bounded retries on
+// transient failures. It exists so that a single VPN hiccup, a server's
+// momentary 503, or a Nextcloud rate-limit burst does not fail an entire
+// sync run: most of the time the second or third attempt succeeds.
+//
+// Retries fire for:
+//
+//   - network errors that are not context cancellation (connection reset,
+//     EOF mid-read, stalled read past ResponseHeaderTimeout);
+//   - status codes 408, 425, 429, 500, 502, 503, 504 (the usual "try again"
+//     class). 4xx client errors are returned immediately so the caller can
+//     handle them (for example 412 Precondition Failed on If-Match).
+//
+// Request bodies are rewound via req.GetBody, which http.NewRequest sets
+// automatically when the body is *bytes.Reader or *strings.Reader. If a body
+// is present but not rewindable, we give up after the first attempt.
+func (c WebDAVClient) do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	const maxAttempts = 3
+	backoff := [...]time.Duration{
+		200 * time.Millisecond,
+		600 * time.Millisecond,
+		1500 * time.Millisecond,
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff[attempt-1]):
+			}
+			if req.Body != nil {
+				if req.GetBody == nil {
+					return nil, lastErr
+				}
+				body, err := req.GetBody()
+				if err != nil {
+					return nil, err
+				}
+				req.Body = body
+			}
+		}
+
+		resp, err := c.httpClient().Do(req)
+		if err != nil {
+			if !isRetriableNetError(err) {
+				return nil, err
+			}
+			lastErr = err
+			continue
+		}
+		if !isRetriableStatus(resp.StatusCode) {
+			return resp, nil
+		}
+		_ = resp.Body.Close()
+		lastErr = fmt.Errorf("transient status %d", resp.StatusCode)
+	}
+
+	return nil, fmt.Errorf("%s %s: retries exhausted: %w", req.Method, req.URL.Redacted(), lastErr)
+}
+
+func isRetriableNetError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	return true
+}
+
+func isRetriableStatus(code int) bool {
+	switch code {
+	case http.StatusRequestTimeout,
+		http.StatusTooEarly,
+		http.StatusTooManyRequests,
+		http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	}
+	return false
 }
 
 func applyAuth(req *http.Request, profile config.SyncProfile) error {
@@ -698,4 +866,19 @@ func escapePath(relPath string) string {
 func contentHash(data []byte) string {
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+// httpStatusError builds an error for a failed WebDAV response that includes
+// a bounded snippet of the response body. Nextcloud and most WebDAV servers
+// return useful diagnostic text there (e.g. "Strict cookie not set",
+// permission messages, XML multistatus errors), so surfacing it makes
+// failures self-explanatory instead of "status 403".
+func httpStatusError(method, target string, resp *http.Response) error {
+	const maxBody = 4 * 1024
+	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	trimmed := strings.Join(strings.Fields(string(snippet)), " ")
+	if trimmed == "" {
+		return fmt.Errorf("%s %s: status %d", method, target, resp.StatusCode)
+	}
+	return fmt.Errorf("%s %s: status %d: %s", method, target, resp.StatusCode, trimmed)
 }

@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"os/exec"
 	"strings"
+	"time"
 
 	"atbuy/noteui/internal/config"
 )
@@ -27,18 +29,46 @@ type Client interface {
 
 func NewClient(profile config.SyncProfile) Client {
 	if config.ResolvedKind(profile) == config.SyncKindWebDAV {
-		// Nextcloud's session middleware sets nc_session_id on the first
-		// request and rejects follow-ups that arrive without it ("Strict
-		// cookie not set"). A shared jar carries the cookie across requests
-		// and across 302 redirects so the same TCP/TLS client is treated as
-		// one session.
-		jar, _ := cookiejar.New(nil)
 		return WebDAVClient{
-			HTTP:     &http.Client{Jar: jar},
+			HTTP:     newWebDAVHTTPClient(),
 			dirCache: newWebDAVDirCache(),
 		}
 	}
 	return SSHClient{}
+}
+
+// newWebDAVHTTPClient returns the default HTTP client used by WebDAVClient.
+//
+// Two reasons to not use http.DefaultClient:
+//
+//  1. Cookie jar. Nextcloud's session middleware sets nc_session_id on the
+//     first hit and rejects follow-ups that arrive without it ("Strict cookie
+//     not set"). A shared jar replays the cookie across requests and across
+//     302/307 redirects inside a single call.
+//  2. Timeouts. Sync often runs over a VPN where a TCP connection can silently
+//     stall. The default client has no deadline and would hang forever; the
+//     layered timeouts below cap dial, TLS handshake, waiting for response
+//     headers, and the overall request.
+func newWebDAVHTTPClient() *http.Client {
+	jar, _ := cookiejar.New(nil)
+	return &http.Client{
+		Jar:     jar,
+		Timeout: 2 * time.Minute,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   15 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+			MaxIdleConns:          16,
+			MaxIdleConnsPerHost:   4,
+			ForceAttemptHTTP2:     true,
+		},
+	}
 }
 
 type Runner func(context.Context, []byte, string, ...string) ([]byte, error)

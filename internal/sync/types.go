@@ -77,6 +77,11 @@ type PullIndexRequest struct {
 type PullIndexResponse struct {
 	Notes []RemoteNoteMeta `json:"notes"`
 	Pins  Pins             `json:"pins"`
+	// SkippedCount is the number of remote notes that the backend
+	// discovered but could not materialize (corrupt mapping, fetch error,
+	// etc). It lets the sync engine report partial failures instead of
+	// silently dropping notes. Zero for backends that do not track it.
+	SkippedCount int `json:"skipped_count,omitempty"`
 }
 
 type FetchNoteRequest struct {
