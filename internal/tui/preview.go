@@ -508,28 +508,25 @@ func (m *Model) rebuildPreviewTodos(raw, rendered string, rawLineOffset int) {
 	limit := min(len(rawTodos), len(rendTodoLines))
 	for i := range limit {
 		startLine := rendTodoLines[i]
-		var rendEndLine int
-		if i+1 < len(rendTodoLines) {
-			// Every line up to (but not including) the next todo's start belongs to
-			// this item – no re-render needed and the width always matches.
-			rendEndLine = rendTodoLines[i+1] - 1
-		} else {
-			// Last matched todo: scan forward through indented continuation lines.
-			rendEndLine = startLine
-			for j := startLine + 1; j < len(rendLines); j++ {
-				t := strings.TrimSpace(rendLines[j])
-				if t == "" {
-					break
-				}
-				if strings.HasPrefix(t, "[ ]") || strings.HasPrefix(t, "[X]") ||
-					strings.HasPrefix(t, "[x]") {
-					break
-				}
-				if !strings.HasPrefix(rendLines[j], " ") {
-					break
-				}
-				rendEndLine = j
+		// A todo owns its own rendered line plus any indented continuation
+		// lines produced by width wrapping. Stop at the first blank line,
+		// at a line that starts a new todo, or at a non-indented line:
+		// those mark content that no longer belongs to this todo, so
+		// highlighting them would bleed the selection across the gap.
+		rendEndLine := startLine
+		for j := startLine + 1; j < len(rendLines); j++ {
+			t := strings.TrimSpace(rendLines[j])
+			if t == "" {
+				break
 			}
+			if strings.HasPrefix(t, "[ ]") || strings.HasPrefix(t, "[X]") ||
+				strings.HasPrefix(t, "[x]") {
+				break
+			}
+			if !strings.HasPrefix(rendLines[j], " ") {
+				break
+			}
+			rendEndLine = j
 		}
 		if rendEndLine >= len(rendLines) {
 			rendEndLine = len(rendLines) - 1

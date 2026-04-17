@@ -285,6 +285,45 @@ func TestRebuildPreviewTodosWrappedEndLineMatchesActualContent(t *testing.T) {
 	})
 }
 
+// A todo followed by a blank line and then a paragraph (and then another
+// todo) must not have its highlight stretched across the gap. Previously
+// the renderer set rendEndLine to the line before the next todo, so the
+// blank line and paragraph lit up with the selection background. The fix
+// scans indented continuation lines only, so the highlight stops at the
+// todo's own wrap or at the first blank line.
+func TestRebuildPreviewTodosHighlightDoesNotBleedAcrossBlankLines(t *testing.T) {
+	ApplyTheme(config.Default())
+	m := Model{cfg: config.Default()}
+	m.preview.Width = 80
+
+	raw := "" +
+		"- [ ] first todo\n" +
+		"\n" +
+		"Some paragraph between todos.\n" +
+		"\n" +
+		"- [ ] second todo\n"
+
+	rendered, lineOffset := m.renderNotePreview("test.md", raw, nil)
+	m.rebuildPreviewTodos(raw, rendered, lineOffset)
+	require.Len(t, m.previewTodos, 2)
+
+	first := m.previewTodos[0]
+	require.Equal(t, first.rendLine, first.rendEndLine,
+		"first todo is a single rendered line; highlight must not extend beyond it")
+
+	highlighted := applyTodoPreviewHighlight(rendered, first, m.preview.Width)
+	lines := strings.Split(highlighted, "\n")
+	selectedBg, ok := ansiBackgroundParam(selectedBgColor)
+	require.True(t, ok)
+
+	require.Contains(t, lines[first.rendLine], selectedBg,
+		"the todo line itself must still be highlighted")
+	for li := first.rendLine + 1; li < m.previewTodos[1].rendLine; li++ {
+		require.NotContains(t, lines[li], selectedBg,
+			"line %d (between todos) must not carry the selection background", li)
+	}
+}
+
 func TestHighlightTodoLinePreservesColorsAndFillsWidth(t *testing.T) {
 	ApplyTheme(config.Default())
 
