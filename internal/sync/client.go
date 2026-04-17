@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/cookiejar"
 	"os/exec"
 	"strings"
 
@@ -25,7 +27,16 @@ type Client interface {
 
 func NewClient(profile config.SyncProfile) Client {
 	if config.ResolvedKind(profile) == config.SyncKindWebDAV {
-		return WebDAVClient{dirCache: newWebDAVDirCache()}
+		// Nextcloud's session middleware sets nc_session_id on the first
+		// request and rejects follow-ups that arrive without it ("Strict
+		// cookie not set"). A shared jar carries the cookie across requests
+		// and across 302 redirects so the same TCP/TLS client is treated as
+		// one session.
+		jar, _ := cookiejar.New(nil)
+		return WebDAVClient{
+			HTTP:     &http.Client{Jar: jar},
+			dirCache: newWebDAVDirCache(),
+		}
 	}
 	return SSHClient{}
 }

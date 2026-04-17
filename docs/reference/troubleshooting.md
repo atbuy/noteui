@@ -115,6 +115,7 @@ How to interpret common failures:
 - `401 Unauthorized`: the credentials are missing from the `noteui` process environment, or the values are rejected by the server
 - `404` or similar "could not be located": the effective path is wrong, or the server does not allow access to that path
 - sync succeeds locally but notes do not appear where expected: double-check the combined `webdav_url + remote_root` path rather than either field in isolation
+- Nextcloud reports "Strict cookie not set" or intermittent connection resets on the first request: noteui keeps an HTTP cookie jar per sync client so the Nextcloud `nc_session_id` cookie set on the initial redirect is replayed on follow-up requests. If you still see this against an old build, update noteui
 
 An empty or brand-new remote root is valid. noteui creates the target directory and its `.noteui-sync/` metadata directory on first successful upload.
 

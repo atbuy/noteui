@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -521,6 +522,70 @@ func TestEscapePath(t *testing.T) {
 	require.Equal(t, "notes/my%20file.md", escapePath("notes/my file.md"))
 	require.Equal(t, "simple.md", escapePath("simple.md"))
 	require.Equal(t, "a/b/c.md", escapePath("a/b/c.md"))
+}
+
+// Nextcloud's session middleware sets nc_session_id on the first hit and
+// rejects follow-ups that do not carry it. NewClient must give WebDAVClient
+// an http.Client with a cookie jar so the cookie survives across requests
+// and across a 307 redirect inside a single call. Without the jar the
+// second request would be treated as a fresh session and loop on redirects.
+func TestNewClientWebDAVPersistsSessionCookieAcrossRequests(t *testing.T) {
+	var (
+		mu           sync.Mutex
+		cookieless   int
+		withCookie   int
+		redirectsHit int
+	)
+	store := newMemWebDAV()
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		cookie, _ := r.Cookie("nc_session_id")
+		mu.Lock()
+		if cookie == nil {
+			cookieless++
+		} else {
+			withCookie++
+		}
+		mu.Unlock()
+
+		if cookie == nil {
+			mu.Lock()
+			redirectsHit++
+			mu.Unlock()
+			http.SetCookie(w, &http.Cookie{Name: "nc_session_id", Value: "session-value", Path: "/"})
+			http.Redirect(w, r, r.URL.Path, http.StatusTemporaryRedirect)
+			return
+		}
+		store.ServeHTTP(w, r)
+	})
+
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: srv.URL,
+		Auth:      "none",
+	}
+	client := NewClient(profile)
+	ctx := context.Background()
+
+	_, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui",
+		RelPath:    "notes/a.md",
+		Content:    "hello",
+	})
+	require.NoError(t, err)
+
+	idx, err := client.PullIndex(ctx, profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.NoError(t, err)
+	require.Len(t, idx.Notes, 1)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, 1, cookieless, "only the very first request should lack the cookie")
+	require.Equal(t, 1, redirectsHit, "jar should avoid further redirect loops after first hit")
+	require.Greater(t, withCookie, 1, "jar should replay cookie on every follow-up request")
 }
 
 func TestWebDAVBaseURL(t *testing.T) {
