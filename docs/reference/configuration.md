@@ -108,6 +108,7 @@ syntax_highlight = true
 code_style = "monokai"
 privacy = false
 line_numbers = true
+mouse_scroll_step = 3
 
 [sync]
 default_profile = "homebox"
@@ -221,6 +222,114 @@ Workspace switching is available from the command palette when multiple workspac
 ## `theme`
 
 Theme chooses the built-in theme and optional visual overrides.
+
+## `preview`
+
+Preview controls markdown rendering, syntax highlighting, privacy behavior, line numbers, and mouse-wheel scrolling in the preview pane.
+
+### `preview.render_markdown`
+
+Type: boolean
+
+Default:
+
+```toml
+[preview]
+render_markdown = true
+```
+
+Controls whether note bodies are rendered as Markdown in the preview pane. When disabled, noteui shows plain text.
+
+### `preview.disable_paths`
+
+Type: array of strings
+
+Default:
+
+```toml
+[preview]
+disable_paths = []
+```
+
+Optional path patterns where Markdown rendering should be disabled even when `render_markdown` is enabled.
+
+### `preview.style`
+
+Type: string
+
+Default:
+
+```toml
+[preview]
+style = "dark"
+```
+
+Controls the Markdown renderer style. Valid values are `dark`, `light`, `auto`, and `notty`.
+
+### `preview.syntax_highlight`
+
+Type: boolean
+
+Default:
+
+```toml
+[preview]
+syntax_highlight = true
+```
+
+Controls syntax highlighting for fenced code blocks in rendered Markdown previews.
+
+### `preview.code_style`
+
+Type: string
+
+Default:
+
+```toml
+[preview]
+code_style = "monokai"
+```
+
+Controls the code highlighting theme used in the preview renderer.
+
+### `preview.privacy`
+
+Type: boolean
+
+Default:
+
+```toml
+[preview]
+privacy = false
+```
+
+When enabled, preview content starts in blurred privacy mode.
+
+### `preview.line_numbers`
+
+Type: boolean
+
+Default:
+
+```toml
+[preview]
+line_numbers = true
+```
+
+Controls whether the preview shows line numbers by default.
+
+### `preview.mouse_scroll_step`
+
+Type: integer
+
+Default:
+
+```toml
+[preview]
+mouse_scroll_step = 3
+```
+
+Controls how many preview rows each mouse-wheel step scrolls. The value must be at least `1`.
 
 ### `theme.name`
 

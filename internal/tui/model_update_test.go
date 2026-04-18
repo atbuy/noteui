@@ -675,6 +675,54 @@ func TestMouseWheelScrollsHelpModal(t *testing.T) {
 	}
 }
 
+func TestMouseWheelScrollsPreviewOnHoverWithoutPreviewFocus(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, tea.WindowSizeMsg{Width: 120, Height: 50})
+	m.focus = focusTree
+
+	lines := make([]string, 80)
+	for i := range lines {
+		lines[i] = strings.Repeat("preview line ", 4)
+	}
+	m.setStaticPreview("test", strings.Join(lines, "\n"))
+
+	require.Equal(t, 0, m.preview.YOffset)
+	require.Greater(t, m.previewPaneW, 0)
+	require.Greater(t, m.previewPaneH, 0)
+
+	m2 := updateModel(m, tea.MouseMsg{
+		X:      m.previewPaneX,
+		Y:      m.previewPaneY,
+		Button: tea.MouseButtonWheelDown,
+	})
+
+	require.Greater(t, m2.preview.YOffset, 0, "expected preview wheel-scroll on hover to move the viewport")
+}
+
+func TestMouseWheelScrollsPreviewUsingConfiguredStep(t *testing.T) {
+	cfg := config.Default()
+	cfg.Dashboard = false
+	cfg.Preview.MouseScrollStep = 5
+
+	m := New(t.TempDir(), "", cfg, "test")
+	m = updateModel(m, tea.WindowSizeMsg{Width: 120, Height: 50})
+	m.focus = focusTree
+
+	lines := make([]string, 120)
+	for i := range lines {
+		lines[i] = strings.Repeat("preview line ", 4)
+	}
+	m.setStaticPreview("test", strings.Join(lines, "\n"))
+
+	m2 := updateModel(m, tea.MouseMsg{
+		X:      m.previewPaneX,
+		Y:      m.previewPaneY,
+		Button: tea.MouseButtonWheelDown,
+	})
+
+	require.Equal(t, 5, m2.preview.YOffset, "expected preview mouse wheel to honor preview.mouse_scroll_step")
+}
+
 func TestPinsModeToggle(t *testing.T) {
 	m := newTestModel(t)
 	m.listMode = listModeNotes

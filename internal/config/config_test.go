@@ -19,6 +19,7 @@ func TestDefaultProvidesExpectedBaseline(t *testing.T) {
 	require.True(t, cfg.Preview.RenderMarkdown)
 	require.True(t, cfg.Preview.SyntaxHighlight)
 	require.True(t, cfg.Preview.LineNumbers)
+	require.Equal(t, 3, cfg.Preview.MouseScrollStep)
 	require.Equal(t, []string{"S"}, cfg.Keys.ToggleSync)
 	require.Equal(t, []string{"U"}, cfg.Keys.DeleteRemoteKeepLocal)
 	require.Equal(t, []string{"i"}, cfg.Keys.SyncImportCurrent)
@@ -78,6 +79,13 @@ func TestValidateRejectsInvalidValues(t *testing.T) {
 			},
 			wantErr: `invalid preview.code_style "mystery"`,
 		},
+		{
+			name: "invalid preview mouse scroll step",
+			mutate: func(cfg *Config) {
+				cfg.Preview.MouseScrollStep = 0
+			},
+			wantErr: `preview.mouse_scroll_step must be at least 1`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -117,6 +125,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 		`style = "light"`,
 		`code_style = "github"`,
 		`line_numbers = false`,
+		`mouse_scroll_step = 5`,
 		"",
 		"[keys]",
 		`toggle_sync = ["gs"]`,
@@ -145,6 +154,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 	require.Equal(t, "light", cfg.Preview.Style)
 	require.Equal(t, "github", cfg.Preview.CodeStyle)
 	require.False(t, cfg.Preview.LineNumbers)
+	require.Equal(t, 5, cfg.Preview.MouseScrollStep)
 	require.Equal(t, "#22c55e", cfg.Theme.SyncedNoteColor)
 	require.Equal(t, "#ef4444", cfg.Theme.UnsyncedNoteColor)
 	require.Equal(t, "#f59e0b", cfg.Theme.SyncingNoteColor)

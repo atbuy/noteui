@@ -1267,6 +1267,8 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, enableMouseCellMotionCmd()
 
 	case tea.MouseMsg:
+		m.updatePreviewMouseBounds()
+
 		if m.showHelp {
 			maxRows := max(8, min(20, m.height-16))
 			switch msg.Button {
@@ -1298,12 +1300,13 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.previewHover = m.mouseInPreview(msg.X, msg.Y)
 
 		if m.previewHover || m.focus == focusPreview {
+			step := m.previewMouseScrollStep()
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
-				m.preview.ScrollUp(3)
+				m.preview.ScrollUp(step)
 				return m, nil
 			case tea.MouseButtonWheelDown:
-				m.preview.ScrollDown(3)
+				m.preview.ScrollDown(step)
 				return m, nil
 			}
 		}
@@ -1332,6 +1335,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		previewInnerHeight := max(6, msg.Height-14)
 		m.preview.Width = previewInnerWidth
 		m.preview.Height = previewInnerHeight
+		m.updatePreviewMouseBounds()
 		m.previewPath = ""
 		m.refreshPreview()
 		return m, nil

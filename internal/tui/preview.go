@@ -1277,6 +1277,37 @@ func (m Model) mouseInPreview(x, y int) bool {
 		y < m.previewPaneY+m.previewPaneH
 }
 
+func (m Model) previewMouseScrollStep() int {
+	if m.cfg.Preview.MouseScrollStep < 1 {
+		return 1
+	}
+	return m.cfg.Preview.MouseScrollStep
+}
+
+func (m *Model) updatePreviewMouseBounds() {
+	if m.width <= 0 || m.height <= 0 || m.preview.Width <= 0 || m.preview.Height <= 0 {
+		m.previewPaneX = 0
+		m.previewPaneY = 0
+		m.previewPaneW = 0
+		m.previewPaneH = 0
+		return
+	}
+
+	usableWidth := max(40, m.width-6)
+	leftWidth, rightWidth := m.panelWidths()
+	rightInnerWidth := max(18, rightWidth-2-2*panelPaddingX)
+
+	titleHeight := lipgloss.Height(titleBarStyle.Width(usableWidth).Render(" "))
+	leftPanelWidth := lipgloss.Width(panelStyle(leftWidth, m.height, false).Render(""))
+	gapWidth := lipgloss.Width(lipgloss.NewStyle().Width(panelGapWidth).Render(""))
+	titleBlockHeight := lipgloss.Height(panelTitleStyle.Width(rightInnerWidth).Render(m.rightPanelTitle()))
+
+	m.previewPaneX = appPaddingX + leftPanelWidth + gapWidth + 1 + panelPaddingX
+	m.previewPaneY = appPaddingY + titleHeight + 1 + panelPaddingY + titleBlockHeight + 2
+	m.previewPaneW = m.preview.Width
+	m.previewPaneH = m.preview.Height
+}
+
 func (m Model) effectivePreviewPrivacy(noteForced bool) bool {
 	return m.cfg.Preview.Privacy || m.previewPrivacyEnabled || noteForced
 }

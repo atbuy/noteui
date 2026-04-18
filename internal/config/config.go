@@ -132,6 +132,7 @@ type PreviewConfig struct {
 	CodeStyle       string   `toml:"code_style"`
 	Privacy         bool     `toml:"privacy"`
 	LineNumbers     bool     `toml:"line_numbers"`
+	MouseScrollStep int      `toml:"mouse_scroll_step"`
 }
 
 type KeysConfig struct {
@@ -250,6 +251,7 @@ func Default() Config {
 			CodeStyle:       "monokai",
 			Privacy:         false,
 			LineNumbers:     true,
+			MouseScrollStep: 3,
 		},
 		Keys: KeysConfig{
 			ToggleSync:            []string{"S"},
@@ -358,6 +360,10 @@ func Validate(cfg Config) error {
 			"invalid preview.code_style %q (valid examples: monokai, github, dracula, swapoff, onesenterprise)",
 			cfg.Preview.CodeStyle,
 		)
+	}
+
+	if cfg.Preview.MouseScrollStep < 1 {
+		return fmt.Errorf("preview.mouse_scroll_step must be at least 1, got %d", cfg.Preview.MouseScrollStep)
 	}
 
 	for name, profile := range cfg.Sync.Profiles {

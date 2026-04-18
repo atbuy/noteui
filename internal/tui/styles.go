@@ -63,6 +63,8 @@ var (
 
 	panelPaddingX int
 	panelPaddingY int
+	appPaddingX   int
+	appPaddingY   int
 	modalPaddingX int
 	modalPaddingY int
 
@@ -176,8 +178,8 @@ func ApplyTheme(cfg config.Config) {
 
 	panelPaddingX = max(0, cfg.Theme.PanelPaddingX)
 	panelPaddingY = max(0, cfg.Theme.PanelPaddingY)
-	appPaddingX := max(0, cfg.Theme.AppPaddingX)
-	appPaddingY := max(0, cfg.Theme.AppPaddingY)
+	appPaddingX = max(0, cfg.Theme.AppPaddingX)
+	appPaddingY = max(0, cfg.Theme.AppPaddingY)
 
 	modalPaddingX = max(0, cfg.Modal.PaddingX)
 	modalPaddingY = max(0, cfg.Modal.PaddingY)
