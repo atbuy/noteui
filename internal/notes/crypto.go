@@ -161,6 +161,18 @@ func DecryptNoteFile(path, passphrase string) error {
 	return atomicWriteFile(path, []byte(final), 0o644)
 }
 
+// ReencryptBody writes new plaintext body back to origPath as encrypted content.
+// The note may be renamed based on the edited title. Plaintext is never written to disk.
+func ReencryptBody(origPath, newBody, passphrase string) (string, error) {
+	raw, err := ReadAll(origPath)
+	if err != nil {
+		return origPath, err
+	}
+
+	plaintext := swapNoteBody(removeEncryptedFlag(raw), newBody)
+	return writeEncryptedNoteContent(origPath, plaintext, passphrase)
+}
+
 // ReencryptFromTemp re-encrypts content from a temp file back to the original path.
 // It handles title-based renaming of the original file. The temp file is always deleted.
 func ReencryptFromTemp(origPath, tempPath, passphrase string) (string, error) {
@@ -171,17 +183,21 @@ func ReencryptFromTemp(origPath, tempPath, passphrase string) (string, error) {
 		return origPath, fmt.Errorf("reading temp file: %w", err)
 	}
 
-	body := StripFrontMatter(tempContent)
+	return writeEncryptedNoteContent(origPath, tempContent, passphrase)
+}
+
+func writeEncryptedNoteContent(origPath, plaintextContent, passphrase string) (string, error) {
+	body := StripFrontMatter(plaintextContent)
 	encrypted, err := EncryptBody(body, passphrase)
 	if err != nil {
 		return origPath, fmt.Errorf("encrypting: %w", err)
 	}
 
-	withFlag := addEncryptedFlag(tempContent)
+	withFlag := addEncryptedFlag(plaintextContent)
 	final := swapNoteBody(withFlag, encrypted+"\n")
 
 	newPath := origPath
-	newTitle := ExtractTitleOrFirstLine(tempContent)
+	newTitle := ExtractTitleOrFirstLine(plaintextContent)
 	if newTitle != "" {
 		dir := filepath.Dir(origPath)
 		ext := filepath.Ext(origPath)
@@ -198,8 +214,6 @@ func ReencryptFromTemp(origPath, tempPath, passphrase string) (string, error) {
 		}
 	}
 
-	// Atomic write: the original file is not touched until the new content is
-	// fully flushed to disk, so a crash or disk-full cannot corrupt origPath.
 	if err := atomicWriteFile(newPath, []byte(final), 0o644); err != nil {
 		return origPath, fmt.Errorf("writing encrypted file: %w", err)
 	}

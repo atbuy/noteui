@@ -717,6 +717,10 @@ func TestRewriteWikilinks(t *testing.T) {
 			in:  "[[note with spaces]]",
 			out: "[note with spaces](#wikilink:note%20with%20spaces)",
 		},
+		{
+			in:  "Use [[target note|Shown Label]] here.",
+			out: "Use [Shown Label](#wikilink:target%20note) here.",
+		},
 	}
 
 	for _, tc := range cases {
@@ -728,10 +732,20 @@ func TestRewriteWikilinks(t *testing.T) {
 }
 
 func TestExtractWikilinks(t *testing.T) {
-	content := "See [[alpha]] and [[beta]].\nAlso [[alpha]] again and [[gamma]]."
+	content := "See [[alpha]] and [[beta|Beta Label]].\nAlso [[alpha]] again and [[gamma]]."
 	got := ExtractWikilinks(content)
 	want := []string{"alpha", "beta", "gamma"}
 	require.Equal(t, want, got)
+}
+
+func TestSplitWikilinkTargetLabel(t *testing.T) {
+	target, label := SplitWikilinkTargetLabel("[[Plan/2026|Quarterly Plan]]")
+	require.Equal(t, "Plan/2026", target)
+	require.Equal(t, "Quarterly Plan", label)
+
+	target, label = SplitWikilinkTargetLabel("Standalone Title")
+	require.Equal(t, "Standalone Title", target)
+	require.Equal(t, "Standalone Title", label)
 }
 
 func TestFindNoteByWikilink(t *testing.T) {

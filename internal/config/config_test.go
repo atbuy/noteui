@@ -20,6 +20,7 @@ func TestDefaultProvidesExpectedBaseline(t *testing.T) {
 	require.True(t, cfg.Preview.SyntaxHighlight)
 	require.True(t, cfg.Preview.LineNumbers)
 	require.Equal(t, 3, cfg.Preview.MouseScrollStep)
+	require.False(t, cfg.Preview.EditInPreview)
 	require.Equal(t, []string{"S"}, cfg.Keys.ToggleSync)
 	require.Equal(t, []string{"U"}, cfg.Keys.DeleteRemoteKeepLocal)
 	require.Equal(t, []string{"i"}, cfg.Keys.SyncImportCurrent)
@@ -126,6 +127,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 		`code_style = "github"`,
 		`line_numbers = false`,
 		`mouse_scroll_step = 5`,
+		`edit_in_preview = true`,
 		"",
 		"[keys]",
 		`toggle_sync = ["gs"]`,
@@ -155,6 +157,7 @@ func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
 	require.Equal(t, "github", cfg.Preview.CodeStyle)
 	require.False(t, cfg.Preview.LineNumbers)
 	require.Equal(t, 5, cfg.Preview.MouseScrollStep)
+	require.True(t, cfg.Preview.EditInPreview)
 	require.Equal(t, "#22c55e", cfg.Theme.SyncedNoteColor)
 	require.Equal(t, "#ef4444", cfg.Theme.UnsyncedNoteColor)
 	require.Equal(t, "#f59e0b", cfg.Theme.SyncingNoteColor)

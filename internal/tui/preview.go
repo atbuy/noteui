@@ -959,7 +959,8 @@ func byteOffsetToLineCol(content string, offset int) (line, col int) {
 
 func normalizeRenderedLinkTarget(target string, isWikilink bool) string {
 	if isWikilink {
-		return strings.Join(strings.Fields(target), " ")
+		wikilinkTarget, _ := notes.SplitWikilinkTargetLabel(target)
+		return strings.Join(strings.Fields(wikilinkTarget), " ")
 	}
 	return strings.Join(strings.Fields(target), "")
 }

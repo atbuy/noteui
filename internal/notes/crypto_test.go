@@ -149,6 +149,34 @@ func TestReencryptFromTempRenamesOriginalBasedOnEditedTitle(t *testing.T) {
 	}
 }
 
+func TestReencryptBodyRenamesOriginalBasedOnEditedTitle(t *testing.T) {
+	dir := t.TempDir()
+	origPath := filepath.Join(dir, "draft.md")
+	encrypted, err := EncryptBody("# Draft\n\nSecret body", "passphrase")
+	require.NoError(t, err)
+
+	raw := strings.Join([]string{
+		"---",
+		"title: Draft",
+		"encrypted: true",
+		"---",
+		encrypted,
+	}, "\n")
+	require.NoError(t, os.WriteFile(origPath, []byte(raw), 0o644))
+
+	newPath, err := ReencryptBody(origPath, "# Renamed Secret\n\nBody text", "passphrase")
+	require.NoError(t, err)
+	require.Equal(t, "renamed-secret.md", filepath.Base(newPath))
+	_, statErr := os.Stat(origPath)
+	require.True(t, os.IsNotExist(statErr))
+
+	updated := mustRead(t, newPath)
+	require.Contains(t, updated, "encrypted: true")
+	decrypted, err := DecryptBody(strings.TrimSpace(StripFrontMatter(updated)), "passphrase")
+	require.NoError(t, err)
+	require.Equal(t, "# Renamed Secret\n\nBody text", decrypted)
+}
+
 func TestUniqueTrashNameAndBuildTrashInfo(t *testing.T) {
 	filesDir := t.TempDir()
 	infoDir := t.TempDir()

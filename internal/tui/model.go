@@ -332,6 +332,7 @@ type Model struct {
 	commandPaletteItems    []paletteItem
 	commandPaletteFiltered []paletteItem
 	commandPaletteCursor   int
+	editorLinkPickerMode   bool
 
 	showHelp             bool
 	helpScroll           int
@@ -392,21 +393,23 @@ type Model struct {
 	lastDeletion   *undoableDelete
 	preserveCursor int
 
-	previewTodos       []previewTodoItem
-	previewTodoCursor  int
-	pendingTodoCursor  int
-	pendingT           bool
-	previewTodoNavMode bool
-	previewLinks       []previewLinkItem
-	previewLinkCursor  int
-	previewLinkNavMode bool
-	showTodoAdd        bool
-	showTodoEdit       bool
-	showTodoDueDate    bool
-	showTodoPriority   bool
-	todoInput          textinput.Model
-	dueDateInput       textinput.Model
-	priorityInput      textinput.Model
+	previewTodos        []previewTodoItem
+	previewTodoCursor   int
+	pendingTodoCursor   int
+	pendingT            bool
+	previewTodoNavMode  bool
+	previewLinks        []previewLinkItem
+	previewLinkCursor   int
+	previewLinkNavMode  bool
+	showTodoAdd         bool
+	showTodoEdit        bool
+	showTodoDueDate     bool
+	showTodoPriority    bool
+	todoInput           textinput.Model
+	dueDateInput        textinput.Model
+	priorityInput       textinput.Model
+	showEditorURLPrompt bool
+	editorURLInput      textinput.Model
 
 	sessionPassphrase    string
 	showPassphraseModal  bool
@@ -455,6 +458,16 @@ type Model struct {
 	themePickerCursor       int
 	themePickerScrollOffset int
 	themePickerOrigTheme    string
+
+	editorActive         bool
+	editorFullscreen     bool
+	editorModel          *EditorModel
+	editorRestoreFocus   paneFocus
+	pendingInAppEditPath string
+	pendingInAppEditRel  string
+	pendingInAppEditTemp bool
+	pendingSelectRelPath string
+	pendingSelectIsTemp  bool
 }
 
 type dataLoadedMsg struct {
@@ -585,6 +598,12 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 	passphraseInput.EchoMode = textinput.EchoPassword
 	passphraseInput.EchoCharacter = '•'
 
+	editorURLInput := textinput.New()
+	editorURLInput.Placeholder = "https://example.com"
+	editorURLInput.Prompt = "URL: "
+	editorURLInput.CharLimit = 1000
+	editorURLInput.Width = 64
+
 	vp := viewport.New(0, 0)
 
 	st, _ := state.Load()
@@ -609,6 +628,7 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 		todoInput:                 todoInput,
 		dueDateInput:              dueDateInput,
 		priorityInput:             priorityInput,
+		editorURLInput:            editorURLInput,
 		passphraseInput:           passphraseInput,
 		preserveCursor:            -1,
 		pendingTodoCursor:         -1,
@@ -626,6 +646,7 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 		todoCursor:                0,
 		previewPrivacyEnabled:     cfg.Preview.Privacy,
 		previewLineNumbersEnabled: cfg.Preview.LineNumbers,
+		editorFullscreen:          cfg.Editor.Fullscreen,
 		showDashboard:             cfg.Dashboard && !session.StartWithPicker,
 		showWorkspacePicker:       session.StartWithPicker,
 		syncRecords:               map[string]notesync.NoteRecord{},
@@ -1064,7 +1085,126 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
+	if m.editorActive && m.editorModel != nil && !m.showCommandPalette && !m.showEditorURLPrompt {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			updated, cmd := m.editorModel.Update(msg)
+			m.editorModel = &updated
+			return m, cmd
+		case tea.MouseMsg:
+			return m, nil
+		}
+	}
+
 	switch msg := msg.(type) {
+	case editorLoadedMsg:
+		if msg.err != nil {
+			m.status = "editor open failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.editorFullscreen = m.cfg.Editor.Fullscreen
+		editorWidth, editorHeight := m.inAppEditorSize()
+		editorModel := NewEditorModel(
+			msg.path,
+			msg.relPath,
+			m.rootDir,
+			msg.content,
+			editorWidth,
+			editorHeight,
+			msg.encrypted,
+			m.sessionPassphrase,
+			msg.isTemp,
+		)
+		editorModel.markLoaded(msg.hash, msg.modTime)
+		editorModel.SetLineNumbers(m.previewLineNumbersEnabled)
+		m.editorModel = &editorModel
+		m.editorActive = true
+		m.showEditorURLPrompt = false
+		m.editorLinkPickerMode = false
+		if m.inAppEditorUsesPreview() {
+			m.focus = focusPreview
+		}
+		m.status = "editing in app"
+		return m, nil
+
+	case editorSavedMsg:
+		if m.editorModel == nil {
+			return m, nil
+		}
+		if msg.discarded {
+			m.pendingSelectRelPath = ""
+			m.pendingSelectIsTemp = false
+			m.closeInAppEditor("note discarded")
+			return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+		}
+		m.editorModel.markSaved(msg.newPath, msg.hash, msg.modTime)
+		m.editorModel.setStatus(editorSavedLabel(msg.newPath))
+		m.pendingSelectRelPath = editorRelativePath(m.rootDir, msg.newPath, m.editorModel.isTemp)
+		m.pendingSelectIsTemp = m.editorModel.isTemp
+		cmd := batchCmds(saveNoteVersionCmd(m.rootDir, msg.newPath), refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+		if msg.closeAfter {
+			m.closeInAppEditor(editorSavedLabel(msg.newPath))
+		}
+		return m, cmd
+
+	case editorSaveErrMsg:
+		if m.editorModel != nil {
+			m.editorModel.setStatus("save failed: " + msg.err.Error())
+			return m, nil
+		}
+		m.status = "save failed: " + msg.err.Error()
+		return m, nil
+
+	case editorConflictMsg:
+		if m.editorModel != nil {
+			m.editorModel.setStatus("file changed on disk; use :w! or :e!")
+		}
+		return m, nil
+
+	case editorReloadedMsg:
+		if m.editorModel == nil {
+			return m, nil
+		}
+		m.editorModel.applyReload(msg.content, msg.hash, msg.modTime)
+		return m, nil
+
+	case editorReloadErrMsg:
+		if m.editorModel != nil {
+			m.editorModel.setStatus("reload failed: " + msg.err.Error())
+			return m, nil
+		}
+		m.status = "reload failed: " + msg.err.Error()
+		return m, nil
+
+	case editorClosedMsg:
+		status := "editor closed"
+		if msg.discarded {
+			status = "discarded editor changes"
+		}
+		m.closeInAppEditor(status)
+		return m, nil
+
+	case editorLinkPickerMsg:
+		m.openEditorLinkPicker()
+		return m, nil
+
+	case editorURLPromptMsg:
+		m.openEditorURLPrompt()
+		return m, nil
+
+	case editorToggleFullscreenMsg:
+		if m.editorModel != nil {
+			m.editorFullscreen = !m.editorFullscreen
+			w, h := m.inAppEditorSize()
+			m.editorModel.Resize(w, h)
+			if m.inAppEditorUsesPreview() {
+				m.focus = focusPreview
+			} else {
+				m.focus = focusTree
+			}
+		}
+		return m, nil
+
 	case previewRenderedMsg:
 		if msg.forPath != m.previewPath {
 			return m, nil
@@ -1335,6 +1475,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		previewInnerHeight := max(6, msg.Height-14)
 		m.preview.Width = previewInnerWidth
 		m.preview.Height = previewInnerHeight
+		if m.editorModel != nil {
+			editorWidth, editorHeight := m.inAppEditorSize()
+			m.editorModel.Resize(editorWidth, editorHeight)
+		}
 		m.updatePreviewMouseBounds()
 		m.previewPath = ""
 		m.refreshPreview()
@@ -1711,8 +1855,19 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		m.clampTodoCursor()
 		m.previewPath = ""
-
-		m.syncSelectedNote()
+		if strings.TrimSpace(m.pendingSelectRelPath) != "" {
+			if m.pendingSelectIsTemp {
+				m.switchToTemporaryMode()
+				m.selectTemporaryNote(m.pendingSelectRelPath)
+			} else {
+				m.switchToNotesMode()
+				m.selectTreeNote(m.pendingSelectRelPath)
+			}
+			m.pendingSelectRelPath = ""
+			m.pendingSelectIsTemp = false
+		} else {
+			m.syncSelectedNote()
+		}
 
 		if m.deferredStatus != "" {
 			m.status = m.deferredStatus
@@ -1878,6 +2033,44 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.showEditorURLPrompt {
+			switch msg.String() {
+			case "esc":
+				m.showEditorURLPrompt = false
+				m.editorURLInput.Blur()
+				m.editorURLInput.SetValue("")
+				if m.editorModel != nil {
+					m.editorModel.setStatus("URL insert cancelled")
+				} else {
+					m.status = "URL insert cancelled"
+				}
+				return m, nil
+			case "enter":
+				url := strings.TrimSpace(m.editorURLInput.Value())
+				m.showEditorURLPrompt = false
+				m.editorURLInput.Blur()
+				m.editorURLInput.SetValue("")
+				if url == "" {
+					if m.editorModel != nil {
+						m.editorModel.setStatus("URL cannot be empty")
+					} else {
+						m.status = "URL cannot be empty"
+					}
+					return m, nil
+				}
+				if m.editorModel != nil {
+					m.editorModel.InsertURLLink(url)
+				}
+				return m, nil
+			}
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.editorURLInput, cmd = m.editorURLInput.Update(msg)
+			return m, cmd
+		}
+
 		if m.showTemplatePicker {
 			switch {
 			case msg.String() == "esc":
@@ -2077,7 +2270,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					return m, nil
 				}
 				switch m.passphraseModalCtx {
-				case "unlock", "unlock_edit", "decrypt":
+				case "unlock", "unlock_edit", "unlock_in_app", "decrypt":
 					raw, err := notes.ReadAll(m.pendingEncryptPath)
 					if err != nil {
 						m.status = "error: " + err.Error()
@@ -2095,6 +2288,15 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 					m.passphraseInput.SetValue("")
 					if m.passphraseModalCtx == "unlock_edit" {
 						return m, saveNoteVersionAndOpenEncryptedCmd(m.rootDir, m.pendingEncryptPath, m.sessionPassphrase)
+					}
+					if m.passphraseModalCtx == "unlock_in_app" {
+						return m, saveNoteVersionAndEditorLoadCmd(
+							m.rootDir,
+							m.pendingInAppEditPath,
+							m.pendingInAppEditRel,
+							m.sessionPassphrase,
+							m.pendingInAppEditTemp,
+						)
 					}
 					if m.passphraseModalCtx == "decrypt" {
 						m.showEncryptConfirm = true
@@ -2610,6 +2812,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			case tea.KeyEsc:
 				m.showCommandPalette = false
 				m.commandPaletteInput.Blur()
+				m.editorLinkPickerMode = false
 			case tea.KeyEnter:
 				if len(m.commandPaletteFiltered) > 0 {
 					paletteCmd = m.commitPaletteSelection()
@@ -3395,6 +3598,10 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.OpenDailyNote) {
 			return m, m.openDailyNote()
+		}
+
+		if key.Matches(msg, keys.EditInApp) {
+			return m, m.openInAppEditorCurrent()
 		}
 
 		if key.Matches(msg, keys.TogglePreviewPrivacy) {

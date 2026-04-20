@@ -2176,6 +2176,179 @@ func TestFollowSelectedLinkUnknownTargetSetsStatus(t *testing.T) {
 	require.Contains(t, m.status, "Nonexistent Note")
 }
 
+func TestFollowSelectedLinkUsesWikilinkAliasTarget(t *testing.T) {
+	m, n := makeLinkNavModel(t)
+	m.previewLinkNavMode = true
+	m.previewLinkCursor = 0
+	m.previewLinks[0] = previewLinkItem{rendLine: 1, target: "Linked|Shown Label", isWikilink: true}
+
+	cmd := m.followSelectedLink()
+
+	require.NotNil(t, cmd)
+	require.False(t, m.previewLinkNavMode)
+	require.Equal(t, focusTree, m.focus)
+	require.Contains(t, m.status, "[[Linked]]")
+	require.Equal(t, n.RelPath, m.currentTreeItem().RelPath)
+}
+
+func TestFollowWikilinkUnderCursorUsesAliasTarget(t *testing.T) {
+	m, n := makeLinkNavModel(t)
+	m.previewContent = "intro\n[[Linked|Shown Label]]\ntrailing"
+	m.preview.YOffset = 0
+	m.preview.Height = 10
+
+	cmd := m.followWikilinkUnderCursor()
+
+	require.NotNil(t, cmd)
+	require.Equal(t, focusTree, m.focus)
+	require.Contains(t, m.status, "[[Linked]]")
+	require.Equal(t, n.RelPath, m.currentTreeItem().RelPath)
+}
+
+func TestRebuildPreviewLinksUsesWikilinkTargetNotAliasLabel(t *testing.T) {
+	m := newTestModel(t)
+	m.previewContent = "[[Plan/2026|Quarterly Plan]]"
+
+	m.rebuildPreviewLinks()
+
+	require.Len(t, m.previewLinks, 1)
+	require.Equal(t, "Plan/2026", m.previewLinks[0].target)
+	require.True(t, m.previewLinks[0].isWikilink)
+}
+
+func TestEditInAppKeyOpensEditorForSelectedNote(t *testing.T) {
+	m := newTestModel(t)
+	path := filepath.Join(m.rootDir, "draft.md")
+	require.NoError(t, os.WriteFile(path, []byte("# Draft\nbody\n"), 0o644))
+	note := notes.Note{
+		Path:      path,
+		RelPath:   "draft.md",
+		Name:      "draft.md",
+		TitleText: "Draft",
+	}
+	m = updateModel(m, dataLoadedMsg{
+		notes:        []notes.Note{note},
+		tempNotes:    nil,
+		categories:   nil,
+		sessionToken: m.sessionToken,
+	})
+	m.focus = focusTree
+	m.selectTreeNote(note.RelPath)
+	m.pendingPreviewCmd = nil
+	require.NotNil(t, m.currentTreeItem())
+	require.Equal(t, note.RelPath, m.currentTreeItem().RelPath)
+
+	next, cmd := m.Update(keyMsg("e"))
+	m = next.(Model)
+	require.NotNil(t, cmd)
+
+	loaded, ok := cmd().(editorLoadedMsg)
+	require.True(t, ok)
+	require.Equal(t, path, loaded.path)
+
+	next, _ = m.Update(loaded)
+	m = next.(Model)
+	require.True(t, m.editorActive)
+	require.NotNil(t, m.editorModel)
+	require.Equal(t, "# Draft\nbody\n", m.editorModel.Content())
+	require.Equal(t, "draft.md", m.editorModel.relPath)
+}
+
+func TestEditInAppPreviewModeUsesPreviewPaneSizeAndFocus(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Preview.EditInPreview = true
+	m = updateModel(m, tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	path := filepath.Join(m.rootDir, "draft.md")
+	require.NoError(t, os.WriteFile(path, []byte("# Draft\nbody\n"), 0o644))
+	note := notes.Note{
+		Path:      path,
+		RelPath:   "draft.md",
+		Name:      "draft.md",
+		TitleText: "Draft",
+	}
+	m = updateModel(m, dataLoadedMsg{
+		notes:        []notes.Note{note},
+		tempNotes:    nil,
+		categories:   nil,
+		sessionToken: m.sessionToken,
+	})
+	m.focus = focusTree
+	m.selectTreeNote(note.RelPath)
+	m.pendingPreviewCmd = nil
+
+	next, cmd := m.Update(keyMsg("e"))
+	m = next.(Model)
+	require.NotNil(t, cmd)
+
+	loaded, ok := cmd().(editorLoadedMsg)
+	require.True(t, ok)
+
+	next, _ = m.Update(loaded)
+	m = next.(Model)
+
+	require.True(t, m.editorActive)
+	require.Equal(t, focusPreview, m.focus)
+	require.Equal(t, m.preview.Width, m.editorModel.width)
+	require.Equal(t, m.preview.Height, m.editorModel.height)
+
+	m = updateModel(m, tea.WindowSizeMsg{Width: 140, Height: 48})
+	require.Equal(t, m.preview.Width, m.editorModel.width)
+	require.Equal(t, m.preview.Height, m.editorModel.height)
+}
+
+func TestEditorURLPromptEnterInsertsLink(t *testing.T) {
+	m := newTestModel(t)
+	editorModel := NewEditorModel("", "draft.md", m.rootDir, "body", 80, 24, false, "", false)
+	editorModel.markLoaded(editorHashContent(editorModel.Content()), time.Now())
+	m.editorActive = true
+	m.editorModel = &editorModel
+	m.showEditorURLPrompt = true
+	m.editorURLInput.SetValue("https://example.com")
+
+	m = updateModel(m, keyMsg("enter"))
+
+	require.False(t, m.showEditorURLPrompt)
+	require.Equal(t, "[label](https://example.com)body", m.editorModel.Content())
+	require.Contains(t, m.editorModel.status, "inserted URL link")
+}
+
+func TestEditorSavedMsgSelectsRenamedNoteAfterRefresh(t *testing.T) {
+	m := newTestModel(t)
+	oldPath := filepath.Join(m.rootDir, "draft.md")
+	newPath := filepath.Join(m.rootDir, "renamed.md")
+	editorModel := NewEditorModel(oldPath, "draft.md", m.rootDir, "# Draft\nbody\n", 80, 24, false, "", false)
+	editorModel.markLoaded(editorHashContent(editorModel.Content()), time.Now())
+	m.editorActive = true
+	m.editorModel = &editorModel
+
+	next, _ := m.Update(editorSavedMsg{
+		oldPath: oldPath,
+		newPath: newPath,
+		hash:    "hash",
+		modTime: time.Now(),
+	})
+	m = next.(Model)
+	require.Equal(t, "renamed.md", m.pendingSelectRelPath)
+
+	note := notes.Note{
+		Path:      newPath,
+		RelPath:   "renamed.md",
+		Name:      "renamed.md",
+		TitleText: "Renamed",
+	}
+	m = updateModel(m, dataLoadedMsg{
+		notes:        []notes.Note{note},
+		tempNotes:    nil,
+		categories:   nil,
+		sessionToken: m.sessionToken,
+	})
+
+	require.NotNil(t, m.currentTreeItem())
+	require.Equal(t, note.RelPath, m.currentTreeItem().RelPath)
+	require.Equal(t, note.RelPath, m.selected.RelPath)
+}
+
 // Trash browser tests
 
 func makeTrashItem(root, name string) notes.TrashedItem {

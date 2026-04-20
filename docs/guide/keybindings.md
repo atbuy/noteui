@@ -11,6 +11,7 @@ This page documents the default keybindings that most users care about first.
 - `j` / `k` or arrow keys: move selection
 - `h` / `l` or left/right: collapse or expand categories
 - `enter` or `o`: open note in editor
+- `e`: edit the selected note in the in-app editor
 - `ctrl+p` or `:`: open the command palette
 - `/`: search
 - `tab`: switch focused pane
@@ -66,8 +67,8 @@ This page documents the default keybindings that most users care about first.
 - `B`: toggle preview privacy
 - `L`: toggle preview line numbers
 - `]f` / `[f`: enter link nav mode and jump to the next or previous link; navigates both `[[wikilinks]]` and regular `[text](url)` links; the selected link is highlighted, and markdown links reveal their URL only while selected
-- In link nav: `f` or `enter` follows the selected link; for wikilinks, opens the referenced note; for external URLs, opens the URL in the system browser; `esc` exits link nav
-- `enter`: when not in link nav, follows the first visible `[[wikilink]]` on screen
+- In link nav: `f` or `enter` follows the selected link; for wikilinks, opens the referenced note; `[[target|label]]` resolves by `target`; for external URLs, opens the URL in the system browser; `esc` exits link nav
+- `enter`: when not in link nav, follows the first visible `[[wikilink]]` on screen, including `[[target|label]]`
 - `n` / `N`: next or previous search match in preview
 - `]h` / `[h`: next or previous heading in preview
 - `]t` / `[t`: next or previous todo in preview
@@ -79,6 +80,23 @@ This page documents the default keybindings that most users care about first.
 - `tp`: set or clear the current todo priority
 - `ctrl+u` / `ctrl+d`: half-page scroll
 - `ctrl+b` / `ctrl+f`: page up/down
+
+## In-app editor
+
+The in-app editor shows the same rendered preview as the preview pane, with a cursor line highlighted. Every source line is individually selectable and editable.
+
+- `e`: open the selected note in the in-app editor
+- `enter` / `o`: keep using the external editor path (unchanged)
+- `ctrl+f`: toggle full-screen mode on and off (overrides the TOML default for the session)
+- Normal mode supports `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`
+- `j`/`k` moves one source line at a time (list items, headings, code lines, and paragraph lines each get their own cursor stop)
+- Insert and open commands: `i`, `a`, `I`, `A`, `o`, `O`; pressing `i` on a line shows that line as raw markdown with a text cursor; all other lines stay rendered
+- Edit operators: `d`, `c`, `y`, `x`, `dd`, `cc`, `yy`, `p`, `P`
+- Visual and search: `v`, `V`, `/`, `?`, `n`, `N`
+- Command line: `:w`, `:w!`, `:wq`, `:q`, `:q!`, `:e!`; `:q` returns to preview without saving
+- `tt`: toggle a checkbox on the current line (`- [ ]` to `- [x]` and back)
+- `gl`: open the note picker and insert a wikilink
+- `gu`: prompt for a URL and insert or wrap a markdown link
 
 ## Advanced note actions
 

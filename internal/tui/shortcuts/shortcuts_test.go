@@ -14,12 +14,14 @@ func TestDefaultMapAndHelpEntries(t *testing.T) {
 
 	require.Equal(t, []string{"enter", "o"}, m.Open.Keys())
 	require.Equal(t, "enter/o", m.Open.Help().Key)
+	require.Equal(t, []string{"e"}, m.EditInApp.Keys())
 	require.Equal(t, []string{"ctrl+p", ":"}, m.CommandPalette.Keys())
 	require.Equal(t, []string{"ctrl+y"}, m.ShowThemePicker.Keys())
 
 	entries := HelpEntries(m)
 	require.Greater(t, len(entries), 20)
 	requireHelpEntry(t, entries, "Tree", m.CommandPalette.Help().Key, "Command palette: notes, actions, and workspace switch")
+	requireHelpEntry(t, entries, "Tree", m.EditInApp.Help().Key, "Edit current note in app")
 	requireHelpEntry(t, entries, "Global", m.ShowThemePicker.Help().Key, "Open theme picker (live preview; saves theme.name only)")
 	requireHelpEntry(t, entries, "Preview", m.TodoKey.Help().Key+m.TodoPriority.Help().Key, "Set or clear current todo priority")
 }

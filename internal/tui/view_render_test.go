@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -37,6 +38,23 @@ func TestRenderStatusUsesErrorStyleForSyncFailures(t *testing.T) {
 	}, "  •  ")
 	rendered := m.renderStatus()
 	assert.Equal(t, statusErrStyle.Render(line), rendered)
+}
+
+func TestViewEmbedsEditorInPreviewWhenConfigured(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Preview.EditInPreview = true
+	m = updateModel(m, tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	editorModel := NewEditorModel("", "draft.md", m.rootDir, "body", m.preview.Width, m.preview.Height, false, "", false)
+	editorModel.markLoaded(editorHashContent(editorModel.Content()), time.Now())
+	m.editorActive = true
+	m.editorModel = &editorModel
+	m.focus = focusPreview
+
+	rendered := stripANSI(m.View())
+	require.Contains(t, rendered, "Tree (")
+	require.Contains(t, rendered, "Editor")
+	require.Contains(t, rendered, "-- NORMAL -- draft.md")
 }
 
 func TestRenderModeSegmentHelp(t *testing.T) {

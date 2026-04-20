@@ -116,14 +116,17 @@ func TestSetNoteSyncClassAndToggleNoteSyncClass(t *testing.T) {
 }
 
 func TestWikilinkAndFrontMatterHelpers(t *testing.T) {
-	content := "Review [[Plan/2026]] with [[Spaced Title]] and [[Plan/2026]]."
+	content := "Review [[Plan/2026|Quarterly Plan]] with [[Spaced Title]] and [[Plan/2026]]."
 
 	rewritten := RewriteWikilinks(content)
-	require.Contains(t, rewritten, "[Plan/2026](#wikilink:Plan%2F2026)")
+	require.Contains(t, rewritten, "[Quarterly Plan](#wikilink:Plan%2F2026)")
 	require.Contains(t, rewritten, "[Spaced Title](#wikilink:Spaced%20Title)")
 	require.Equal(t, []string{"Plan/2026", "Spaced Title"}, ExtractWikilinks(content))
 	require.Equal(t, "Spaced Title", DecodeWikilinkTarget("Spaced%20Title"))
 	require.Equal(t, "%zz", DecodeWikilinkTarget("%zz"))
+	target, label := SplitWikilinkTargetLabel("[[Plan/2026|Quarterly Plan]]")
+	require.Equal(t, "Plan/2026", target)
+	require.Equal(t, "Quarterly Plan", label)
 
 	require.Equal(t, "custom-key", normalizeFrontMatterKey(" Custom_Key "))
 	require.Equal(t, []string{"Work", "Personal", "new"}, mergeTags([]string{"Work", "#Personal"}, []string{"work", "new", "#personal"}))

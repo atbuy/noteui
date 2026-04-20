@@ -216,6 +216,10 @@ const WikilinkURLPrefix = meta.WikilinkURLPrefix
 func RewriteWikilinks(content string) string     { return meta.RewriteWikilinks(content) }
 func DecodeWikilinkTarget(encoded string) string { return meta.DecodeWikilinkTarget(encoded) }
 func ExtractWikilinks(content string) []string   { return meta.ExtractWikilinks(content) }
+func SplitWikilinkTargetLabel(raw string) (string, string) {
+	return meta.SplitWikilinkTargetLabel(raw)
+}
+func SplitFrontMatter(raw string) (string, string) { return meta.SplitFrontMatter(raw) }
 
 // FindNoteByWikilink searches notes for one whose title or filename matches
 // target (case-insensitive). It checks exact title match first, then exact
@@ -483,6 +487,10 @@ func ReadAll(path string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+func WriteAll(path, raw string) error {
+	return atomicWriteFile(path, []byte(raw), 0o644)
 }
 
 func IsNoteFile(path string) bool {

@@ -169,6 +169,7 @@ func isConflictCopy(relPath string) bool {
 }
 
 func (m *Model) openCommandPalette() {
+	m.editorLinkPickerMode = false
 	items := make([]paletteItem, 0, len(m.notes)+len(m.tempNotes))
 	for _, n := range m.notes {
 		if isConflictCopy(n.RelPath) {
@@ -835,6 +836,20 @@ func (m *Model) commitPaletteSelection() tea.Cmd {
 	m.showCommandPalette = false
 	m.commandPaletteInput.Blur()
 
+	if m.editorLinkPickerMode {
+		m.editorLinkPickerMode = false
+		if m.editorModel == nil {
+			return nil
+		}
+		switch item.kind {
+		case paletteKindNote, paletteKindTempNote:
+			m.editorModel.InsertWikilink(item.note.Title())
+		default:
+			m.editorModel.setStatus("select a note")
+		}
+		return nil
+	}
+
 	switch item.kind {
 	case paletteKindNote:
 		m.switchToNotesMode()
@@ -960,7 +975,7 @@ func (m *Model) followWikilinkUnderCursor() tea.Cmd {
 	var target string
 	for _, line := range stripped[start:end] {
 		if match := renderedWikilinkRe.FindStringSubmatch(line); match != nil {
-			target = match[1]
+			target, _ = notes.SplitWikilinkTargetLabel(match[1])
 			break
 		}
 	}
@@ -991,9 +1006,10 @@ func (m *Model) followSelectedLink() tea.Cmd {
 		m.status = "opening: " + link.target
 		return openURLCmd(link.target)
 	}
-	n := notes.FindNoteByWikilink(m.notes, link.target)
+	target, _ := notes.SplitWikilinkTargetLabel(link.target)
+	n := notes.FindNoteByWikilink(m.notes, target)
 	if n == nil {
-		m.status = "no note found for [[" + link.target + "]]"
+		m.status = "no note found for [[" + target + "]]"
 		return nil
 	}
 	m.previewLinkNavMode = false
@@ -1001,7 +1017,7 @@ func (m *Model) followSelectedLink() tea.Cmd {
 	m.focus = focusTree
 	m.switchToNotesMode()
 	m.selectTreeNote(n.RelPath)
-	m.status = "opened [[" + link.target + "]]"
+	m.status = "opened [[" + target + "]]"
 	return editor.Open(n.Path)
 }
 
@@ -1123,6 +1139,9 @@ func (m *Model) togglePreviewLineNumbers() {
 		m.status = "preview line numbers enabled"
 	} else {
 		m.status = "preview line numbers disabled"
+	}
+	if m.editorModel != nil {
+		m.editorModel.SetLineNumbers(m.previewLineNumbersEnabled)
 	}
 	m.refreshPreview()
 }

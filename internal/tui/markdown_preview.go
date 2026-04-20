@@ -69,6 +69,248 @@ type renderedMarkdownLink struct {
 	label      string
 }
 
+type renderedBlockKind int
+
+const (
+	renderedKindUnknown renderedBlockKind = iota
+	renderedKindHeading
+	renderedKindParagraph
+	renderedKindCode
+	renderedKindList
+	renderedKindBlockquote
+	renderedKindThematic
+)
+
+// RenderedBlock describes a top-level markdown block: its kind, its line range
+// in the raw source, and its line range in the rendered output.
+type RenderedBlock struct {
+	Kind        renderedBlockKind
+	SourceLine  int // 0-indexed start line in the raw (body-only) source
+	SourceCount int // number of source lines this block spans
+	VisualStart int // 0-indexed start line in RenderedDoc.Lines
+	VisualEnd   int // exclusive end line in RenderedDoc.Lines
+	Level       int // heading level 1-6; 0 for non-headings
+	IsTask      bool
+	TaskChecked bool
+}
+
+// RenderedDoc is the output of renderMarkdownDoc: styled terminal lines plus
+// structural metadata that maps back to source positions.
+type RenderedDoc struct {
+	Lines            []string
+	Blocks           []RenderedBlock
+	VisualLineSource []int // maps each visual line index to a source line (-1 for blank separators)
+}
+
+// renderMarkdownDoc renders raw markdown (body only, no frontmatter) and also
+// returns block-level metadata so an editor can map rendered lines back to
+// source line ranges.
+func renderMarkdownDoc(raw string, opts markdownRenderOptions) RenderedDoc {
+	if strings.TrimSpace(raw) == "" {
+		return RenderedDoc{}
+	}
+
+	rewritten := notes.RewriteWikilinks(raw)
+	source := []byte(rewritten)
+
+	md := goldmark.New(goldmark.WithExtensions(extension.GFM))
+	doc := md.Parser().Parse(gmtext.NewReader(source))
+
+	r := markdownPreviewRenderer{
+		source: source,
+		width:  max(20, opts.Width),
+		opts:   opts,
+	}
+
+	type blockItem struct {
+		rendered      string
+		kind          renderedBlockKind
+		level         int
+		srcLine       int
+		srcCount      int
+		tightWithPrev bool // no blank separator before this item (same list)
+	}
+
+	var items []blockItem
+	for child := doc.FirstChild(); child != nil; child = child.NextSibling() {
+		if listNode, ok := child.(*ast.List); ok {
+			// Expand each list item into its own block so j/k navigates per item.
+			ordered := listNode.IsOrdered()
+			idx := 0
+			first := true
+			for item := listNode.FirstChild(); item != nil; item = item.NextSibling() {
+				listItem, ok := item.(*ast.ListItem)
+				if !ok {
+					continue
+				}
+				rendered := strings.TrimRight(r.renderListItem(listItem, idx, ordered, 0), "\n")
+				if strings.TrimSpace(rendered) == "" {
+					idx++
+					continue
+				}
+				srcLine, srcCount := renderedBlockSourceRange(listItem, source)
+				items = append(items, blockItem{
+					rendered:      rendered,
+					kind:          renderedKindList,
+					srcLine:       srcLine,
+					srcCount:      srcCount,
+					tightWithPrev: !first,
+				})
+				first = false
+				idx++
+			}
+			continue
+		}
+		rendered := strings.TrimRight(r.renderBlock(child, 0), "\n")
+		if strings.TrimSpace(rendered) == "" {
+			continue
+		}
+		kind, level := classifyRenderedBlock(child)
+		srcLine, srcCount := renderedBlockSourceRange(child, source)
+		items = append(items, blockItem{
+			rendered: rendered,
+			kind:     kind,
+			level:    level,
+			srcLine:  srcLine,
+			srcCount: srcCount,
+		})
+	}
+
+	if len(items) == 0 {
+		return RenderedDoc{}
+	}
+
+	blankLine := lipgloss.NewStyle().Background(bgSoftColor).Width(opts.Width).Render("")
+	var parts []string
+	blocks := make([]RenderedBlock, len(items))
+	lineOffset := 0
+
+	for i, it := range items {
+		if i > 0 && !it.tightWithPrev {
+			parts = append(parts, blankLine)
+			lineOffset++ // blank separator before this block
+		}
+		lineCount := strings.Count(it.rendered, "\n") + 1
+		blocks[i] = RenderedBlock{
+			Kind:        it.kind,
+			Level:       it.level,
+			SourceLine:  it.srcLine,
+			SourceCount: it.srcCount,
+			VisualStart: lineOffset,
+			VisualEnd:   lineOffset + lineCount,
+		}
+		parts = append(parts, it.rendered)
+		lineOffset += lineCount
+	}
+
+	text := strings.Join(parts, "\n")
+	lines := strings.Split(text, "\n")
+
+	// Build VisualLineSource: maps each visual line to its source line (-1 for blank separators).
+	vls := make([]int, len(lines))
+	for i := range vls {
+		vls[i] = -1
+	}
+	for _, b := range blocks {
+		for vi := b.VisualStart; vi < b.VisualEnd && vi < len(vls); vi++ {
+			vls[vi] = b.SourceLine
+		}
+	}
+
+	return RenderedDoc{
+		Lines:            lines,
+		Blocks:           blocks,
+		VisualLineSource: vls,
+	}
+}
+
+func classifyRenderedBlock(node ast.Node) (renderedBlockKind, int) {
+	switch n := node.(type) {
+	case *ast.Heading:
+		return renderedKindHeading, n.Level
+	case *ast.Paragraph, *ast.TextBlock:
+		return renderedKindParagraph, 0
+	case *ast.FencedCodeBlock, *ast.CodeBlock:
+		return renderedKindCode, 0
+	case *ast.List:
+		return renderedKindList, 0
+	case *ast.Blockquote:
+		return renderedKindBlockquote, 0
+	case *ast.ThematicBreak:
+		return renderedKindThematic, 0
+	default:
+		_ = n
+		return renderedKindUnknown, 0
+	}
+}
+
+// renderedBlockSourceRange computes the 0-indexed start line and line count for
+// a goldmark AST node relative to source. The byte offsets in source come from
+// the wikilink-rewritten content, but because rewriting never adds or removes
+// newlines the line numbers are identical in the original source.
+func renderedBlockSourceRange(node ast.Node, source []byte) (startLine, lineCount int) {
+	lines := node.Lines()
+	if lines != nil && lines.Len() > 0 {
+		firstSeg := lines.At(0)
+		lastSeg := lines.At(lines.Len() - 1)
+
+		start := bytes.Count(source[:firstSeg.Start], []byte("\n"))
+
+		stopByte := lastSeg.Stop
+		if stopByte > len(source) {
+			stopByte = len(source)
+		}
+		var end int
+		if stopByte > 0 {
+			// Stop is exclusive; Stop-1 is the last byte of the segment.
+			end = bytes.Count(source[:stopByte], []byte("\n"))
+			if stopByte > 0 && source[stopByte-1] == '\n' {
+				// The trailing newline is a line separator, not a new line of content.
+				end--
+			}
+		} else {
+			end = start
+		}
+
+		if _, ok := node.(*ast.FencedCodeBlock); ok {
+			// Include the opening and closing ``` fence lines.
+			if start > 0 {
+				start--
+			}
+			end++
+			maxLine := bytes.Count(source, []byte("\n"))
+			if end > maxLine {
+				end = maxLine
+			}
+		}
+
+		if end < start {
+			end = start
+		}
+		return start, end - start + 1
+	}
+
+	// Container node (List, Blockquote, …): derive range from children.
+	first := -1
+	last := 0
+	for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+		sl, sc := renderedBlockSourceRange(child, source)
+		if sc <= 0 {
+			continue
+		}
+		if first < 0 || sl < first {
+			first = sl
+		}
+		if sl+sc > last {
+			last = sl + sc
+		}
+	}
+	if first < 0 {
+		return 0, 0
+	}
+	return first, last - first
+}
+
 func extractRenderedMarkdownLinks(raw string) []renderedMarkdownLink {
 	if strings.TrimSpace(raw) == "" {
 		return nil

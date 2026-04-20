@@ -22,9 +22,14 @@ type Config struct {
 	Icons            IconsConfig                `toml:"icons"`
 	Modal            ModalConfig                `toml:"modal"`
 	Preview          PreviewConfig              `toml:"preview"`
+	Editor           EditorConfig               `toml:"editor"`
 	Keys             KeysConfig                 `toml:"keys"`
 	Sync             SyncConfig                 `toml:"sync"`
 	DailyNotes       DailyNotesConfig           `toml:"daily_notes"`
+}
+
+type EditorConfig struct {
+	Fullscreen bool `toml:"fullscreen"`
 }
 
 type DailyNotesConfig struct {
@@ -133,10 +138,12 @@ type PreviewConfig struct {
 	Privacy         bool     `toml:"privacy"`
 	LineNumbers     bool     `toml:"line_numbers"`
 	MouseScrollStep int      `toml:"mouse_scroll_step"`
+	EditInPreview   bool     `toml:"edit_in_preview"`
 }
 
 type KeysConfig struct {
 	Open                     []string `toml:"open"`
+	EditInApp                []string `toml:"edit_in_app"`
 	Refresh                  []string `toml:"refresh"`
 	Quit                     []string `toml:"quit"`
 	Focus                    []string `toml:"focus"`
@@ -252,8 +259,10 @@ func Default() Config {
 			Privacy:         false,
 			LineNumbers:     true,
 			MouseScrollStep: 3,
+			EditInPreview:   false,
 		},
 		Keys: KeysConfig{
+			EditInApp:             []string{"e"},
 			ToggleSync:            []string{"S"},
 			ShowSyncDebug:         []string{"ctrl+e"},
 			DeleteRemoteKeepLocal: []string{"U"},

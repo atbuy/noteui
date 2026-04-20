@@ -103,6 +103,37 @@ The main interface is split into two panes:
 
 The tree shows categories and notes. The preview shows the selected note.
 
+## In-app editor
+
+Use `e` on the selected note to open the in-app editor. This keeps the TUI active instead of suspending into `$NOTEUI_EDITOR` or `$EDITOR`.
+
+If you prefer to keep the tree visible while editing, set:
+
+```toml
+[preview]
+edit_in_preview = true
+```
+
+With that option enabled, `e` opens the same in-app editor inside the preview pane instead of taking over the full screen.
+
+The external editor path is unchanged:
+
+- `enter` or `o` still opens the selected note in your configured external editor
+- `e` opens the in-app editor
+
+The in-app editor supports a focused vim-style subset:
+
+- motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`
+- insert and open: `i`, `a`, `I`, `A`, `o`, `O`
+- edit operators: `d`, `c`, `y`, `x`, `dd`, `cc`, `yy`, `p`, `P`
+- visual and search: `v`, `V`, `/`, `?`, `n`, `N`
+- command line: `:w`, `:w!`, `:wq`, `:q`, `:q!`, `:e!`
+
+Link insertion is built in:
+
+- `gl` opens the note picker and inserts a wikilink
+- `gu` prompts for a URL and inserts or wraps a markdown link
+
 Use `tab` to switch focus between panes.
 
 ## Navigation
@@ -274,9 +305,9 @@ The Todos view shows only open tasks and sorts them by due date first, then prio
 
 ## Wikilinks
 
-Inside any note you can write `[[note title]]` to link to another note by its title or filename.
+Inside any note you can write `[[note title]]` to link to another note by its title or filename. Aliased wikilinks are also supported: `[[target|label]]`.
 
-When the preview pane renders a note with wikilinks, each `[[target]]` appears as a styled link. To follow a wikilink:
+When the preview pane renders a note with wikilinks, each `[[target]]` or `[[target|label]]` appears as a styled link. To follow a wikilink:
 
 1. Focus the preview pane with `tab`.
 2. Scroll until a `[[target]]` line is visible.
@@ -323,6 +354,8 @@ See the [Sync guide](sync.md) for setup and recovery details.
 ## Encrypted notes
 
 noteui supports encrypted note bodies for workflows that want encrypted content on disk with preview/edit support inside the app.
+
+Encrypted notes can also be edited with `e`. noteui decrypts the body in memory for the in-app editor, and `:w` or `:wq` re-encrypts the body without writing plaintext to disk.
 
 See [Encrypted notes](../advanced/encryption.md) for details.
 

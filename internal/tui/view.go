@@ -92,6 +92,17 @@ func (m Model) renderBaseView() string {
 }
 
 func (m Model) View() string {
+	if m.editorActive && m.editorModel != nil && !m.inAppEditorUsesPreview() {
+		background := m.editorModel.View()
+		if m.showCommandPalette {
+			return placeOverlay(background, m.renderCommandPaletteModal(), m.width, m.height)
+		}
+		if m.showEditorURLPrompt {
+			return placeOverlay(background, m.renderEditorURLPromptModal(), m.width, m.height)
+		}
+		return background
+	}
+
 	if m.showWorkspacePicker {
 		background := m.renderBaseView()
 		if m.showDashboard {
@@ -106,6 +117,10 @@ func (m Model) View() string {
 
 	if m.showCommandPalette {
 		return placeOverlay(m.renderBaseView(), m.renderCommandPaletteModal(), m.width, m.height)
+	}
+
+	if m.showEditorURLPrompt {
+		return placeOverlay(m.renderBaseView(), m.renderEditorURLPromptModal(), m.width, m.height)
 	}
 
 	// For all other modals, compute the base view once and use it as the background canvas.
@@ -1167,6 +1182,8 @@ func (m Model) renderModeSegment() string {
 		return "HISTORY"
 	case m.showTemplatePicker:
 		return "TEMPLATE"
+	case m.editorActive && m.editorModel != nil && m.inAppEditorUsesPreview():
+		return "EDITOR"
 	case m.searchMode:
 		switch m.listMode {
 		case listModeTemporary:
@@ -1293,6 +1310,9 @@ func (m Model) renderFilterSegment() string {
 }
 
 func (m Model) renderPreviewSegment() string {
+	if m.editorActive && m.editorModel != nil && m.inAppEditorUsesPreview() {
+		return ""
+	}
 	if m.preview.TotalLineCount() == 0 {
 		return ""
 	}
@@ -1908,6 +1928,9 @@ func (m Model) renderHelpLine(k, desc string, width int) string {
 }
 
 func (m Model) previewView() string {
+	if m.editorActive && m.editorModel != nil && m.inAppEditorUsesPreview() {
+		return m.editorModel.View()
+	}
 	return fillWidthBackground(m.preview.View(), m.preview.Width, bgSoftColor)
 }
 
@@ -1994,6 +2017,17 @@ func (m Model) leftPanelTitle() string {
 }
 
 func (m Model) rightPanelTitle() string {
+	if m.editorActive && m.editorModel != nil && m.inAppEditorUsesPreview() {
+		title := "Editor"
+		if m.editorModel.dirty {
+			title += " [+]"
+		}
+		if m.focus == focusPreview {
+			title += " • focused"
+		}
+		return title
+	}
+
 	title := "Preview"
 	if m.previewSupportsSearchMatches() {
 		title += fmt.Sprintf(" (%d matches)", len(m.previewMatches))
@@ -2026,6 +2060,12 @@ func (m Model) renderLeftPaneHint(width int) string {
 }
 
 func (m Model) renderRightPaneHint(width int) string {
+	if m.editorActive && m.editorModel != nil && m.inAppEditorUsesPreview() {
+		hint := "editor active • esc normal • :w save • :q quit • gl note link • gu URL"
+		style := mutedStyle.Background(bgSoftColor).Foreground(accentSoftColor)
+		return fillWidthBackground(style.Render(truncateToWidth(hint, width)), width, bgSoftColor)
+	}
+
 	hint := "tab to focus preview"
 	if m.focus == focusPreview {
 		parts := []string{"focused", "ctrl+d/u scroll", "B privacy", "L lines"}

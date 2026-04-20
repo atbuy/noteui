@@ -109,6 +109,7 @@ code_style = "monokai"
 privacy = false
 line_numbers = true
 mouse_scroll_step = 3
+edit_in_preview = false
 
 [sync]
 default_profile = "homebox"
@@ -331,6 +332,36 @@ mouse_scroll_step = 3
 
 Controls how many preview rows each mouse-wheel step scrolls. The value must be at least `1`.
 
+### `preview.edit_in_preview`
+
+Type: boolean
+
+Default:
+
+```toml
+[preview]
+edit_in_preview = false
+```
+
+When enabled, the in-app editor opened with `e` stays inside the preview pane. When disabled, the in-app editor takes over the full screen.
+
+---
+
+## `[editor]`
+
+### `editor.fullscreen`
+
+Type: boolean
+
+Default:
+
+```toml
+[editor]
+fullscreen = false
+```
+
+When `true`, the in-app editor always opens in full-screen mode regardless of `preview.edit_in_preview`. The `ctrl+f` keybind toggles full-screen on and off for the current session, overriding this default.
+
 ### `theme.name`
 
 Type: string
@@ -520,6 +551,7 @@ syntax_highlight = true
 code_style = "monokai"
 privacy = false
 line_numbers = true
+edit_in_preview = false
 ```
 
 ### `preview.render_markdown`
@@ -586,6 +618,12 @@ Controls privacy blur mode in the preview pane.
 Type: boolean
 
 Controls line numbers in the preview pane.
+
+### `preview.edit_in_preview`
+
+Type: boolean
+
+Controls whether the in-app editor opened with `e` renders inside the preview pane instead of taking over the full screen.
 
 ## `sync`
 
@@ -680,6 +718,9 @@ trash_browser = ["X"]
 
 - `open`
   Default: `["enter", "o"]`
+- `edit_in_app`
+  Default: `["e"]`
+  Opens the selected note in the in-app editor. The external editor path on `open` is unchanged. Use `preview.edit_in_preview` to keep that editor inside the preview pane.
 - `refresh`
   Default: `["r"]`
 - `quit`

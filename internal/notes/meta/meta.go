@@ -19,7 +19,7 @@ const (
 	SyncClassShared = "shared"
 )
 
-var wikilinkRe = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+var wikilinkRe = regexp.MustCompile(`\[\[([^\]|]+)(?:\|([^\]]+))?\]\]`)
 
 // WikilinkURLPrefix is the synthetic URL prefix used to mark wikilink destinations.
 const WikilinkURLPrefix = "#wikilink:"
@@ -125,6 +125,24 @@ func StripFrontMatter(raw string) string {
 	return body
 }
 
+// SplitFrontMatter returns the raw frontmatter block (including "---" delimiters)
+// and the body. If no frontmatter is present the first return value is empty and
+// the second is the original content unchanged.
+func SplitFrontMatter(raw string) (string, string) {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	if !strings.HasPrefix(raw, "---\n") {
+		return "", raw
+	}
+	rest := strings.TrimPrefix(raw, "---\n")
+	end := strings.Index(rest, "\n---\n")
+	if end == -1 {
+		return "", raw
+	}
+	fm := "---\n" + rest[:end+1] + "---"
+	body := rest[end+5:]
+	return fm, body
+}
+
 func ParseTags(fm FrontMatter) []string {
 	raw, ok := fm[normalizeFrontMatterKey("tags")]
 	if !ok || strings.TrimSpace(raw) == "" {
@@ -211,14 +229,22 @@ func ToggleNoteSyncClass(path string) (string, error) {
 	return next, SetNoteSyncClass(path, next)
 }
 
-// RewriteWikilinks replaces [[target]] patterns with [target](#wikilink:encoded)
-// so the standard markdown parser treats them as links. The target is
+// RewriteWikilinks replaces [[target]] or [[target|label]] patterns with
+// markdown links so the standard parser treats them as links. The target is
 // percent-encoded so the URL is valid.
 func RewriteWikilinks(content string) string {
 	return wikilinkRe.ReplaceAllStringFunc(content, func(match string) string {
-		inner := match[2 : len(match)-2]
-		encoded := url.PathEscape(inner)
-		return "[" + inner + "](" + WikilinkURLPrefix + encoded + ")"
+		sub := wikilinkRe.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		target := strings.TrimSpace(sub[1])
+		label := target
+		if len(sub) > 2 && strings.TrimSpace(sub[2]) != "" {
+			label = strings.TrimSpace(sub[2])
+		}
+		encoded := url.PathEscape(target)
+		return "[" + label + "](" + WikilinkURLPrefix + encoded + ")"
 	})
 }
 
@@ -235,13 +261,36 @@ func ExtractWikilinks(content string) []string {
 	seen := make(map[string]bool, len(matches))
 	out := make([]string, 0, len(matches))
 	for _, m := range matches {
-		target := m[1]
+		target := strings.TrimSpace(m[1])
 		if !seen[target] {
 			seen[target] = true
 			out = append(out, target)
 		}
 	}
 	return out
+}
+
+func SplitWikilinkTargetLabel(raw string) (target, label string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	sub := wikilinkRe.FindStringSubmatch(raw)
+	if len(sub) >= 2 && strings.TrimSpace(sub[1]) != "" {
+		target = strings.TrimSpace(sub[1])
+		label = target
+		if len(sub) > 2 && strings.TrimSpace(sub[2]) != "" {
+			label = strings.TrimSpace(sub[2])
+		}
+		return target, label
+	}
+	parts := strings.SplitN(raw, "|", 2)
+	target = strings.TrimSpace(parts[0])
+	label = target
+	if len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+		label = strings.TrimSpace(parts[1])
+	}
+	return target, label
 }
 
 func normalizeFrontMatterKey(s string) string {
