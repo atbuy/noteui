@@ -76,10 +76,6 @@ func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.S
 			}
 			result.PinsChanged = true
 		}
-	} else {
-		if _, err := client.PinsPut(ctx, profile, PinsPutRequest{RemoteRoot: profile.RemoteRoot, Pins: localPins}); err != nil {
-			return result, err
-		}
 	}
 
 	noteByRelPath := make(map[string]notes.Note, len(allNotes))

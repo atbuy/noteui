@@ -1344,3 +1344,32 @@ func TestSyncRootPerWorkspaceRemoteRootIsolation(t *testing.T) {
 	require.Len(t, discoveredB, 1)
 	require.Equal(t, "beta.md", discoveredB[0].RelPath)
 }
+
+// pinsPutCountingClient wraps Client and counts PinsPut calls.
+type pinsPutCountingClient struct {
+	Client
+	calls int
+}
+
+func (c *pinsPutCountingClient) PinsPut(ctx context.Context, p config.SyncProfile, req PinsPutRequest) (PinsPutResponse, error) {
+	c.calls++
+	return c.Client.PinsPut(ctx, p, req)
+}
+
+// PinsPut must be called at most once per sync run. A double-call caused
+// stale-ETag 412 errors on Nextcloud when the second call received a cached
+// ETag from before the first call's write.
+func TestSyncRootCallsPinsPutAtMostOncePerRun(t *testing.T) {
+	root := t.TempDir()
+	remote := t.TempDir()
+	notePath := filepath.Join(root, "work", "plan.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte("---\nsync: synced\n---\n# Plan\n"), 0o644))
+
+	cfg := testSyncConfig(remote)
+	cc := &pinsPutCountingClient{Client: localClient{}}
+
+	_, err := SyncRoot(context.Background(), root, "", cfg, []string{"work/plan.md"}, []string{"work"}, cc)
+	require.NoError(t, err)
+	require.LessOrEqual(t, cc.calls, 1, "PinsPut called more than once in a single sync run")
+}
