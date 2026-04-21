@@ -40,6 +40,8 @@ If the config file is missing, noteui uses defaults.
 
 If the config file contains unknown keys or invalid values, noteui warns at startup and keeps the decoded portion of the file where possible instead of rewriting it.
 
+Run `noteui +check-config` to validate the file without opening the TUI. It prints the resolved path, any errors, warnings, and keybinding conflicts, and exits with code 1 if something is wrong.
+
 Check:
 
 - the file path from `NOTEUI_CONFIG`, if set

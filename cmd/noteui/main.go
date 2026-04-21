@@ -33,6 +33,11 @@ func main() {
 		case "+themes":
 			printThemes(os.Stdout)
 			return
+		case "+check-config":
+			if !printCheckConfig(os.Stdout) {
+				os.Exit(1)
+			}
+			return
 		case "+set-theme":
 			if i+1 >= len(args) {
 				printError(os.Stderr, "usage: noteui +set-theme <name>  (run 'noteui +themes' to see available themes)")

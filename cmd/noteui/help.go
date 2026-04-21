@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"atbuy/noteui/internal/buildinfo"
+	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/tui"
 )
 
@@ -36,6 +37,7 @@ var helpFlags = []flagDef{
 	{"-w, --capture", "Append text to inbox.md without opening the TUI"},
 	{"   +themes", "List all available themes with color previews"},
 	{"   +set-theme <name>", "Switch the active theme without opening the editor"},
+	{"   +check-config", "Validate config file and report errors"},
 }
 
 var helpEnvs = []envDef{
@@ -151,6 +153,64 @@ func printThemes(w io.Writer) {
 	)
 
 	_, _ = io.WriteString(w, sb.String())
+}
+
+// printCheckConfig validates the config file and prints a diagnostic report.
+// Returns true if no errors were found.
+func printCheckConfig(w io.Writer) bool {
+	bold := lipgloss.NewStyle().Bold(true)
+	muted := lipgloss.NewStyle().Foreground(lipgloss.Color("#A8A8A8"))
+	subtle := lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
+	okStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#6AAF6A"))
+	warnStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#D7AF5F"))
+	errStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#D75F5F"))
+
+	var sb strings.Builder
+	p := func(format string, args ...any) { _, _ = fmt.Fprintf(&sb, format, args...) }
+
+	p("%s\n\n", bold.Render("Config check"))
+
+	cfgPath, pathErr := config.ResolvePath()
+	if pathErr != nil {
+		p("  %s  %s\n", errStyle.Render("error:"), muted.Render(pathErr.Error()))
+		_, _ = io.WriteString(w, sb.String())
+		return false
+	}
+	p("  %s  %s\n\n", subtle.Render("path:"), muted.Render(cfgPath))
+
+	hasErrors := false
+
+	cfg, loadErr := config.Load()
+	if loadErr != nil {
+		p("  %s  %s\n", errStyle.Render("error:"), muted.Render(loadErr.Error()))
+		hasErrors = true
+	} else {
+		p("  %s  config loaded and validated\n", okStyle.Render("ok:"))
+	}
+
+	for _, w := range config.Warnings(cfg) {
+		p("  %s  %s\n", warnStyle.Render("warn:"), muted.Render(w))
+	}
+
+	tui.ApplyConfigKeys(cfg.Keys)
+	if collisions := tui.ValidateKeyCollisions(); len(collisions) > 0 {
+		for _, c := range collisions {
+			p("  %s  %s\n", errStyle.Render("error:"), muted.Render("keybinding conflict: "+c))
+			hasErrors = true
+		}
+	} else if !hasErrors {
+		p("  %s  no keybinding conflicts\n", okStyle.Render("ok:"))
+	}
+
+	p("\n")
+	if hasErrors {
+		p("%s\n", errStyle.Render("Config has errors."))
+	} else {
+		p("%s\n", okStyle.Render("Config is valid."))
+	}
+
+	_, _ = io.WriteString(w, sb.String())
+	return !hasErrors
 }
 
 func printThemeChanged(w io.Writer, oldName, newName, configPath string, newPalette tui.BuiltinThemeEntry) {

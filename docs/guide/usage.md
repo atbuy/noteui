@@ -64,6 +64,24 @@ Each entry is prefixed with a timestamp:
 This is designed for shell aliases and scripts where opening the full TUI
 would be disruptive.
 
+## Validating the config
+
+Run `noteui +check-config` to validate the config file and report any problems without opening the TUI:
+
+```
+noteui +check-config
+```
+
+The command:
+
+- prints the resolved config file path
+- loads and validates the file, reporting any parse or validation errors
+- lists any warnings (deprecated fields, unknown sync profile references, etc.)
+- checks for keybinding conflicts in the `[keys]` section
+- exits with code 0 if valid, code 1 if any errors were found
+
+This is useful for CI, shell scripts, or any time you want to confirm that a config edit is syntactically and semantically correct before restarting noteui. Warnings do not cause a non-zero exit; only errors do.
+
 ## Workspace profiles
 
 If you configure multiple workspaces in `config.toml`, noteui can switch between them from the command palette or directly with `W`.
