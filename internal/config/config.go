@@ -418,6 +418,34 @@ func Validate(cfg Config) error {
 	return nil
 }
 
+// Warnings returns non-fatal configuration notices that do not prevent the
+// application from starting but indicate likely misconfiguration. Callers
+// should print these to stderr on startup.
+func Warnings(cfg Config) []string {
+	var out []string
+	for name, profile := range cfg.Sync.Profiles {
+		out = append(out, syncProfileWarnings(name, profile)...)
+	}
+	return out
+}
+
+func syncProfileWarnings(name string, p SyncProfile) []string {
+	if ResolvedKind(p) != SyncKindSSH {
+		return nil
+	}
+	var out []string
+	if p.ForceIPv4 {
+		out = append(out, fmt.Sprintf("sync profile %q: force_ipv4 has no effect on SSH profiles", name))
+	}
+	if p.InsecureSkipTLSVerify {
+		out = append(out, fmt.Sprintf("sync profile %q: insecure_skip_tls_verify has no effect on SSH profiles", name))
+	}
+	if strings.TrimSpace(p.CACert) != "" {
+		out = append(out, fmt.Sprintf("sync profile %q: ca_cert has no effect on SSH profiles", name))
+	}
+	return out
+}
+
 func SortedWorkspaceNames(cfg Config) []string {
 	if len(cfg.Workspaces) == 0 {
 		return nil

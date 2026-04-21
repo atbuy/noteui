@@ -117,6 +117,9 @@ func main() {
 		startupError = cfgErr.Error()
 		fmt.Fprintf(os.Stderr, "config warning: %v\n", cfgErr)
 	}
+	for _, w := range config.Warnings(cfg) {
+		fmt.Fprintf(os.Stderr, "config warning: %s\n", w)
+	}
 
 	startup := config.ResolveStartupWorkspace(cfg, os.Getenv("NOTES_ROOT"), fallbackRoot)
 

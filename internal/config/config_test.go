@@ -795,6 +795,45 @@ func TestValidateAcceptsValidCACert(t *testing.T) {
 	require.NoError(t, Validate(cfg))
 }
 
+func TestWarningsSSHProfileWithWebDAVOnlyFields(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"home": {
+			Kind:                  SyncKindSSH,
+			SSHHost:               "server",
+			RemoteRoot:            "/srv/noteui",
+			RemoteBin:             "noteui-sync",
+			ForceIPv4:             true,
+			InsecureSkipTLSVerify: true,
+			CACert:                "/some/ca.pem",
+		},
+	}
+	warns := Warnings(cfg)
+	require.Len(t, warns, 3)
+	joined := strings.Join(warns, "\n")
+	require.Contains(t, joined, "force_ipv4")
+	require.Contains(t, joined, "insecure_skip_tls_verify")
+	require.Contains(t, joined, "ca_cert")
+}
+
+func TestWarningsWebDAVProfileNoSpuriousWarnings(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:                  SyncKindWebDAV,
+			WebDAVURL:             "https://cloud.example.com/dav",
+			Auth:                  SyncAuthNone,
+			ForceIPv4:             true,
+			InsecureSkipTLSVerify: true,
+		},
+	}
+	require.Empty(t, Warnings(cfg))
+}
+
+func TestWarningsCleanConfigProducesNoWarnings(t *testing.T) {
+	require.Empty(t, Warnings(Default()))
+}
+
 func TestValidThemeNamesDerivedFromCatalog(t *testing.T) {
 	valid := ValidThemeNames()
 	require.NotEmpty(t, valid)
