@@ -1326,25 +1326,33 @@ func (m Model) renderFilterSegment() string {
 
 func (m Model) renderPreviewSegment() string {
 	if m.editorActive && m.editorModel != nil && m.inAppEditorUsesPreview() {
-		return ""
+		content := m.editorModel.Content()
+		wc := notes.WordCount(content)
+		cc := notes.CharCount(content)
+		if wc == 0 && cc == 0 {
+			return ""
+		}
+		return fmt.Sprintf("%d words · %d chars", wc, cc)
 	}
 	if m.preview.TotalLineCount() == 0 {
 		return ""
 	}
 
-	// Word count and reading time.
+	// Word count, char count, and reading time.
 	wordCount := 0
+	charCount := 0
 	if m.selected != nil {
 		raw, err := notes.ReadAll(m.selected.Path)
 		if err == nil {
 			wordCount = notes.WordCount(raw)
+			charCount = notes.CharCount(raw)
 		}
 	}
 
-	wordPart := ""
+	countPart := ""
 	if wordCount > 0 {
 		mins := notes.ReadingTimeMinutes(wordCount)
-		wordPart = fmt.Sprintf("%d words · ~%d min read", wordCount, mins)
+		countPart = fmt.Sprintf("%d words · %d chars · ~%d min read", wordCount, charCount, mins)
 	}
 
 	// Scroll position.
@@ -1373,11 +1381,11 @@ func (m Model) renderPreviewSegment() string {
 		}
 	}
 
-	if wordPart != "" && scrollPart != "" {
-		return fmt.Sprintf("preview: %s · %s", wordPart, scrollPart)
+	if countPart != "" && scrollPart != "" {
+		return fmt.Sprintf("preview: %s · %s", countPart, scrollPart)
 	}
-	if wordPart != "" {
-		return "preview: " + wordPart
+	if countPart != "" {
+		return "preview: " + countPart
 	}
 	if scrollPart != "" {
 		return "preview: " + scrollPart

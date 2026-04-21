@@ -333,6 +333,9 @@ func (e EditorModel) renderCommandLine() string {
 		}
 		text = prefix + string(e.searchBuf)
 	}
+	if text != "" {
+		return editorFillLine(text, e.width, bgSoftColor, accentColor)
+	}
 	return editorFillLine(text, e.width, bgSoftColor, textColor)
 }
 
@@ -545,11 +548,13 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		e.openBelow()
 		if e.renderMode {
 			e.recomputeRenderedDoc()
+			e.syncRenderViewTop()
 		}
 	case "O":
 		e.openAbove()
 		if e.renderMode {
 			e.recomputeRenderedDoc()
+			e.syncRenderViewTop()
 		}
 	case "v":
 		e.renderMode = false
@@ -1110,7 +1115,7 @@ func (e *EditorModel) insertText(text string) {
 
 func (e *EditorModel) insertNewline() {
 	start := e.insertOffset()
-	e.replaceOffsets(start, start, "\n", start+1, true)
+	e.replaceOffsets(start, start, "\n\n", start+2, true)
 }
 
 func (e *EditorModel) backspace() {
@@ -1132,8 +1137,9 @@ func (e *EditorModel) deleteChar() {
 func (e *EditorModel) openBelow() {
 	e.pushUndo()
 	insertAt := e.row + 1
-	e.lines = append(e.lines[:insertAt], append([][]rune{{}}, e.lines[insertAt:]...)...)
-	e.row = insertAt
+	blank := [][]rune{{}, {}}
+	e.lines = append(e.lines[:insertAt], append(blank, e.lines[insertAt:]...)...)
+	e.row = insertAt + 1
 	e.col = 0
 	e.preferCol = 0
 	e.mode = editorModeInsert
@@ -1144,7 +1150,8 @@ func (e *EditorModel) openBelow() {
 func (e *EditorModel) openAbove() {
 	e.pushUndo()
 	insertAt := e.row
-	e.lines = append(e.lines[:insertAt], append([][]rune{{}}, e.lines[insertAt:]...)...)
+	blank := [][]rune{{}, {}}
+	e.lines = append(e.lines[:insertAt], append(blank, e.lines[insertAt:]...)...)
 	e.row = insertAt
 	e.col = 0
 	e.preferCol = 0
@@ -1537,7 +1544,7 @@ func (e *EditorModel) setFromRunes(content []rune) {
 }
 
 func (e EditorModel) allRunes() []rune {
-	return []rune(e.Content())
+	return []rune(editorJoinLines(e.lines))
 }
 
 func (e EditorModel) lineEndOffset(row int) int {

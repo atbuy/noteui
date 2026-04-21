@@ -61,6 +61,17 @@ func TestSlugifyAndWordCount(t *testing.T) {
 	if got := ReadingTimeMinutes(226); got != 2 {
 		require.Failf(t, "assertion failed", "expected rounded reading time of 2, got %d", got)
 	}
+
+	// CharCount strips frontmatter and counts all non-newline runes including spaces.
+	if got := CharCount(raw); got != 12 { // "one two\nthree" = 12 chars (space included, newline excluded)
+		require.Failf(t, "assertion failed", "expected char count 13, got %d", got)
+	}
+	if got := CharCount("no frontmatter"); got != 14 {
+		require.Failf(t, "assertion failed", "expected char count 14, got %d", got)
+	}
+	if got := CharCount(""); got != 0 {
+		require.Failf(t, "assertion failed", "expected char count 0 for empty string, got %d", got)
+	}
 }
 
 func TestCleanRelativePathAndReplaceOrInsertRootTitle(t *testing.T) {
