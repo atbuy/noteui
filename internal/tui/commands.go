@@ -171,6 +171,13 @@ func addNoteTagsCmd(path string, tags []string) tea.Cmd {
 	}
 }
 
+func removeNoteTagsCmd(path string, tags []string) tea.Cmd {
+	return func() tea.Msg {
+		err := notes.RemoveTagsFromNote(path, tags)
+		return noteUntaggedMsg{path: path, tags: tags, err: err}
+	}
+}
+
 func createTodoNoteCmd(root, relDir string) tea.Cmd {
 	return func() tea.Msg {
 		path, err := notes.CreateTodoNote(root, relDir)

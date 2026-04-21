@@ -30,6 +30,7 @@ type Map struct {
 	Move                     key.Binding
 	Rename                   key.Binding
 	AddTag                   key.Binding
+	RemoveTag                key.Binding
 	ToggleSelect             key.Binding
 	ClearMarks               key.Binding
 	Pin                      key.Binding
@@ -119,6 +120,7 @@ func DefaultMap() Map {
 		Move:                     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "Move")),
 		Rename:                   key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "Rename note")),
 		AddTag:                   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "Add tag")),
+		RemoveTag:                key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "Remove tag")),
 		ToggleSelect:             key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "Mark item")),
 		ClearMarks:               key.NewBinding(key.WithKeys("V"), key.WithHelp("V", "Clear marks")),
 		Pin:                      key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "Pin")),
@@ -204,6 +206,7 @@ func ApplyConfig(m *Map, cfg config.KeysConfig) {
 	apply(&m.Move, cfg.Move)
 	apply(&m.Rename, cfg.Rename)
 	apply(&m.AddTag, cfg.AddTag)
+	apply(&m.RemoveTag, cfg.RemoveTag)
 	apply(&m.ToggleSelect, cfg.ToggleSelect)
 	apply(&m.ClearMarks, cfg.ClearMarks)
 	apply(&m.Pin, cfg.Pin)
@@ -270,7 +273,7 @@ func ValidateCollisions(m Map) []string {
 		name    string
 		binding *key.Binding
 	}
-	primary := []named{{"open", &m.Open}, {"edit_in_app", &m.EditInApp}, {"refresh", &m.Refresh}, {"quit", &m.Quit}, {"focus", &m.Focus}, {"new_note", &m.NewNote}, {"new_temporary_note", &m.NewTemporaryNote}, {"new_todo_list", &m.NewTodoList}, {"search", &m.Search}, {"show_help", &m.ShowHelp}, {"show_pins", &m.ShowPins}, {"show_todos", &m.ShowTodos}, {"create_category", &m.CreateCategory}, {"toggle_category", &m.ToggleCategory}, {"delete", &m.Delete}, {"move", &m.Move}, {"rename", &m.Rename}, {"add_tag", &m.AddTag}, {"toggle_select", &m.ToggleSelect}, {"clear_marks", &m.ClearMarks}, {"pin", &m.Pin}, {"promote_temporary", &m.PromoteTemporary}, {"archive_temporary", &m.ArchiveTemporary}, {"move_to_temporary", &m.MoveToTemporary}, {"toggle_sync", &m.ToggleSync}, {"make_shared", &m.MakeShared}, {"toggle_temporary", &m.ToggleTemporary}, {"command_palette", &m.CommandPalette}, {"select_workspace", &m.SelectWorkspace}, {"select_sync_profile", &m.SelectSyncProfile}, {"open_conflict_copy", &m.OpenConflictCopy}, {"show_sync_debug", &m.ShowSyncDebug}, {"show_sync_timeline", &m.ShowSyncTimeline}, {"delete_remote_keep_local", &m.DeleteRemoteKeepLocal}, {"sync_import_current", &m.SyncImportCurrent}, {"sync_import", &m.SyncImport}, {"undo_delete", &m.UndoDelete}, {"toggle_preview_privacy", &m.TogglePreviewPrivacy}, {"toggle_preview_line_numbers", &m.TogglePreviewLineNumbers}, {"sort_key", &m.SortKey}, {"scroll_half_page_up", &m.ScrollHalfPageUp}, {"scroll_half_page_down", &m.ScrollHalfPageDown}, {"move_up", &m.MoveUp}, {"move_down", &m.MoveDown}, {"collapse_category", &m.CollapseCategory}, {"expand_category", &m.ExpandCategory}, {"jump_bottom", &m.JumpBottom}, {"pending_g", &m.PendingG}, {"bracket_forward", &m.BracketForward}, {"bracket_backward", &m.BracketBackward}, {"pending_z", &m.PendingZ}, {"scroll_page_down", &m.ScrollPageDown}, {"scroll_page_up", &m.ScrollPageUp}, {"toggle_encryption", &m.ToggleEncryption}, {"note_history", &m.NoteHistory}, {"trash_browser", &m.TrashBrowser}, {"new_template", &m.NewTemplate}, {"edit_templates", &m.EditTemplates}, {"open_daily_note", &m.OpenDailyNote}, {"show_theme_picker", &m.ShowThemePicker}}
+	primary := []named{{"open", &m.Open}, {"edit_in_app", &m.EditInApp}, {"refresh", &m.Refresh}, {"quit", &m.Quit}, {"focus", &m.Focus}, {"new_note", &m.NewNote}, {"new_temporary_note", &m.NewTemporaryNote}, {"new_todo_list", &m.NewTodoList}, {"search", &m.Search}, {"show_help", &m.ShowHelp}, {"show_pins", &m.ShowPins}, {"show_todos", &m.ShowTodos}, {"create_category", &m.CreateCategory}, {"toggle_category", &m.ToggleCategory}, {"delete", &m.Delete}, {"move", &m.Move}, {"rename", &m.Rename}, {"add_tag", &m.AddTag}, {"remove_tag", &m.RemoveTag}, {"toggle_select", &m.ToggleSelect}, {"clear_marks", &m.ClearMarks}, {"pin", &m.Pin}, {"promote_temporary", &m.PromoteTemporary}, {"archive_temporary", &m.ArchiveTemporary}, {"move_to_temporary", &m.MoveToTemporary}, {"toggle_sync", &m.ToggleSync}, {"make_shared", &m.MakeShared}, {"toggle_temporary", &m.ToggleTemporary}, {"command_palette", &m.CommandPalette}, {"select_workspace", &m.SelectWorkspace}, {"select_sync_profile", &m.SelectSyncProfile}, {"open_conflict_copy", &m.OpenConflictCopy}, {"show_sync_debug", &m.ShowSyncDebug}, {"show_sync_timeline", &m.ShowSyncTimeline}, {"delete_remote_keep_local", &m.DeleteRemoteKeepLocal}, {"sync_import_current", &m.SyncImportCurrent}, {"sync_import", &m.SyncImport}, {"undo_delete", &m.UndoDelete}, {"toggle_preview_privacy", &m.TogglePreviewPrivacy}, {"toggle_preview_line_numbers", &m.TogglePreviewLineNumbers}, {"sort_key", &m.SortKey}, {"scroll_half_page_up", &m.ScrollHalfPageUp}, {"scroll_half_page_down", &m.ScrollHalfPageDown}, {"move_up", &m.MoveUp}, {"move_down", &m.MoveDown}, {"collapse_category", &m.CollapseCategory}, {"expand_category", &m.ExpandCategory}, {"jump_bottom", &m.JumpBottom}, {"pending_g", &m.PendingG}, {"bracket_forward", &m.BracketForward}, {"bracket_backward", &m.BracketBackward}, {"pending_z", &m.PendingZ}, {"scroll_page_down", &m.ScrollPageDown}, {"scroll_page_up", &m.ScrollPageUp}, {"toggle_encryption", &m.ToggleEncryption}, {"note_history", &m.NoteHistory}, {"trash_browser", &m.TrashBrowser}, {"new_template", &m.NewTemplate}, {"edit_templates", &m.EditTemplates}, {"open_daily_note", &m.OpenDailyNote}, {"show_theme_picker", &m.ShowThemePicker}}
 	seen := make(map[string][]string)
 	for _, nb := range primary {
 		for _, k := range nb.binding.Keys() {
@@ -302,6 +305,7 @@ func HelpEntries(m Map) []HelpEntry {
 		{Section: "Tree", Key: m.ToggleSelect.Help().Key, Desc: "Mark/unmark item for bulk actions"},
 		{Section: "Tree", Key: m.Rename.Help().Key, Desc: "Rename note/category"},
 		{Section: "Tree", Key: m.AddTag.Help().Key, Desc: "Add tags to selected note or marked notes"},
+		{Section: "Tree", Key: m.RemoveTag.Help().Key, Desc: "Remove tags from selected note or marked notes"},
 		{Section: "Tree", Key: m.Pin.Help().Key, Desc: "Pin or unpin current item or marked notes"},
 		{Section: "Tree", Key: m.ToggleSync.Help().Key, Desc: "Toggle selected note sync"},
 		{Section: "Tree", Key: m.MakeShared.Help().Key, Desc: "Toggle shared status of selected note"},

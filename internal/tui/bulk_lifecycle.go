@@ -55,6 +55,12 @@ type notesTaggedMsg struct {
 	err   error
 }
 
+type notesUntaggedMsg struct {
+	paths []string
+	tags  []string
+	err   error
+}
+
 func tempMarkKey(relPath string) string {
 	relPath = filepath.ToSlash(strings.TrimSpace(relPath))
 	return "t:" + strings.Trim(relPath, "/")
@@ -270,6 +276,19 @@ func addNoteTagsBatchCmd(paths []string, tags []string) tea.Cmd {
 			}
 		}
 		return notesTaggedMsg{paths: copyPaths, tags: copyTags}
+	}
+}
+
+func removeNoteTagsBatchCmd(paths []string, tags []string) tea.Cmd {
+	copyPaths := append([]string(nil), paths...)
+	copyTags := append([]string(nil), tags...)
+	return func() tea.Msg {
+		for _, path := range copyPaths {
+			if err := notes.RemoveTagsFromNote(path, copyTags); err != nil {
+				return notesUntaggedMsg{paths: copyPaths, tags: copyTags, err: err}
+			}
+		}
+		return notesUntaggedMsg{paths: copyPaths, tags: copyTags}
 	}
 }
 

@@ -35,6 +35,7 @@ This page documents the default keybindings that most users care about first.
 - `m`: move
 - `d`: delete the current item, or trash marked notes after confirmation
 - `A`: add tags to the current note or marked notes
+- `K`: remove tags from the current note or marked notes
 - `v`: mark the current note/category/temp note
 - `V`: clear current marks
 

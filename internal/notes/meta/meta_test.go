@@ -62,6 +62,88 @@ func TestAddTagsToNoteMergesCaseInsensitiveTags(t *testing.T) {
 	}, "\n"), string(updated))
 }
 
+func TestRemoveTagsFromNote(t *testing.T) {
+	t.Run("removes matching tags case-insensitively", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "note.md")
+		initial := strings.Join([]string{
+			"---",
+			"tags: Work, Personal, urgent",
+			"sync: local",
+			"---",
+			"body",
+		}, "\n")
+		require.NoError(t, os.WriteFile(path, []byte(initial), 0o644))
+
+		require.NoError(t, RemoveTagsFromNote(path, []string{"#Personal", "URGENT"}))
+
+		updated, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, strings.Join([]string{
+			"---",
+			"sync: local",
+			"tags: Work",
+			"---",
+			"body",
+		}, "\n"), string(updated))
+	})
+
+	t.Run("removes tags field entirely when all tags removed", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "note.md")
+		initial := strings.Join([]string{
+			"---",
+			"tags: Work",
+			"sync: local",
+			"---",
+			"body",
+		}, "\n")
+		require.NoError(t, os.WriteFile(path, []byte(initial), 0o644))
+
+		require.NoError(t, RemoveTagsFromNote(path, []string{"Work"}))
+
+		updated, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, strings.Join([]string{
+			"---",
+			"sync: local",
+			"---",
+			"body",
+		}, "\n"), string(updated))
+	})
+
+	t.Run("no-op when tag not present", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "note.md")
+		initial := strings.Join([]string{
+			"---",
+			"tags: Work",
+			"---",
+			"body",
+		}, "\n")
+		require.NoError(t, os.WriteFile(path, []byte(initial), 0o644))
+
+		require.NoError(t, RemoveTagsFromNote(path, []string{"missing"}))
+
+		updated, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, strings.Join([]string{
+			"---",
+			"tags: Work",
+			"---",
+			"body",
+		}, "\n"), string(updated))
+	})
+
+	t.Run("no-op when note has no frontmatter", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "note.md")
+		require.NoError(t, os.WriteFile(path, []byte("just body text"), 0o644))
+
+		require.NoError(t, RemoveTagsFromNote(path, []string{"Work"}))
+
+		updated, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, "just body text", string(updated))
+	})
+}
+
 func TestSetNoteSyncClassAndToggleNoteSyncClass(t *testing.T) {
 	t.Run("set unknown sync class falls back to local", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "note.md")

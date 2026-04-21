@@ -181,6 +181,17 @@ func (m Model) View() string {
 		)
 	}
 
+	if m.showRemoveTag {
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			m.renderRemoveTagModal(),
+			lipgloss.WithWhitespaceBackground(bgColor),
+		)
+	}
+
 	if m.showSyncDebugModal {
 		return lipgloss.Place(
 			m.width,
@@ -1160,6 +1171,10 @@ func (m Model) renderModeSegment() string {
 		return "MOVE"
 	case m.showRename:
 		return "RENAME"
+	case m.showAddTag:
+		return "ADD TAG"
+	case m.showRemoveTag:
+		return "REMOVE TAG"
 	case m.showSyncDebugModal:
 		return "SYNC DEBUG"
 	case m.showSyncProfilePicker:
@@ -1657,6 +1672,16 @@ func (m Model) renderAddTagModal() string {
 		"Tags",
 		m.tagInput,
 		"Enter to add • Esc to cancel",
+	)
+}
+
+func (m Model) renderRemoveTagModal() string {
+	return m.renderStandardModal(
+		"Remove tag",
+		"Remove one or more tags from the selected note. Separate multiple tags with commas.",
+		"Tags",
+		m.tagInput,
+		"Enter to remove • Esc to cancel",
 	)
 }
 

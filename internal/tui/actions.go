@@ -540,6 +540,21 @@ func (m *Model) armAddTagCurrent() {
 	m.status = "add tag"
 }
 
+func (m *Model) armRemoveTagCurrent() {
+	if m.blockRemoteOnlyAction() {
+		return
+	}
+	if _, err := m.selectedTaggableNotePaths(); err != nil {
+		m.status = err.Error()
+		return
+	}
+	m.showRemoveTag = true
+	m.tagInput.SetValue("")
+	m.tagInput.Focus()
+	m.tagInput.CursorEnd()
+	m.status = "remove tag"
+}
+
 func (m Model) currentNotePath() string {
 	if m.listMode == listModeTodos {
 		item := m.currentTodoItem()

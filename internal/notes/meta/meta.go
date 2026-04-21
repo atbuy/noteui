@@ -182,6 +182,39 @@ func AddTagsToNote(path string, tags []string) error {
 	return fsutil.WriteFileAtomic(path, []byte(updated), 0o644)
 }
 
+func RemoveTagsFromNote(path string, tags []string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	normalizedRaw := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	fm, body, err := ParseFrontMatter(normalizedRaw)
+	if err != nil {
+		return err
+	}
+
+	existing := ParseTags(fm)
+	remove := make(map[string]bool, len(tags))
+	for _, t := range tags {
+		remove[strings.ToLower(normalizeTag(t))] = true
+	}
+	var filtered []string
+	for _, t := range existing {
+		if !remove[strings.ToLower(t)] {
+			filtered = append(filtered, t)
+		}
+	}
+
+	var updated string
+	if len(filtered) == 0 {
+		updated = deleteFrontMatterField(normalizedRaw, body, "tags")
+	} else {
+		updated = setFrontMatterField(normalizedRaw, body, "tags", "tags: "+strings.Join(filtered, ", "))
+	}
+	return fsutil.WriteFileAtomic(path, []byte(updated), 0o644)
+}
+
 func SetNoteSyncClass(path, syncClass string) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -327,6 +360,37 @@ func normalizeTag(tag string) string {
 	tag = strings.TrimSpace(tag)
 	tag = strings.TrimPrefix(tag, "#")
 	return strings.TrimSpace(tag)
+}
+
+func deleteFrontMatterField(raw, body, key string) string {
+	normalizedKey := normalizeFrontMatterKey(key)
+	if raw == body {
+		return raw
+	}
+
+	rest := strings.TrimPrefix(raw, "---\n")
+	end := strings.Index(rest, "\n---\n")
+	if end == -1 {
+		return raw
+	}
+
+	block := rest[:end]
+	lines := make([]string, 0, strings.Count(block, "\n")+1)
+	for _, line := range strings.Split(block, "\n") {
+		if idx := strings.Index(line, ":"); idx >= 0 {
+			if normalizeFrontMatterKey(line[:idx]) == normalizedKey {
+				continue
+			}
+		}
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		return body
+	}
+	return "---\n" + strings.Join(lines, "\n") + "\n---\n" + body
 }
 
 func setFrontMatterField(raw, body, key, fieldLine string) string {

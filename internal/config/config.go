@@ -167,6 +167,7 @@ type KeysConfig struct {
 	Move                     []string `toml:"move"`
 	Rename                   []string `toml:"rename"`
 	AddTag                   []string `toml:"add_tag"`
+	RemoveTag                []string `toml:"remove_tag"`
 	ToggleSelect             []string `toml:"toggle_select"`
 	ClearMarks               []string `toml:"clear_marks"`
 	Pin                      []string `toml:"pin"`

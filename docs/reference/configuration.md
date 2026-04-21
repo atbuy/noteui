@@ -785,6 +785,8 @@ trash_browser = ["X"]
   Default: `["R"]`
 - `add_tag`
   Default: `["A"]`
+- `remove_tag`
+  Default: `["K"]`
 - `toggle_select`
   Default: `["v"]`
 - `clear_marks`

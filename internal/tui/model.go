@@ -372,9 +372,10 @@ type Model struct {
 	renameInput   textinput.Model
 	renamePending *renamePending
 
-	showAddTag bool
-	tagInput   textinput.Model
-	helpInput  textinput.Model
+	showAddTag    bool
+	showRemoveTag bool
+	tagInput      textinput.Model
+	helpInput     textinput.Model
 
 	showWorkspacePicker        bool
 	showSyncProfilePicker      bool
@@ -492,6 +493,12 @@ type categoryCreatedMsg struct {
 }
 
 type noteTaggedMsg struct {
+	path string
+	tags []string
+	err  error
+}
+
+type noteUntaggedMsg struct {
 	path string
 	tags []string
 	err  error
@@ -1700,6 +1707,42 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
 
+	case noteUntaggedMsg:
+		if msg.err != nil {
+			m.status = "remove tag failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showRemoveTag = false
+		m.tagInput.Blur()
+		m.tagInput.SetValue("")
+		m.previewPath = ""
+		m.preserveCursor = m.treeCursor
+		if len(msg.tags) == 1 {
+			m.status = "removed tag: " + msg.tags[0]
+		} else {
+			m.status = fmt.Sprintf("removed %d tags", len(msg.tags))
+		}
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+
+	case notesUntaggedMsg:
+		if msg.err != nil {
+			m.status = "remove tag failed: " + msg.err.Error()
+			return m, nil
+		}
+		m.showRemoveTag = false
+		m.tagInput.Blur()
+		m.tagInput.SetValue("")
+		m.previewPath = ""
+		m.preserveCursor = m.treeCursor
+		if len(msg.paths) == 1 && len(msg.tags) == 1 {
+			m.status = "removed tag: " + msg.tags[0]
+		} else if len(msg.tags) == 1 {
+			m.status = fmt.Sprintf("removed %q from %d notes", msg.tags[0], len(msg.paths))
+		} else {
+			m.status = fmt.Sprintf("removed %d tags from %d notes", len(msg.tags), len(msg.paths))
+		}
+		return m, batchCmds(refreshAllCmd(m.rootDir, m.sessionToken), m.scheduleSync())
+
 	case categoryRenamedMsg:
 		if msg.err != nil {
 			m.status = "rename failed: " + msg.err.Error()
@@ -2726,6 +2769,50 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 			return m, cmd
 		}
 
+		if m.showRemoveTag {
+			switch msg.String() {
+			case "esc":
+				m.showRemoveTag = false
+				m.tagInput.Blur()
+				m.tagInput.SetValue("")
+				m.status = "remove tag cancelled"
+				return m, nil
+			case "enter":
+				value := strings.TrimSpace(m.tagInput.Value())
+				if value == "" {
+					m.showRemoveTag = false
+					m.tagInput.Blur()
+					m.tagInput.SetValue("")
+					m.status = "remove tag cancelled"
+					return m, nil
+				}
+				paths, err := m.selectedTaggableNotePaths()
+				if err != nil {
+					m.status = err.Error()
+					return m, nil
+				}
+				tags := parseTagInput(value)
+				if len(tags) == 0 {
+					m.showRemoveTag = false
+					m.tagInput.Blur()
+					m.tagInput.SetValue("")
+					m.status = "remove tag cancelled"
+					return m, nil
+				}
+				if len(paths) == 1 {
+					return m, removeNoteTagsCmd(paths[0], tags)
+				}
+				return m, removeNoteTagsBatchCmd(paths, tags)
+			}
+
+			if isMouseEscapeFragment(msg) {
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.tagInput, cmd = m.tagInput.Update(msg)
+			return m, cmd
+		}
+
 		if m.deletePending != nil {
 			switch {
 			case msg.String() == "esc":
@@ -3103,7 +3190,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if m.focus == focusPreview && !m.showHelp && !m.showCreateCategory && !m.showMoveBrowser &&
-			!m.showMove && !m.showRename && !m.showAddTag {
+			!m.showMove && !m.showRename && !m.showAddTag && !m.showRemoveTag {
 			if !key.Matches(msg, keys.PendingZ) {
 				m.pendingZ = false
 			}
@@ -3525,6 +3612,11 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 
 		if key.Matches(msg, keys.AddTag) {
 			m.armAddTagCurrent()
+			return m, nil
+		}
+
+		if key.Matches(msg, keys.RemoveTag) {
+			m.armRemoveTagCurrent()
 			return m, nil
 		}
 
