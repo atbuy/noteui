@@ -204,6 +204,47 @@ More specifically:
 
 Conflict copies are kept local-only, matching SSH behavior.
 
+### WebDAV connection options
+
+Three optional fields adjust how noteui dials and verifies the server. They are WebDAV-only and have no effect on SSH profiles.
+
+#### `force_ipv4`
+
+Forces all connections to use IPv4. Useful when the server's IPv6 path resets connections while IPv4 works, which is common with Nextcloud behind a reverse proxy that is bound to IPv4 only.
+
+```toml
+[sync.profiles.internal]
+kind = "webdav"
+webdav_url = "https://cloud.example.com/remote.php/dav/files/alice"
+force_ipv4 = true
+```
+
+Symptom that suggests this is needed: `read tcp [IPv6]:port -> [IPv6]:443: read: connection reset by peer`.
+
+#### `ca_cert`
+
+Path to a PEM-encoded CA certificate file. Use this when the server is signed by an internal or private CA that is not in the system trust store. noteui adds that CA on top of the system CAs; all other certificates continue to be validated normally.
+
+```toml
+[sync.profiles.internal]
+kind = "webdav"
+webdav_url = "https://internal.example.intra/remote.php/dav/files/alice"
+ca_cert = "/etc/ssl/certs/my-internal-ca.pem"
+```
+
+#### `insecure_skip_tls_verify`
+
+Disables TLS certificate verification entirely. Only use this on a trusted internal network where you cannot install the CA certificate and the server has a self-signed or IP-only certificate.
+
+```toml
+[sync.profiles.internal]
+kind = "webdav"
+webdav_url = "https://192.168.1.10/remote.php/dav/files/alice"
+insecure_skip_tls_verify = true
+```
+
+Symptom that suggests this is needed: `tls: failed to verify certificate: x509: certificate signed by unknown authority` or `tls: failed to verify certificate for <IP> because it doesn't contain any IP SANs`.
+
 ### WebDAV performance note
 
 WebDAV is more request-heavy than SSH sync. A single sync run may need multiple HTTP requests for remote indexing, note content, metadata, and directory creation.

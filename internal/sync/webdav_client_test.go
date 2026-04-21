@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -899,6 +900,66 @@ func TestWebDAVPullIndexSkippedCountReportsBadMappings(t *testing.T) {
 	require.Equal(t, 1, idx.SkippedCount)
 	require.Equal(t, "notes/a.md", idx.Notes[0].RelPath)
 	require.Equal(t, "notes/b.md", idx.Notes[1].RelPath)
+}
+
+// insecure_skip_tls_verify must allow connections to a server with a
+// self-signed certificate that would otherwise fail verification.
+func TestNewClientWebDAVInsecureSkipTLSVerify(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewTLSServer(store)
+	defer srv.Close()
+
+	profile := config.SyncProfile{
+		Kind:                  config.SyncKindWebDAV,
+		WebDAVURL:             srv.URL,
+		Auth:                  "none",
+		InsecureSkipTLSVerify: true,
+	}
+	client := NewClient(profile)
+	ctx := context.Background()
+
+	_, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui",
+		RelPath:    "notes/tls-skip.md",
+		Content:    "hello",
+	})
+	require.NoError(t, err, "insecure_skip_tls_verify must allow self-signed cert")
+}
+
+// ca_cert must allow connections to a server whose certificate is signed by
+// the provided CA, without disabling verification entirely.
+func TestNewClientWebDAVCACert(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewTLSServer(store)
+	defer srv.Close()
+
+	certFile := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(certFile, extractTLSServerCert(srv), 0o600))
+
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: srv.URL,
+		Auth:      "none",
+		CACert:    certFile,
+	}
+	client := NewClient(profile)
+	ctx := context.Background()
+
+	_, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui",
+		RelPath:    "notes/ca-cert.md",
+		Content:    "hello",
+	})
+	require.NoError(t, err, "ca_cert must trust the provided CA")
+}
+
+// extractTLSServerCert returns the PEM-encoded leaf certificate from a TLS
+// test server so tests can write it to disk as a CA cert file.
+func extractTLSServerCert(srv *httptest.Server) []byte {
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: srv.Certificate().Raw,
+	})
 }
 
 func TestWebDAVBaseURL(t *testing.T) {

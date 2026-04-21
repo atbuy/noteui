@@ -3,12 +3,15 @@ package sync
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -63,6 +66,19 @@ func newWebDAVHTTPClient(profile config.SyncProfile) *http.Client {
 			return dialer.DialContext(ctx, network, addr)
 		}
 	}
+	tlsCfg := &tls.Config{}
+	if profile.InsecureSkipTLSVerify {
+		tlsCfg.InsecureSkipVerify = true //nolint:gosec
+	} else if profile.CACert != "" {
+		pem, err := os.ReadFile(profile.CACert)
+		if err == nil {
+			pool := x509.NewCertPool()
+			if pool.AppendCertsFromPEM(pem) {
+				tlsCfg.RootCAs = pool
+			}
+		}
+	}
+
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{
 		Jar:     jar,
@@ -70,6 +86,7 @@ func newWebDAVHTTPClient(profile config.SyncProfile) *http.Client {
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           dialFn,
+			TLSClientConfig:       tlsCfg,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ResponseHeaderTimeout: 30 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,

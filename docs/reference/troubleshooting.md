@@ -122,6 +122,9 @@ How to interpret common failures:
 - sync succeeds locally but notes do not appear where expected: double-check the combined `webdav_url + remote_root` path rather than either field in isolation
 - a WebDAV auth error that mentions `secrets.toml`: the fallback file exists but cannot be read or parsed
 - Nextcloud reports "Strict cookie not set" or intermittent connection resets on the first request: noteui keeps an HTTP cookie jar per sync client so the Nextcloud `nc_session_id` cookie set on the initial redirect is replayed on follow-up requests. If you still see this against an old build, update noteui
+- `read tcp [IPv6]:port -> [IPv6]:443: read: connection reset by peer`: the server's IPv6 path resets connections while IPv4 works. Set `force_ipv4 = true` in the sync profile.
+- `tls: failed to verify certificate for <IP> because it doesn't contain any IP SANs`: the certificate has no IP Subject Alternative Name so Go rejects it when connecting by IP address. Either connect by hostname (requires DNS to resolve it) or set `insecure_skip_tls_verify = true` in the profile.
+- `x509: certificate signed by unknown authority`: the server uses a certificate signed by a private or internal CA not in the system trust store. Point `ca_cert` at your internal CA's PEM file, or set `insecure_skip_tls_verify = true` if you cannot install the cert.
 
 An empty or brand-new remote root is valid. noteui creates the target directory and its `.noteui-sync/` metadata directory on first successful upload.
 

@@ -57,16 +57,18 @@ type SyncConfig struct {
 }
 
 type SyncProfile struct {
-	Kind        string `toml:"kind"`
-	SSHHost     string `toml:"ssh_host"`
-	RemoteRoot  string `toml:"remote_root"`
-	RemoteBin   string `toml:"remote_bin"`
-	WebDAVURL   string `toml:"webdav_url"`
-	Auth        string `toml:"auth"`
-	UsernameEnv string `toml:"username_env"`
-	PasswordEnv string `toml:"password_env"`
-	TokenEnv    string `toml:"token_env"`
-	ForceIPv4   bool   `toml:"force_ipv4"`
+	Kind                  string `toml:"kind"`
+	SSHHost               string `toml:"ssh_host"`
+	RemoteRoot            string `toml:"remote_root"`
+	RemoteBin             string `toml:"remote_bin"`
+	WebDAVURL             string `toml:"webdav_url"`
+	Auth                  string `toml:"auth"`
+	UsernameEnv           string `toml:"username_env"`
+	PasswordEnv           string `toml:"password_env"`
+	TokenEnv              string `toml:"token_env"`
+	ForceIPv4             bool   `toml:"force_ipv4"`
+	InsecureSkipTLSVerify bool   `toml:"insecure_skip_tls_verify"`
+	CACert                string `toml:"ca_cert"`
 }
 
 type ThemeConfig struct {

@@ -672,6 +672,8 @@ remote_bin = "/usr/local/bin/noteui-sync"
 | `password_env` | when auth=basic | | Env var name holding the password value |
 | `token_env` | when auth=bearer | | Env var name holding the bearer token value (e.g. a Nextcloud app token or OAuth access token) |
 | `force_ipv4` | no | `false` | Force all connections to use IPv4. Use when the server's IPv6 path resets connections while IPv4 works (common with Nextcloud behind a reverse proxy that is only bound to IPv4). |
+| `insecure_skip_tls_verify` | no | `false` | Disable TLS certificate verification. Use only on trusted internal networks where the server has a self-signed or IP-only certificate. |
+| `ca_cert` | no | | Path to a PEM-encoded CA certificate file to trust in addition to system CAs. Use for internal servers signed by a private CA. |
 
 Example:
 
