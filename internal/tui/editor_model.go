@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -86,6 +87,7 @@ type (
 	editorLinkPickerMsg       struct{}
 	editorURLPromptMsg        struct{}
 	editorToggleFullscreenMsg struct{}
+	editorRelativeNumbersMsg  struct{ enabled bool }
 )
 
 type EditorModel struct {
@@ -117,16 +119,18 @@ type EditorModel struct {
 	dirty         bool
 	pendingPrefix rune
 	pendingOp     rune
+	pendingCount  int
 	pendingT      bool
 	registers     editorRegister
 	status        string
 
 	// Rendered-mode fields (populated when renderMode is true).
-	frontmatter        string       // raw "---...---" block preserved from file
-	renderMode         bool         // show rendered markdown in normal mode
-	renderedDoc        *RenderedDoc // derived from e.lines; nil until first render
-	renderViewTop      int          // scroll offset for the rendered view
-	lineNumbersEnabled bool         // mirrors previewLineNumbersEnabled
+	frontmatter         string       // raw "---...---" block preserved from file
+	renderMode          bool         // show rendered markdown in normal mode
+	renderedDoc         *RenderedDoc // derived from e.lines; nil until first render
+	renderViewTop       int          // scroll offset for the rendered view
+	lineNumbersEnabled  bool         // mirrors previewLineNumbersEnabled
+	relativeLineNumbers bool         // show distances from cursor instead of absolute numbers
 }
 
 func NewEditorModel(path, relPath, rootDir, content string, width, height int, encrypted bool, passphrase string, isTemp bool) EditorModel {
@@ -195,6 +199,7 @@ func (e *EditorModel) markSaved(newPath, hash string, modTime time.Time) {
 	e.mode = editorModeNormal
 	e.pendingPrefix = 0
 	e.pendingOp = 0
+	e.pendingCount = 0
 	e.cmdBuf = nil
 	e.searchBuf = nil
 }
@@ -214,6 +219,7 @@ func (e *EditorModel) applyReload(content, hash string, modTime time.Time) {
 	e.mode = editorModeNormal
 	e.pendingPrefix = 0
 	e.pendingOp = 0
+	e.pendingCount = 0
 	e.cmdBuf = nil
 	e.searchBuf = nil
 	e.markLoaded(hash, modTime)
@@ -269,7 +275,7 @@ func (e EditorModel) View() string {
 		lineIdx := e.viewTop + i
 		line := e.renderLine(lineIdx, contentWidth)
 		if gw > 0 {
-			line = gutterStyle.Render(fmt.Sprintf("%*d ", digits, lineIdx+1)) + line
+			line = gutterStyle.Render(fmt.Sprintf("%*d ", digits, e.gutterLineNumber(lineIdx))) + line
 		}
 		body = append(body, line)
 	}
@@ -473,6 +479,14 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		e.pendingPrefix = 0
 	}
 
+	// Accumulate count digits (1-9 to start, 0-9 after first digit).
+	if len(key) == 1 && key[0] >= '0' && key[0] <= '9' {
+		if key != "0" || e.pendingCount > 0 {
+			e.pendingCount = e.pendingCount*10 + int(key[0]-'0')
+			return e, nil
+		}
+	}
+
 	switch key {
 	case "h", "left":
 		e.moveLeft()
@@ -487,9 +501,15 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 	case "end":
 		e.moveEndLine()
 	case "j", "down":
-		e.moveDown()
+		n := max(1, e.pendingCount)
+		for range n {
+			e.moveDown()
+		}
 	case "k", "up":
-		e.moveUp()
+		n := max(1, e.pendingCount)
+		for range n {
+			e.moveUp()
+		}
 	case "0":
 		e.moveStartLine()
 	case "^":
@@ -576,6 +596,7 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 	case "N":
 		e.repeatSearch(true)
 	}
+	e.pendingCount = 0
 	e.ensureVisible()
 	if e.renderMode {
 		e.syncRenderViewTop()
@@ -768,6 +789,9 @@ func (e EditorModel) updateCmdline(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 			e.cmdBuf = e.cmdBuf[:len(e.cmdBuf)-1]
 		}
 		return e, nil
+	case " ":
+		e.cmdBuf = append(e.cmdBuf, ' ')
+		return e, nil
 	}
 	if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
 		e.cmdBuf = append(e.cmdBuf, msg.Runes...)
@@ -798,6 +822,9 @@ func (e EditorModel) updateSearch(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 			e.searchBuf = e.searchBuf[:len(e.searchBuf)-1]
 		}
 		return e, nil
+	case " ":
+		e.searchBuf = append(e.searchBuf, ' ')
+		return e, nil
 	}
 	if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
 		e.searchBuf = append(e.searchBuf, msg.Runes...)
@@ -827,7 +854,27 @@ func (e *EditorModel) executeCmdline() tea.Cmd {
 		return editorSaveCmd(e.rootDir, e.path, e.Content(), e.loadHash, e.passphrase, e.encrypted, false, true)
 	case "e!":
 		return editorReloadCmd(e.path, e.encrypted, e.passphrase)
+	case "set relativenumber", "set rnu":
+		e.relativeLineNumbers = true
+		e.lineNumbersEnabled = true
+		return func() tea.Msg { return editorRelativeNumbersMsg{enabled: true} }
+	case "set norelativenumber", "set nornu":
+		e.relativeLineNumbers = false
+		return func() tea.Msg { return editorRelativeNumbersMsg{enabled: false} }
 	default:
+		// Numeric command: jump to line.
+		n, err := strconv.Atoi(cmd)
+		if err == nil && n >= 1 {
+			e.row = clamp(n-1, 0, len(e.lines)-1)
+			e.col = 0
+			e.preferCol = 0
+			e.ensureVisible()
+			if e.renderMode {
+				e.recomputeRenderedDoc()
+				e.syncRenderViewTop()
+			}
+			return nil
+		}
 		e.status = "unknown command: :" + cmd
 		return nil
 	}
@@ -882,6 +929,7 @@ func (e *EditorModel) search(pattern string, forward, wrap bool) bool {
 func (e *EditorModel) updatePendingOperator(key string) (EditorModel, tea.Cmd) {
 	op := e.pendingOp
 	e.pendingOp = 0
+	e.pendingCount = 0
 	switch op {
 	case 'd':
 		return e.applyOperator(key, false, false)
@@ -1260,6 +1308,7 @@ func (e *EditorModel) restoreSnapshot(s editorUndoSnapshot) {
 	e.mode = editorModeNormal
 	e.pendingPrefix = 0
 	e.pendingOp = 0
+	e.pendingCount = 0
 	e.dirty = editorHashContent(e.Content()) != e.loadHash
 	e.ensureVisible()
 }
@@ -1282,6 +1331,7 @@ func (e *EditorModel) replaceOffsets(start, end int, replacement string, cursorO
 	}
 	e.pendingPrefix = 0
 	e.pendingOp = 0
+	e.pendingCount = 0
 	e.dirty = true
 	e.ensureVisible()
 	if e.renderMode {
@@ -1313,6 +1363,7 @@ func (e *EditorModel) replaceLinewise(start, end int, enterInsert bool) {
 	}
 	e.pendingPrefix = 0
 	e.pendingOp = 0
+	e.pendingCount = 0
 	e.dirty = true
 	e.ensureVisible()
 	if e.renderMode {

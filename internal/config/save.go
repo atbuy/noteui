@@ -72,6 +72,14 @@ func SaveDefaultSyncProfile(profile string) (Config, string, error) {
 	return cfg, path, nil
 }
 
+func SaveRelativeLineNumbers(enabled bool) error {
+	path, err := ResolvePath()
+	if err != nil {
+		return err
+	}
+	return updateConfigBool(path, "preview", "relative_line_numbers", enabled, Default().Preview.RelativeLineNumbers)
+}
+
 func loadForMutation(path string) Config {
 	cfg := Default()
 	data, err := os.ReadFile(path)
@@ -80,6 +88,92 @@ func loadForMutation(path string) Config {
 	}
 	_, _ = toml.Decode(string(data), &cfg)
 	return cfg
+}
+
+func updateConfigBool(path, section, key string, value, defaultValue bool) error {
+	raw, err := os.ReadFile(path)
+	switch {
+	case err == nil:
+	case os.IsNotExist(err):
+		raw = nil
+	default:
+		return err
+	}
+	updated, changed := updateTOMLBoolKey(raw, section, key, value, defaultValue)
+	if !changed {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return fsutil.WriteFileAtomic(path, updated, 0o644)
+}
+
+func updateTOMLBoolKey(raw []byte, section, key string, value, defaultValue bool) ([]byte, bool) {
+	newline := detectNewline(raw)
+	lines := splitLinesPreserveEndings(string(raw))
+	remove := value == defaultValue
+
+	start, end, foundSection := findSection(lines, section)
+	if !foundSection {
+		if remove {
+			return raw, false
+		}
+		lines = appendBoolSection(lines, section, key, value, newline)
+		return []byte(strings.Join(lines, "")), true
+	}
+
+	val := "false"
+	if value {
+		val = "true"
+	}
+	for i := start + 1; i < end; i++ {
+		_, _, ok := matchKeyLine(lines[i], key)
+		if !ok {
+			continue
+		}
+		if remove {
+			lines = append(lines[:i], lines[i+1:]...)
+			lines = pruneEmptySection(lines, start, end-1)
+		} else {
+			base := strings.TrimRight(lines[i], "\r\n")
+			indent := base[:len(base)-len(strings.TrimLeft(base, " \t"))]
+			lines[i] = indent + key + " = " + val + lineEnding(lines[i], newline)
+		}
+		return []byte(strings.Join(lines, "")), true
+	}
+
+	if remove {
+		return raw, false
+	}
+
+	insertAt := end
+	if insertAt > 0 && !hasLineEnding(lines[insertAt-1]) {
+		lines[insertAt-1] += newline
+	}
+	lines = append(lines[:insertAt], append([]string{key + " = " + val + newline}, lines[insertAt:]...)...)
+	return []byte(strings.Join(lines, "")), true
+}
+
+func appendBoolSection(lines []string, section, key string, value bool, newline string) []string {
+	if len(lines) > 0 {
+		last := len(lines) - 1
+		if !hasLineEnding(lines[last]) {
+			lines[last] += newline
+		}
+		if strings.TrimSpace(strings.TrimRight(lines[last], "\r\n")) != "" {
+			lines = append(lines, newline)
+		}
+	}
+	val := "false"
+	if value {
+		val = "true"
+	}
+	lines = append(lines,
+		"["+section+"]"+newline,
+		key+" = "+val+newline,
+	)
+	return lines
 }
 
 func updateConfigString(path, section, key, value, defaultValue string) error {

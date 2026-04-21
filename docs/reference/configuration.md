@@ -619,6 +619,12 @@ Type: boolean
 
 Controls line numbers in the preview pane.
 
+### `preview.relative_line_numbers`
+
+Type: boolean
+
+When true, the in-app editor shows line numbers as distances from the cursor (relative numbers) rather than absolute line numbers. The cursor line always shows its absolute number. Can also be toggled at runtime with `:set rnu` / `:set nornu` inside the editor; the setting is written back to this key automatically.
+
 ### `preview.edit_in_preview`
 
 Type: boolean

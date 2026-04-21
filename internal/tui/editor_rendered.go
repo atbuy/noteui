@@ -15,6 +15,28 @@ func (e *EditorModel) SetLineNumbers(enabled bool) {
 	}
 }
 
+func (e *EditorModel) SetRelativeLineNumbers(enabled bool) {
+	e.relativeLineNumbers = enabled
+	if enabled {
+		e.lineNumbersEnabled = true
+	}
+}
+
+// gutterLineNumber returns the number to display in the gutter for lineIdx.
+// In relative mode all lines show their distance from the cursor; the cursor
+// line shows its absolute 1-based number. In absolute mode every line shows
+// its 1-based number.
+func (e EditorModel) gutterLineNumber(lineIdx int) int {
+	if e.relativeLineNumbers && lineIdx != e.row {
+		d := lineIdx - e.row
+		if d < 0 {
+			d = -d
+		}
+		return d
+	}
+	return lineIdx + 1
+}
+
 // gutterWidth returns the column width reserved for the line-number gutter.
 // Uses the current renderedDoc line count so the width is stable across renders.
 func (e EditorModel) gutterWidth() int {
@@ -154,8 +176,16 @@ func (e EditorModel) viewRendered() string {
 		lineIdx := e.renderViewTop + i
 
 		if gw > 0 {
-			// Sequential visual line numbers matching the preview's formatPreviewForDisplay.
-			b.WriteString(gutterStyle.Render(fmt.Sprintf("%*d ", digits, lineIdx+1)))
+			var lineNum int
+			if e.relativeLineNumbers && lineIdx != vStart {
+				lineNum = lineIdx - vStart
+				if lineNum < 0 {
+					lineNum = -lineNum
+				}
+			} else {
+				lineNum = lineIdx + 1
+			}
+			b.WriteString(gutterStyle.Render(fmt.Sprintf("%*d ", digits, lineNum)))
 		}
 
 		if lineIdx == vStart {

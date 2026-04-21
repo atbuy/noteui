@@ -165,6 +165,8 @@ type undoableDelete struct {
 	results []notes.TrashResult
 }
 
+type saveRelativeLineNumbersDoneMsg error
+
 type previewRenderedMsg struct {
 	forPath             string
 	baseContent         string
@@ -301,6 +303,7 @@ type Model struct {
 	previewPrivacyEnabled      bool
 	previewPrivacyForcedByNote bool
 	previewLineNumbersEnabled  bool
+	relativeLineNumbers        bool
 
 	watcher     interface{ Close() error }
 	watchEvents <-chan teaMsg
@@ -646,6 +649,7 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 		todoCursor:                0,
 		previewPrivacyEnabled:     cfg.Preview.Privacy,
 		previewLineNumbersEnabled: cfg.Preview.LineNumbers,
+		relativeLineNumbers:       cfg.Preview.RelativeLineNumbers,
 		editorFullscreen:          cfg.Editor.Fullscreen,
 		showDashboard:             cfg.Dashboard && !session.StartWithPicker,
 		showWorkspacePicker:       session.StartWithPicker,
@@ -1117,6 +1121,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		)
 		editorModel.markLoaded(msg.hash, msg.modTime)
 		editorModel.SetLineNumbers(m.previewLineNumbersEnabled)
+		editorModel.SetRelativeLineNumbers(m.relativeLineNumbers)
 		m.editorModel = &editorModel
 		m.editorActive = true
 		m.showEditorURLPrompt = false
@@ -1192,6 +1197,19 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		m.openEditorURLPrompt()
 		return m, nil
 
+	case editorRelativeNumbersMsg:
+		m.relativeLineNumbers = msg.enabled
+		if m.editorModel != nil {
+			m.editorModel.SetRelativeLineNumbers(msg.enabled)
+		}
+		return m, func() tea.Msg {
+			return saveRelativeLineNumbersDoneMsg(config.SaveRelativeLineNumbers(msg.enabled))
+		}
+	case saveRelativeLineNumbersDoneMsg:
+		if err := error(msg); err != nil {
+			m.status = "failed to save setting: " + err.Error()
+		}
+		return m, nil
 	case editorToggleFullscreenMsg:
 		if m.editorModel != nil {
 			m.editorFullscreen = !m.editorFullscreen

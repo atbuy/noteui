@@ -136,15 +136,16 @@ type ModalConfig struct {
 }
 
 type PreviewConfig struct {
-	RenderMarkdown  bool     `toml:"render_markdown"`
-	DisablePaths    []string `toml:"disable_paths"`
-	Style           string   `toml:"style"`
-	SyntaxHighlight bool     `toml:"syntax_highlight"`
-	CodeStyle       string   `toml:"code_style"`
-	Privacy         bool     `toml:"privacy"`
-	LineNumbers     bool     `toml:"line_numbers"`
-	MouseScrollStep int      `toml:"mouse_scroll_step"`
-	EditInPreview   bool     `toml:"edit_in_preview"`
+	RenderMarkdown      bool     `toml:"render_markdown"`
+	DisablePaths        []string `toml:"disable_paths"`
+	Style               string   `toml:"style"`
+	SyntaxHighlight     bool     `toml:"syntax_highlight"`
+	CodeStyle           string   `toml:"code_style"`
+	Privacy             bool     `toml:"privacy"`
+	LineNumbers         bool     `toml:"line_numbers"`
+	RelativeLineNumbers bool     `toml:"relative_line_numbers"`
+	MouseScrollStep     int      `toml:"mouse_scroll_step"`
+	EditInPreview       bool     `toml:"edit_in_preview"`
 }
 
 type KeysConfig struct {
