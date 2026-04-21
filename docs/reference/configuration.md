@@ -671,6 +671,7 @@ remote_bin = "/usr/local/bin/noteui-sync"
 | `username_env` | when auth=basic | | Env var name holding the username value |
 | `password_env` | when auth=basic | | Env var name holding the password value |
 | `token_env` | when auth=bearer | | Env var name holding the bearer token value (e.g. a Nextcloud app token or OAuth access token) |
+| `force_ipv4` | no | `false` | Force all connections to use IPv4. Use when the server's IPv6 path resets connections while IPv4 works (common with Nextcloud behind a reverse proxy that is only bound to IPv4). |
 
 Example:
 

@@ -66,6 +66,7 @@ type SyncProfile struct {
 	UsernameEnv string `toml:"username_env"`
 	PasswordEnv string `toml:"password_env"`
 	TokenEnv    string `toml:"token_env"`
+	ForceIPv4   bool   `toml:"force_ipv4"`
 }
 
 type ThemeConfig struct {

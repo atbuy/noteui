@@ -30,7 +30,7 @@ type Client interface {
 func NewClient(profile config.SyncProfile) Client {
 	if config.ResolvedKind(profile) == config.SyncKindWebDAV {
 		return WebDAVClient{
-			HTTP:     newWebDAVHTTPClient(),
+			HTTP:     newWebDAVHTTPClient(profile),
 			dirCache: newWebDAVDirCache(),
 		}
 	}
@@ -49,17 +49,27 @@ func NewClient(profile config.SyncProfile) Client {
 //     stall. The default client has no deadline and would hang forever; the
 //     layered timeouts below cap dial, TLS handshake, waiting for response
 //     headers, and the overall request.
-func newWebDAVHTTPClient() *http.Client {
+func newWebDAVHTTPClient(profile config.SyncProfile) *http.Client {
+	dialer := &net.Dialer{
+		Timeout:   15 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	dialFn := dialer.DialContext
+	if profile.ForceIPv4 {
+		dialFn = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if network == "tcp" {
+				network = "tcp4"
+			}
+			return dialer.DialContext(ctx, network, addr)
+		}
+	}
 	jar, _ := cookiejar.New(nil)
 	return &http.Client{
 		Jar:     jar,
 		Timeout: 2 * time.Minute,
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   15 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           dialFn,
 			TLSHandshakeTimeout:   10 * time.Second,
 			ResponseHeaderTimeout: 30 * time.Second,
 			ExpectContinueTimeout: 1 * time.Second,

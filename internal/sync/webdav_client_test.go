@@ -749,6 +749,35 @@ func TestNewClientWebDAVHasTimeoutAndCookieJar(t *testing.T) {
 	require.NotNil(t, wc.HTTP.Transport, "transport must be configured for dial / TLS timeouts")
 }
 
+// force_ipv4 = true must not break connectivity to IPv4 servers. It replaces
+// "tcp" with "tcp4" in the dialer so Go's resolver never tries AAAA records,
+// which fixes servers where the IPv6 path resets connections but IPv4 works.
+func TestNewClientWebDAVForceIPv4ConnectsToIPv4Server(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	profile := config.SyncProfile{
+		Kind:      config.SyncKindWebDAV,
+		WebDAVURL: srv.URL,
+		Auth:      "none",
+		ForceIPv4: true,
+	}
+	client := NewClient(profile)
+	ctx := context.Background()
+
+	_, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui",
+		RelPath:    "notes/ipv4test.md",
+		Content:    "hello ipv4",
+	})
+	require.NoError(t, err, "force_ipv4 must not break IPv4 connections")
+
+	idx, err := client.PullIndex(ctx, profile, PullIndexRequest{RemoteRoot: "/noteui"})
+	require.NoError(t, err)
+	require.Len(t, idx.Notes, 1)
+}
+
 // When a WebDAV request fails with a non-2xx status, the returned error must
 // include the server's response body (e.g. Nextcloud XML diagnostics) so the
 // caller can see *why* the request was rejected, not merely the status code.
