@@ -1,6 +1,9 @@
 package config
 
 import (
+	"encoding/pem"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -731,6 +734,65 @@ func TestResolveStartupWorkspaceUsesFallbackWithoutProfiles(t *testing.T) {
 	require.Equal(t, "/fallback", got.Root)
 	require.False(t, got.Override)
 	require.False(t, got.NeedsSelection)
+}
+
+func TestValidateRejectsCACertMissingFile(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:      SyncKindWebDAV,
+			WebDAVURL: "https://internal.example.com/dav",
+			Auth:      SyncAuthNone,
+			CACert:    "/nonexistent/path/ca.pem",
+		},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ca_cert")
+}
+
+func TestValidateRejectsCACertInvalidPEM(t *testing.T) {
+	dir := t.TempDir()
+	badPEM := filepath.Join(dir, "bad.pem")
+	require.NoError(t, os.WriteFile(badPEM, []byte("this is not a certificate"), 0o600))
+
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:      SyncKindWebDAV,
+			WebDAVURL: "https://internal.example.com/dav",
+			Auth:      SyncAuthNone,
+			CACert:    badPEM,
+		},
+	}
+	err := Validate(cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ca_cert")
+	require.Contains(t, err.Error(), "no valid PEM certificates found")
+}
+
+func TestValidateAcceptsValidCACert(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer srv.Close()
+
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	dir := t.TempDir()
+	caFile := filepath.Join(dir, "ca.pem")
+	require.NoError(t, os.WriteFile(caFile, certPEM, 0o600))
+
+	cfg := Default()
+	cfg.Sync.DefaultProfile = "cloud"
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:      SyncKindWebDAV,
+			WebDAVURL: "https://internal.example.com/dav",
+			Auth:      SyncAuthNone,
+			CACert:    caFile,
+		},
+	}
+	require.NoError(t, Validate(cfg))
 }
 
 func TestValidThemeNamesDerivedFromCatalog(t *testing.T) {

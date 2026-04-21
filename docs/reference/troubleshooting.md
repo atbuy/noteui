@@ -125,6 +125,7 @@ How to interpret common failures:
 - `read tcp [IPv6]:port -> [IPv6]:443: read: connection reset by peer`: the server's IPv6 path resets connections while IPv4 works. Set `force_ipv4 = true` in the sync profile.
 - `tls: failed to verify certificate for <IP> because it doesn't contain any IP SANs`: the certificate has no IP Subject Alternative Name so Go rejects it when connecting by IP address. Either connect by hostname (requires DNS to resolve it) or set `insecure_skip_tls_verify = true` in the profile.
 - `x509: certificate signed by unknown authority`: the server uses a certificate signed by a private or internal CA not in the system trust store. Point `ca_cert` at your internal CA's PEM file, or set `insecure_skip_tls_verify = true` if you cannot install the cert.
+- `sync profile "x" ca_cert: ...`: the `ca_cert` path does not exist or the file contains no valid PEM certificates. noteui validates `ca_cert` at startup so the error appears before sync is attempted. Fix the path or regenerate the PEM file.
 
 An empty or brand-new remote root is valid. noteui creates the target directory and its `.noteui-sync/` metadata directory on first successful upload.
 

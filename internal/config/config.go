@@ -2,6 +2,7 @@
 package config
 
 import (
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"os"
@@ -542,6 +543,16 @@ func validateSyncProfile(name string, p SyncProfile) error {
 		case SyncAuthNone:
 		default:
 			return fmt.Errorf("sync profile %q has unknown auth mode %q (valid: basic, bearer, none)", name, auth)
+		}
+		if ca := strings.TrimSpace(p.CACert); ca != "" {
+			pem, err := os.ReadFile(ca)
+			if err != nil {
+				return fmt.Errorf("sync profile %q ca_cert: %w", name, err)
+			}
+			pool := x509.NewCertPool()
+			if !pool.AppendCertsFromPEM(pem) {
+				return fmt.Errorf("sync profile %q ca_cert %q: no valid PEM certificates found", name, ca)
+			}
 		}
 	default:
 		return fmt.Errorf("sync profile %q has unknown kind %q (valid: ssh, webdav)", name, kind)
