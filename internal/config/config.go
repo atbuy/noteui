@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+
+	"atbuy/noteui/internal/tui/theme"
 )
 
 type Config struct {
@@ -470,41 +472,13 @@ func ResolveStartupWorkspace(cfg Config, notesRootOverride, fallbackRoot string)
 }
 
 func ValidThemeNames() []string {
-	return []string{
-		"default",
-		"nord",
-		"gruvbox",
-		"catppuccin",
-		"catppuccin-mocha",
-		"mocha",
-		"catppuccin-latte",
-		"latte",
-		"solarized-light",
-		"paper",
-		"onedark",
-		"kanagawa",
-		"dracula",
-		"everforest",
-		"everforest-dark",
-		"tokyo-night-storm",
-		"tokyonight-storm",
-		"github-light",
-		"github-dark",
-		"carbonfox",
-		"crimson",
-		"dusk",
-		"rose-pine",
-		"rosepine",
-		"rose_pine",
-		"monokai",
-		"solarized-dark",
-		"solarized",
-		"ayu-dark",
-		"ayu",
-		"material",
-		"material-dark",
-		"nightfox",
+	entries := theme.BuiltinThemes()
+	names := make([]string, 0, len(entries)*2)
+	for _, e := range entries {
+		names = append(names, e.Name)
+		names = append(names, e.Aliases...)
 	}
+	return names
 }
 
 func IsValidThemeName(name string) bool {

@@ -452,6 +452,32 @@ func Builtin(name string) Palette {
 			HighlightBgColor: "#263250",
 		}
 
+	case "monochrome":
+		return Palette{
+			BgColor:           "#000000",
+			PanelBgColor:      "#0d0d0d",
+			BorderColor:       "#2a2a2a",
+			FocusBorderColor:  "#666666",
+			AccentColor:       "#aaaaaa",
+			AccentSoftColor:   "#777777",
+			TextColor:         "#e8e8e8",
+			MutedColor:        "#666666",
+			SubtleColor:       "#333333",
+			ChipBgColor:       "#1a1a1a",
+			InlineCodeBgColor: "#111111",
+			PinnedNoteColor:   "#ffffff",
+			SyncedNoteColor:   "#aaaaaa",
+			UnsyncedNoteColor: "#606060",
+			SyncingNoteColor:  "#ffffff",
+			SharedNoteColor:   "#d0d0d0",
+			MarkedItemColor:   "#ffffff",
+			ErrorColor:        "#ff5555",
+			SuccessColor:      "#bbbbbb",
+			SelectedBgColor:   "#222222",
+			SelectedFgColor:   "#ffffff",
+			HighlightBgColor:  "#1c1c1c",
+		}
+
 	case "nightfox":
 		return Palette{
 			BgColor:          "#192330",
@@ -536,6 +562,7 @@ func BuiltinThemes() []BuiltinThemeEntry {
 		{"ayu-dark", []string{"ayu"}, "Minimal dark theme with a warm golden accent (Ayu Dark)"},
 		{"material", []string{"material-dark"}, "Dark theme inspired by Google's Material Design color system"},
 		{"nightfox", nil, "Soft navy dark theme with blue and purple tones (Nightfox)"},
+		{"monochrome", nil, "Pure black and white theme with no color accents"},
 	}
 	result := make([]BuiltinThemeEntry, len(entries))
 	for i, e := range entries {

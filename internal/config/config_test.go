@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
+
+	"atbuy/noteui/internal/tui/theme"
 )
 
 func TestDefaultProvidesExpectedBaseline(t *testing.T) {
@@ -729,4 +731,16 @@ func TestResolveStartupWorkspaceUsesFallbackWithoutProfiles(t *testing.T) {
 	require.Equal(t, "/fallback", got.Root)
 	require.False(t, got.Override)
 	require.False(t, got.NeedsSelection)
+}
+
+func TestValidThemeNamesDerivedFromCatalog(t *testing.T) {
+	valid := ValidThemeNames()
+	require.NotEmpty(t, valid)
+
+	for _, entry := range theme.BuiltinThemes() {
+		require.Contains(t, valid, entry.Name, "catalog theme %q missing from ValidThemeNames", entry.Name)
+		for _, alias := range entry.Aliases {
+			require.Contains(t, valid, alias, "alias %q for theme %q missing from ValidThemeNames", alias, entry.Name)
+		}
+	}
 }
