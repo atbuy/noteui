@@ -65,3 +65,32 @@ func TestEditorModelQRefusesDirtyBuffer(t *testing.T) {
 	require.Equal(t, editorModeNormal, e.mode)
 	require.Contains(t, e.status, "no write since last change")
 }
+
+func TestEditorModelCtrlWDeletesPreviousWordInInsertMode(t *testing.T) {
+	e := NewEditorModel("", "note.md", "", "one two three", 80, 24, false, "", false)
+	e.markLoaded(editorHashContent(e.Content()), time.Now())
+
+	e, _ = updateEditorModel(e, keyMsg("A"))
+	e, _ = updateEditorModel(e, keyMsg("ctrl+w"))
+
+	require.Equal(t, "one two ", e.Content())
+	require.Equal(t, editorModeInsert, e.mode)
+	require.Equal(t, len([]rune("one two ")), e.col)
+	require.True(t, e.dirty)
+}
+
+func TestEditorModelCtrlWDeletesPreviousWordAndWhitespace(t *testing.T) {
+	e := NewEditorModel("", "note.md", "", "one   two", 80, 24, false, "", false)
+	e.markLoaded(editorHashContent(e.Content()), time.Now())
+
+	e.mode = editorModeInsert
+	e.col = len([]rune("one   "))
+	e.preferCol = e.col
+
+	e, _ = updateEditorModel(e, keyMsg("ctrl+w"))
+
+	require.Equal(t, "two", e.Content())
+	require.Equal(t, editorModeInsert, e.mode)
+	require.Equal(t, 0, e.col)
+	require.True(t, e.dirty)
+}

@@ -726,6 +726,13 @@ func (e EditorModel) updateInsert(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 			e.syncRenderViewTop()
 		}
 		return e, nil
+	case "ctrl+w":
+		e.deleteBackwardWord()
+		if e.renderMode {
+			e.recomputeRenderedDoc()
+			e.syncRenderViewTop()
+		}
+		return e, nil
 	case "left":
 		e.moveInsertLeft()
 		return e, nil
@@ -1124,6 +1131,15 @@ func (e *EditorModel) backspace() {
 		return
 	}
 	e.replaceOffsets(start-1, start, "", start-1, true)
+}
+
+func (e *EditorModel) deleteBackwardWord() {
+	end := e.insertOffset()
+	if end == 0 {
+		return
+	}
+	start := editorPrevWordStart(e.allRunes(), end)
+	e.replaceOffsets(start, end, "", start, true)
 }
 
 func (e *EditorModel) deleteChar() {
