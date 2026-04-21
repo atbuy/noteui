@@ -379,18 +379,12 @@ func (c WebDAVClient) PinsPut(ctx context.Context, profile config.SyncProfile, r
 	baseURL := webdavBaseURL(profile, req.RemoteRoot)
 	pinsURL := baseURL + "/.noteui-sync/pins.json"
 
-	pinsBody, pinsEtag, _ := c.getFile(ctx, profile, pinsURL)
-	ifMatch := ""
-	if len(pinsBody) > 0 {
-		ifMatch = strings.TrimSpace(pinsEtag)
-	}
-
 	data, err := json.MarshalIndent(req.Pins, "", "  ")
 	if err != nil {
 		return resp, err
 	}
 	c.mkcolParents(ctx, profile, baseURL, pinsURL)
-	if _, err := c.putFile(ctx, profile, pinsURL, data, ifMatch); err != nil {
+	if _, err := c.putFile(ctx, profile, pinsURL, data, ""); err != nil {
 		return resp, fmt.Errorf("webdav pins put: %w", err)
 	}
 	resp.Pins = req.Pins
