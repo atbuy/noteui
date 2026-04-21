@@ -66,12 +66,38 @@ func (e *EditorModel) rowToVisualRange(row int) (int, int) {
 	return -1, -1
 }
 
+// rowToVisualStart returns the visual line index for source line row. For empty
+// or separator source lines not covered by any block, it estimates the position
+// as the visual end of the last block that precedes the row.
+func (e *EditorModel) rowToVisualStart(row int) int {
+	start, _ := e.rowToVisualRange(row)
+	if start >= 0 {
+		return start
+	}
+	if e.renderedDoc == nil {
+		return 0
+	}
+	vStart := 0
+	for _, b := range e.renderedDoc.Blocks {
+		if b.SourceLine+b.SourceCount <= row {
+			vStart = b.VisualEnd
+		}
+	}
+	return vStart
+}
+
+// maybeRestoreRenderMode re-enables render mode if the document has renderable content.
+func (e *EditorModel) maybeRestoreRenderMode() {
+	if e.renderedDoc != nil && len(e.renderedDoc.Blocks) > 0 {
+		e.renderMode = true
+		e.recomputeRenderedDoc()
+		e.syncRenderViewTop()
+	}
+}
+
 // syncRenderViewTop adjusts renderViewTop so the cursor source line is visible.
 func (e *EditorModel) syncRenderViewTop() {
-	vStart, _ := e.rowToVisualRange(e.row)
-	if vStart < 0 {
-		return
-	}
+	vStart := e.rowToVisualStart(e.row)
 	if vStart < e.renderViewTop {
 		e.renderViewTop = vStart
 	}
@@ -112,7 +138,7 @@ func (e *EditorModel) toggleCurrentTaskCheckbox() {
 // the raw source with a single cursor cell at e.col.
 func (e EditorModel) viewRendered() string {
 	e.syncRenderViewTop()
-	vStart, _ := e.rowToVisualRange(e.row)
+	vStart := e.rowToVisualStart(e.row)
 
 	gw := e.gutterWidth()
 	contentWidth := e.width - gw
@@ -132,7 +158,7 @@ func (e EditorModel) viewRendered() string {
 			b.WriteString(gutterStyle.Render(fmt.Sprintf("%*d ", digits, lineIdx+1)))
 		}
 
-		if lineIdx == vStart && vStart >= 0 {
+		if lineIdx == vStart {
 			b.WriteString(e.renderRawSourceLine(e.row, e.col, contentWidth))
 		} else {
 			var rendered string

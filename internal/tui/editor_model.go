@@ -255,9 +255,23 @@ func (e EditorModel) View() string {
 	if e.renderMode && e.renderedDoc != nil {
 		return e.viewRendered()
 	}
+	gw := 0
+	var gutterStyle lipgloss.Style
+	var digits int
+	if e.lineNumbersEnabled && len(e.lines) > 0 {
+		digits = len(fmt.Sprintf("%d", max(1, len(e.lines))))
+		gw = digits + 1
+		gutterStyle = lipgloss.NewStyle().Foreground(mutedColor).Background(bgSoftColor)
+	}
+	contentWidth := e.width - gw
 	body := make([]string, 0, e.contentHeight+2)
 	for i := 0; i < e.contentHeight; i++ {
-		body = append(body, e.renderLine(e.viewTop+i))
+		lineIdx := e.viewTop + i
+		line := e.renderLine(lineIdx, contentWidth)
+		if gw > 0 {
+			line = gutterStyle.Render(fmt.Sprintf("%*d ", digits, lineIdx+1)) + line
+		}
+		body = append(body, line)
 	}
 	body = append(body, e.renderCommandLine())
 	body = append(body, e.renderStatusLine())
@@ -329,19 +343,20 @@ func (e EditorModel) renderStatusLine() string {
 	return editorFillLine(text, e.width, bgColor, mutedColor)
 }
 
-func (e EditorModel) renderLine(lineIdx int) string {
+func (e EditorModel) renderLine(lineIdx, width int) string {
 	bg := bgSoftColor
 	baseStyle := lipgloss.NewStyle().Background(bg).Foreground(textColor)
 	selectedStyle := lipgloss.NewStyle().Background(selectedBgColor).Foreground(selectedFgColor).Bold(boldSelected)
 	cursorStyle := lipgloss.NewStyle().Background(accentSoftColor).Foreground(bgSoftColor).Bold(true)
+	visualCursorStyle := lipgloss.NewStyle().Background(selectedFgColor).Foreground(selectedBgColor).Bold(true)
 
 	if lineIdx < 0 || lineIdx >= len(e.lines) {
-		return editorFillLine("", e.width, bg, textColor)
+		return editorFillLine("", width, bg, textColor)
 	}
 
 	line := e.lines[lineIdx]
 	var b strings.Builder
-	for screenCol := 0; screenCol < e.width; screenCol++ {
+	for screenCol := 0; screenCol < width; screenCol++ {
 		col := e.viewLeft + screenCol
 		ch := ' '
 		hasRune := col < len(line)
@@ -358,7 +373,11 @@ func (e EditorModel) renderLine(lineIdx int) string {
 			style = selectedStyle
 		}
 		if isCursor {
-			style = cursorStyle
+			if e.mode == editorModeVisualChar || e.mode == editorModeVisualLine {
+				style = visualCursorStyle
+			} else {
+				style = cursorStyle
+			}
 		}
 
 		b.WriteString(style.Render(text))
@@ -459,6 +478,14 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		e.moveLeft()
 	case "l", "right":
 		e.moveRight()
+	case "ctrl+left":
+		e.moveToPoint(e.prevWordStartPoint())
+	case "ctrl+right":
+		e.moveToPoint(e.nextWordStartPoint())
+	case "home":
+		e.moveStartLine()
+	case "end":
+		e.moveEndLine()
 	case "j", "down":
 		e.moveDown()
 	case "k", "up":
@@ -505,9 +532,11 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 			e.recomputeRenderedDoc()
 		}
 	case "v":
+		e.renderMode = false
 		e.mode = editorModeVisualChar
 		e.visualAnchor = editorPoint{row: e.row, col: e.cursorDisplayCol()}
 	case "V":
+		e.renderMode = false
 		e.mode = editorModeVisualLine
 		e.visualAnchor = editorPoint{row: e.row, col: 0}
 	case ":":
@@ -525,6 +554,15 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		e.pendingOp = rune(key[0])
 	case "x":
 		e.deleteChar()
+	case "s":
+		if len(e.currentLine()) > 0 {
+			start := e.currentCharOffset()
+			e.applyMotionRange(start, start+1, true, false)
+		} else {
+			e.mode = editorModeInsert
+		}
+	case "S":
+		e.changeCurrentLine()
 	case "p":
 		e.pasteAfter()
 	case "P":
@@ -564,6 +602,14 @@ func (e EditorModel) updateVisual(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		e.moveLeft()
 	case "l", "right":
 		e.moveRight()
+	case "ctrl+left":
+		e.moveToPoint(e.prevWordStartPoint())
+	case "ctrl+right":
+		e.moveToPoint(e.nextWordStartPoint())
+	case "home":
+		e.moveStartLine()
+	case "end":
+		e.moveEndLine()
 	case "j", "down":
 		e.moveDown()
 	case "k", "up":
@@ -621,6 +667,9 @@ func (e EditorModel) updateVisual(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		e.repeatSearch(true)
 	}
 	e.ensureVisible()
+	if e.mode == editorModeNormal {
+		e.maybeRestoreRenderMode()
+	}
 	return e, nil
 }
 
@@ -657,6 +706,18 @@ func (e EditorModel) updateInsert(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 	case "right":
 		e.moveInsertRight()
 		return e, nil
+	case "ctrl+left":
+		e.moveToPoint(e.prevWordStartPoint())
+		return e, nil
+	case "ctrl+right":
+		e.moveToPoint(e.nextWordStartPoint())
+		return e, nil
+	case "home":
+		e.col = 0
+		return e, nil
+	case "end":
+		e.col = len(e.currentLine())
+		return e, nil
 	case "up":
 		e.moveInsertUp()
 		if e.renderMode {
@@ -671,6 +732,13 @@ func (e EditorModel) updateInsert(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		return e, nil
 	case "tab":
 		e.insertText("\t")
+		if e.renderMode {
+			e.recomputeRenderedDoc()
+			e.syncRenderViewTop()
+		}
+		return e, nil
+	case " ":
+		e.insertText(" ")
 		if e.renderMode {
 			e.recomputeRenderedDoc()
 			e.syncRenderViewTop()
@@ -1058,17 +1126,21 @@ func (e *EditorModel) changeCurrentLine() {
 }
 
 func (e *EditorModel) yankVisualSelection() {
+	var text string
 	if e.mode == editorModeVisualLine {
 		startRow, endRow := e.selectedLineBounds()
 		start, end := e.selectedLineOffsets(startRow, endRow)
-		e.registers = editorRegister{text: e.substringByOffsets(start, end), linewise: true}
+		text = e.substringByOffsets(start, end)
+		e.registers = editorRegister{text: text, linewise: true}
 	} else {
 		start, end, ok := e.visualSelectionOffsets()
 		if !ok {
 			return
 		}
-		e.registers = editorRegister{text: e.substringByOffsets(start, end)}
+		text = e.substringByOffsets(start, end)
+		e.registers = editorRegister{text: text}
 	}
+	_ = writeClipboard(text)
 	e.mode = editorModeNormal
 	e.status = "yanked"
 }
@@ -1359,6 +1431,10 @@ func (e EditorModel) pointAfterChar(p editorPoint) editorPoint {
 	}
 	line := e.lines[p.row]
 	if len(line) == 0 {
+		// Empty line: advance past the implicit newline to include it in selections.
+		if p.row+1 < len(e.lines) {
+			return editorPoint{row: p.row + 1, col: 0}
+		}
 		return editorPoint{row: p.row, col: 0}
 	}
 	if p.col+1 <= len(line) {

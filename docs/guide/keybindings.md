@@ -88,11 +88,12 @@ The in-app editor shows the same rendered preview as the preview pane, with a cu
 - `e`: open the selected note in the in-app editor
 - `enter` / `o`: keep using the external editor path (unchanged)
 - `ctrl+f`: toggle full-screen mode on and off (overrides the TOML default for the session)
-- Normal mode supports `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`
+- Normal mode supports `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`; `ctrl+left`/`ctrl+right` jump to the previous/next word start; `home`/`end` jump to the start/end of the line
 - `j`/`k` moves one source line at a time (list items, headings, code lines, and paragraph lines each get their own cursor stop)
 - Insert and open commands: `i`, `a`, `I`, `A`, `o`, `O`; pressing `i` on a line shows that line as raw markdown with a text cursor; all other lines stay rendered
-- Edit operators: `d`, `c`, `y`, `x`, `dd`, `cc`, `yy`, `p`, `P`
-- Visual and search: `v`, `V`, `/`, `?`, `n`, `N`
+- Edit operators: `d`, `c`, `y`, `x`, `s`, `S`, `dd`, `cc`, `yy`, `p`, `P`; `s` deletes the character under the cursor and enters insert mode; `S` clears the entire line and enters insert mode
+- Visual mode: `v` starts character selection, `V` starts line selection; extend with `h`/`j`/`k`/`l`, motion keys, `ctrl+left`/`ctrl+right`, or `home`/`end`; `y` yanks selection and copies it to the system clipboard; `d` deletes; `c` changes
+- Search: `/`, `?`, `n`, `N`
 - Command line: `:w`, `:w!`, `:wq`, `:q`, `:q!`, `:e!`; `:q` returns to preview without saving
 - `tt`: toggle a checkbox on the current line (`- [ ]` to `- [x]` and back)
 - `gl`: open the note picker and insert a wikilink
