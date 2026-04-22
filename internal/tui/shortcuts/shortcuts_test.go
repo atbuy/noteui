@@ -57,6 +57,60 @@ func TestValidateCollisions(t *testing.T) {
 	require.True(t, strings.Contains(collisions[0], "refresh") && strings.Contains(collisions[0], "quit"))
 }
 
+func TestValidateCollisionsDetectsSortMenuConflicts(t *testing.T) {
+	m := DefaultMap()
+
+	ApplyConfig(&m, config.KeysConfig{
+		SortByModified: []string{"n"},
+	})
+
+	collisions := ValidateCollisions(m)
+	require.Len(t, collisions, 1)
+	require.Contains(t, collisions[0], `sort menu key "n"`)
+	require.Contains(t, collisions[0], "sort_by_name")
+	require.Contains(t, collisions[0], "sort_by_modified")
+}
+
+func TestValidateCollisionsDetectsPreviewChordConflicts(t *testing.T) {
+	m := DefaultMap()
+
+	ApplyConfig(&m, config.KeysConfig{
+		LinkKey: []string{"h"},
+	})
+
+	collisions := ValidateCollisions(m)
+	require.Len(t, collisions, 1)
+	require.Contains(t, collisions[0], `preview bracket chord second key "h"`)
+	require.Contains(t, collisions[0], "heading_jump_key")
+	require.Contains(t, collisions[0], "link_key")
+}
+
+func TestValidateCollisionsDetectsTodoChordConflicts(t *testing.T) {
+	m := DefaultMap()
+
+	ApplyConfig(&m, config.KeysConfig{
+		TodoAdd: []string{"t"},
+	})
+
+	collisions := ValidateCollisions(m)
+	require.Len(t, collisions, 1)
+	require.Contains(t, collisions[0], `todo chord second key "t"`)
+	require.Contains(t, collisions[0], "todo_key")
+	require.Contains(t, collisions[0], "todo_add")
+}
+
+func TestValidateCollisionsAllowsFollowLinkToShareLinkKey(t *testing.T) {
+	m := DefaultMap()
+	require.Empty(t, ValidateCollisions(m))
+
+	ApplyConfig(&m, config.KeysConfig{
+		LinkKey:    []string{"x"},
+		FollowLink: []string{"x"},
+	})
+
+	require.Empty(t, ValidateCollisions(m))
+}
+
 func requireHelpEntry(t *testing.T, entries []HelpEntry, section, key, desc string) {
 	t.Helper()
 

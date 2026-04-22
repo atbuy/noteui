@@ -921,6 +921,8 @@ trash_browser = ["X"]
 
 The in-app help modal is still the live source of truth if you change keybindings heavily.
 
+`noteui +check-config` validates both direct key collisions and ambiguous chord families such as sort-menu sub-keys, `]` / `[` preview chords, and `todo_key` follow-up actions.
+
 
 ## `[keys]`
 

@@ -98,6 +98,11 @@ type HelpEntry struct {
 	Desc    string
 }
 
+type namedBinding struct {
+	name    string
+	binding *key.Binding
+}
+
 func DefaultMap() Map {
 	return Map{
 		Search:                   key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "Search")),
@@ -269,11 +274,7 @@ func ApplyConfig(m *Map, cfg config.KeysConfig) {
 }
 
 func ValidateCollisions(m Map) []string {
-	type named struct {
-		name    string
-		binding *key.Binding
-	}
-	primary := []named{{"open", &m.Open}, {"edit_in_app", &m.EditInApp}, {"refresh", &m.Refresh}, {"quit", &m.Quit}, {"focus", &m.Focus}, {"new_note", &m.NewNote}, {"new_temporary_note", &m.NewTemporaryNote}, {"new_todo_list", &m.NewTodoList}, {"search", &m.Search}, {"show_help", &m.ShowHelp}, {"show_pins", &m.ShowPins}, {"show_todos", &m.ShowTodos}, {"create_category", &m.CreateCategory}, {"toggle_category", &m.ToggleCategory}, {"delete", &m.Delete}, {"move", &m.Move}, {"rename", &m.Rename}, {"add_tag", &m.AddTag}, {"remove_tag", &m.RemoveTag}, {"toggle_select", &m.ToggleSelect}, {"clear_marks", &m.ClearMarks}, {"pin", &m.Pin}, {"promote_temporary", &m.PromoteTemporary}, {"archive_temporary", &m.ArchiveTemporary}, {"move_to_temporary", &m.MoveToTemporary}, {"toggle_sync", &m.ToggleSync}, {"make_shared", &m.MakeShared}, {"toggle_temporary", &m.ToggleTemporary}, {"command_palette", &m.CommandPalette}, {"select_workspace", &m.SelectWorkspace}, {"select_sync_profile", &m.SelectSyncProfile}, {"open_conflict_copy", &m.OpenConflictCopy}, {"show_sync_debug", &m.ShowSyncDebug}, {"show_sync_timeline", &m.ShowSyncTimeline}, {"delete_remote_keep_local", &m.DeleteRemoteKeepLocal}, {"sync_import_current", &m.SyncImportCurrent}, {"sync_import", &m.SyncImport}, {"undo_delete", &m.UndoDelete}, {"toggle_preview_privacy", &m.TogglePreviewPrivacy}, {"toggle_preview_line_numbers", &m.TogglePreviewLineNumbers}, {"sort_key", &m.SortKey}, {"scroll_half_page_up", &m.ScrollHalfPageUp}, {"scroll_half_page_down", &m.ScrollHalfPageDown}, {"move_up", &m.MoveUp}, {"move_down", &m.MoveDown}, {"collapse_category", &m.CollapseCategory}, {"expand_category", &m.ExpandCategory}, {"jump_bottom", &m.JumpBottom}, {"pending_g", &m.PendingG}, {"bracket_forward", &m.BracketForward}, {"bracket_backward", &m.BracketBackward}, {"pending_z", &m.PendingZ}, {"scroll_page_down", &m.ScrollPageDown}, {"scroll_page_up", &m.ScrollPageUp}, {"toggle_encryption", &m.ToggleEncryption}, {"note_history", &m.NoteHistory}, {"trash_browser", &m.TrashBrowser}, {"new_template", &m.NewTemplate}, {"edit_templates", &m.EditTemplates}, {"open_daily_note", &m.OpenDailyNote}, {"show_theme_picker", &m.ShowThemePicker}}
+	primary := []namedBinding{{"open", &m.Open}, {"edit_in_app", &m.EditInApp}, {"refresh", &m.Refresh}, {"quit", &m.Quit}, {"focus", &m.Focus}, {"new_note", &m.NewNote}, {"new_temporary_note", &m.NewTemporaryNote}, {"new_todo_list", &m.NewTodoList}, {"search", &m.Search}, {"show_help", &m.ShowHelp}, {"show_pins", &m.ShowPins}, {"show_todos", &m.ShowTodos}, {"create_category", &m.CreateCategory}, {"toggle_category", &m.ToggleCategory}, {"delete", &m.Delete}, {"move", &m.Move}, {"rename", &m.Rename}, {"add_tag", &m.AddTag}, {"remove_tag", &m.RemoveTag}, {"toggle_select", &m.ToggleSelect}, {"clear_marks", &m.ClearMarks}, {"pin", &m.Pin}, {"promote_temporary", &m.PromoteTemporary}, {"archive_temporary", &m.ArchiveTemporary}, {"move_to_temporary", &m.MoveToTemporary}, {"toggle_sync", &m.ToggleSync}, {"make_shared", &m.MakeShared}, {"toggle_temporary", &m.ToggleTemporary}, {"command_palette", &m.CommandPalette}, {"select_workspace", &m.SelectWorkspace}, {"select_sync_profile", &m.SelectSyncProfile}, {"open_conflict_copy", &m.OpenConflictCopy}, {"show_sync_debug", &m.ShowSyncDebug}, {"show_sync_timeline", &m.ShowSyncTimeline}, {"delete_remote_keep_local", &m.DeleteRemoteKeepLocal}, {"sync_import_current", &m.SyncImportCurrent}, {"sync_import", &m.SyncImport}, {"undo_delete", &m.UndoDelete}, {"toggle_preview_privacy", &m.TogglePreviewPrivacy}, {"toggle_preview_line_numbers", &m.TogglePreviewLineNumbers}, {"sort_key", &m.SortKey}, {"scroll_half_page_up", &m.ScrollHalfPageUp}, {"scroll_half_page_down", &m.ScrollHalfPageDown}, {"move_up", &m.MoveUp}, {"move_down", &m.MoveDown}, {"collapse_category", &m.CollapseCategory}, {"expand_category", &m.ExpandCategory}, {"jump_bottom", &m.JumpBottom}, {"pending_g", &m.PendingG}, {"bracket_forward", &m.BracketForward}, {"bracket_backward", &m.BracketBackward}, {"pending_z", &m.PendingZ}, {"scroll_page_down", &m.ScrollPageDown}, {"scroll_page_up", &m.ScrollPageUp}, {"toggle_encryption", &m.ToggleEncryption}, {"note_history", &m.NoteHistory}, {"trash_browser", &m.TrashBrowser}, {"new_template", &m.NewTemplate}, {"edit_templates", &m.EditTemplates}, {"open_daily_note", &m.OpenDailyNote}, {"show_theme_picker", &m.ShowThemePicker}}
 	seen := make(map[string][]string)
 	for _, nb := range primary {
 		for _, k := range nb.binding.Keys() {
@@ -284,6 +285,58 @@ func ValidateCollisions(m Map) []string {
 	for k, names := range seen {
 		if len(names) > 1 {
 			collisions = append(collisions, fmt.Sprintf("key %q is bound to multiple actions: %s", k, strings.Join(names, ", ")))
+		}
+	}
+	collisions = append(collisions,
+		validateSequenceFamily(
+			"sort menu key",
+			[]namedBinding{
+				{"sort_by_name", &m.SortByName},
+				{"sort_by_modified", &m.SortByModified},
+				{"sort_by_created", &m.SortByCreated},
+				{"sort_by_size", &m.SortBySize},
+				{"sort_reverse", &m.SortReverse},
+			},
+		)...,
+	)
+	collisions = append(collisions,
+		validateSequenceFamily(
+			"preview bracket chord second key",
+			[]namedBinding{
+				{"heading_jump_key", &m.HeadingJumpKey},
+				{"todo_key", &m.TodoKey},
+				{"link_key", &m.LinkKey},
+			},
+		)...,
+	)
+	collisions = append(collisions,
+		validateSequenceFamily(
+			"todo chord second key",
+			[]namedBinding{
+				{"todo_key", &m.TodoKey},
+				{"todo_add", &m.TodoAdd},
+				{"todo_delete", &m.TodoDelete},
+				{"todo_edit", &m.TodoEdit},
+				{"todo_due_date", &m.TodoDueDate},
+				{"todo_priority", &m.TodoPriority},
+			},
+		)...,
+	)
+	sort.Strings(collisions)
+	return collisions
+}
+
+func validateSequenceFamily(label string, items []namedBinding) []string {
+	seen := make(map[string][]string)
+	for _, item := range items {
+		for _, k := range item.binding.Keys() {
+			seen[k] = append(seen[k], item.name)
+		}
+	}
+	var collisions []string
+	for k, names := range seen {
+		if len(names) > 1 {
+			collisions = append(collisions, fmt.Sprintf("%s %q is bound to multiple actions: %s", label, k, strings.Join(names, ", ")))
 		}
 	}
 	sort.Strings(collisions)
