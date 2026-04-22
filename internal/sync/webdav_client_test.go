@@ -23,6 +23,7 @@ import (
 type memWebDAV struct {
 	mu       sync.Mutex
 	files    map[string]memFile
+	failures map[string]int
 	requests []memRequest
 }
 
@@ -38,7 +39,16 @@ type memRequest struct {
 }
 
 func newMemWebDAV() *memWebDAV {
-	return &memWebDAV{files: make(map[string]memFile)}
+	return &memWebDAV{
+		files:    make(map[string]memFile),
+		failures: make(map[string]int),
+	}
+}
+
+func (m *memWebDAV) fail(method, path string, status int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.failures[method+" "+path] = status
 }
 
 func (m *memWebDAV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -50,6 +60,10 @@ func (m *memWebDAV) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		path:          path,
 		authorization: r.Header.Get("Authorization"),
 	})
+	if status, ok := m.failures[r.Method+" "+path]; ok {
+		w.WriteHeader(status)
+		return
+	}
 	switch r.Method {
 	case http.MethodGet:
 		f, ok := m.files[path]
@@ -470,8 +484,9 @@ func TestWebDAVDeleteNote(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = client.DeleteNote(ctx, profile, DeleteNoteRequest{
-		RemoteRoot: "/noteui",
-		NoteID:     reg.ID,
+		RemoteRoot:       "/noteui",
+		NoteID:           reg.ID,
+		ExpectedRevision: reg.Revision,
 	})
 	require.NoError(t, err)
 
@@ -480,6 +495,82 @@ func TestWebDAVDeleteNote(t *testing.T) {
 		NoteID:     reg.ID,
 	})
 	require.Error(t, err)
+}
+
+func TestWebDAVDeleteNoteRevisionMismatch(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	profile := testWebDAVProfile(srv.URL)
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+	ctx := context.Background()
+
+	reg, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui",
+		RelPath:    "delete-me.md",
+		Content:    "v1",
+	})
+	require.NoError(t, err)
+
+	pushResp, err := client.PushNote(ctx, profile, PushNoteRequest{
+		RemoteRoot:       "/noteui",
+		NoteID:           reg.ID,
+		ExpectedRevision: reg.Revision,
+		RelPath:          "delete-me.md",
+		Content:          "v2",
+	})
+	require.NoError(t, err)
+
+	_, err = client.DeleteNote(ctx, profile, DeleteNoteRequest{
+		RemoteRoot:       "/noteui",
+		NoteID:           reg.ID,
+		ExpectedRevision: reg.Revision,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "revision mismatch")
+
+	fetched, err := client.FetchNote(ctx, profile, FetchNoteRequest{
+		RemoteRoot: "/noteui",
+		NoteID:     reg.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, pushResp.Revision, fetched.Note.Revision)
+	require.Equal(t, "v2", fetched.Note.Content)
+}
+
+func TestWebDAVDeleteNotePropagatesDeleteFailure(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	profile := testWebDAVProfile(srv.URL)
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+	ctx := context.Background()
+
+	reg, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui",
+		RelPath:    "delete-me.md",
+		Content:    "bye",
+	})
+	require.NoError(t, err)
+
+	store.fail(http.MethodDelete, "/noteui/delete-me.md", http.StatusInternalServerError)
+
+	_, err = client.DeleteNote(ctx, profile, DeleteNoteRequest{
+		RemoteRoot:       "/noteui",
+		NoteID:           reg.ID,
+		ExpectedRevision: reg.Revision,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "webdav delete note content")
+
+	fetched, err := client.FetchNote(ctx, profile, FetchNoteRequest{
+		RemoteRoot: "/noteui",
+		NoteID:     reg.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "bye", fetched.Note.Content)
 }
 
 func TestWebDAVUpdateNotePath(t *testing.T) {

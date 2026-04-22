@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -15,6 +16,10 @@ import (
 )
 
 type localClient struct{ server Server }
+
+type deleteErrorClient struct {
+	deleteErr error
+}
 
 func (c localClient) PullIndex(_ context.Context, _ config.SyncProfile, req PullIndexRequest) (PullIndexResponse, error) {
 	return c.server.PullIndex(req)
@@ -46,6 +51,38 @@ func (c localClient) PinsGet(_ context.Context, _ config.SyncProfile, req PinsGe
 
 func (c localClient) PinsPut(_ context.Context, _ config.SyncProfile, req PinsPutRequest) (PinsPutResponse, error) {
 	return c.server.PinsPut(req)
+}
+
+func (c deleteErrorClient) PullIndex(_ context.Context, _ config.SyncProfile, _ PullIndexRequest) (PullIndexResponse, error) {
+	return PullIndexResponse{}, nil
+}
+
+func (c deleteErrorClient) FetchNote(_ context.Context, _ config.SyncProfile, _ FetchNoteRequest) (FetchNoteResponse, error) {
+	return FetchNoteResponse{}, nil
+}
+
+func (c deleteErrorClient) RegisterNote(_ context.Context, _ config.SyncProfile, _ RegisterNoteRequest) (RegisterNoteResponse, error) {
+	return RegisterNoteResponse{}, nil
+}
+
+func (c deleteErrorClient) PushNote(_ context.Context, _ config.SyncProfile, _ PushNoteRequest) (PushNoteResponse, error) {
+	return PushNoteResponse{}, nil
+}
+
+func (c deleteErrorClient) UpdateNotePath(_ context.Context, _ config.SyncProfile, _ UpdateNotePathRequest) (UpdateNotePathResponse, error) {
+	return UpdateNotePathResponse{}, nil
+}
+
+func (c deleteErrorClient) DeleteNote(_ context.Context, _ config.SyncProfile, _ DeleteNoteRequest) (DeleteNoteResponse, error) {
+	return DeleteNoteResponse{}, c.deleteErr
+}
+
+func (c deleteErrorClient) PinsGet(_ context.Context, _ config.SyncProfile, _ PinsGetRequest) (PinsGetResponse, error) {
+	return PinsGetResponse{}, nil
+}
+
+func (c deleteErrorClient) PinsPut(_ context.Context, _ config.SyncProfile, _ PinsPutRequest) (PinsPutResponse, error) {
+	return PinsPutResponse{}, nil
 }
 
 func testSyncConfig(remoteRoot string) config.SyncConfig {
@@ -961,6 +998,57 @@ Body
 	fm, _, err := notes.ParseFrontMatter(string(raw))
 	require.NoError(t, err)
 	require.Equal(t, notes.SyncClassLocal, notes.ParseSyncClass(fm))
+}
+
+func TestDeleteRemoteNoteAndKeepLocalLeavesLocalStateUntouchedOnDeleteError(t *testing.T) {
+	root := t.TempDir()
+	notePath := filepath.Join(root, "work", "plan.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(notePath), 0o755))
+	require.NoError(t, os.WriteFile(notePath, []byte(`---
+sync: synced
+---
+# Plan
+
+Body
+`), 0o644))
+
+	cfg := testSyncConfig("/srv/noteui")
+	rec := NoteRecord{
+		ID:         "n1",
+		RelPath:    "work/plan.md",
+		Class:      ClassSynced,
+		RemoteRev:  "7",
+		LastSyncAt: time.Date(2026, time.April, 22, 12, 0, 0, 0, time.UTC),
+	}
+	require.NoError(t, SaveNoteRecord(root, rec))
+	require.NoError(t, SavePins(root, Pins{PinnedNoteIDs: []string{"n1"}, PinnedCategories: []string{"work"}}))
+
+	err := DeleteRemoteNoteAndKeepLocal(
+		context.Background(),
+		root,
+		notePath,
+		"",
+		cfg,
+		deleteErrorClient{deleteErr: fmt.Errorf("remote unavailable")},
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "remote unavailable")
+
+	records, err := LoadNoteRecords(root)
+	require.NoError(t, err)
+	require.Len(t, records, 1)
+	require.Equal(t, rec, records["n1"])
+
+	pins, err := LoadPins(root)
+	require.NoError(t, err)
+	require.Equal(t, []string{"n1"}, pins.PinnedNoteIDs)
+	require.Equal(t, []string{"work"}, pins.PinnedCategories)
+
+	raw, err := os.ReadFile(notePath)
+	require.NoError(t, err)
+	fm, _, err := notes.ParseFrontMatter(string(raw))
+	require.NoError(t, err)
+	require.Equal(t, notes.SyncClassSynced, notes.ParseSyncClass(fm))
 }
 
 func TestServerDeleteNoteRemovesPinnedID(t *testing.T) {

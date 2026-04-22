@@ -340,10 +340,22 @@ func (c WebDAVClient) DeleteNote(ctx context.Context, profile config.SyncProfile
 	}
 
 	noteURL := baseURL + "/" + escapePath(mapping.RelPath)
-	_ = c.deleteFile(ctx, profile, noteURL)
+	currentBody, currentEtag, err := c.getFile(ctx, profile, noteURL)
+	if err != nil {
+		return resp, fmt.Errorf("webdav delete note: fetch current: %w", err)
+	}
+	currentRev := buildWebDAVRevision(currentEtag, currentBody)
+	if req.ExpectedRevision != "" && !sameRevision(currentRev, req.ExpectedRevision) {
+		return resp, &RPCError{Code: ErrCodeConflict, Message: "revision mismatch"}
+	}
+	if err := c.deleteFile(ctx, profile, noteURL); err != nil {
+		return resp, fmt.Errorf("webdav delete note content: %w", err)
+	}
 
 	mappingURL := baseURL + "/.noteui-sync/notes/" + url.PathEscape(req.NoteID) + ".json"
-	_ = c.deleteFile(ctx, profile, mappingURL)
+	if err := c.deleteFile(ctx, profile, mappingURL); err != nil {
+		return resp, fmt.Errorf("webdav delete note mapping: %w", err)
+	}
 
 	pinsURL := baseURL + "/.noteui-sync/pins.json"
 	pinsBody, _, err := c.getFile(ctx, profile, pinsURL)
@@ -352,8 +364,15 @@ func (c WebDAVClient) DeleteNote(ctx context.Context, profile config.SyncProfile
 		if json.Unmarshal(pinsBody, &pins) == nil {
 			pins.PinnedNoteIDs = removePinnedNoteID(pins.PinnedNoteIDs, req.NoteID)
 			if data, err := json.MarshalIndent(pins, "", "  "); err == nil {
-				_, _ = c.putFile(ctx, profile, pinsURL, data, "")
+				if _, err := c.putFile(ctx, profile, pinsURL, data, ""); err != nil {
+					return resp, fmt.Errorf("webdav delete note pins: %w", err)
+				}
 			}
+		}
+	} else if err != nil {
+		var rpcErr *RPCError
+		if !errors.As(err, &rpcErr) || rpcErr.Code != ErrCodeNotFound {
+			return resp, fmt.Errorf("webdav delete note pins: %w", err)
 		}
 	}
 
