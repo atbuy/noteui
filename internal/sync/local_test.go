@@ -349,18 +349,21 @@ func TestSavePinsFromRelPaths(t *testing.T) {
 	syncedNote := notes.Note{RelPath: "work/note.md"}
 	syncedNote.SyncClass = notes.SyncClassSynced
 
+	sharedNote := notes.Note{RelPath: "shared/note.md"}
+	sharedNote.SyncClass = notes.SyncClassShared
+
 	localNote := notes.Note{RelPath: "local/note.md"}
 
 	rec := NoteRecord{ID: "wn1", RelPath: "work/note.md", Class: ClassSynced}
 	require.NoError(t, SaveNoteRecord(root, rec))
+	require.NoError(t, SaveNoteRecord(root, NoteRecord{ID: "sn1", RelPath: "shared/note.md", Class: ClassSynced}))
 
-	require.NoError(t, SavePinsFromRelPaths(root, []notes.Note{syncedNote, localNote},
-		[]string{"work/note.md", "local/note.md"}, []string{"work"}))
+	require.NoError(t, SavePinsFromRelPaths(root, []notes.Note{syncedNote, sharedNote, localNote},
+		[]string{"work/note.md", "shared/note.md", "local/note.md"}, []string{"work"}))
 
 	pins, err := LoadPins(root)
 	require.NoError(t, err)
-	// only the synced note should be included
-	require.Equal(t, []string{"wn1"}, pins.PinnedNoteIDs)
+	require.Equal(t, []string{"sn1", "wn1"}, pins.PinnedNoteIDs)
 	require.Equal(t, []string{"work"}, pins.PinnedCategories)
 }
 

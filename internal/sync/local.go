@@ -240,7 +240,7 @@ func SavePinsFromRelPaths(root string, currentNotes []notes.Note, pinnedNotes []
 	}
 	syncedPaths := make(map[string]bool, len(currentNotes))
 	for _, note := range currentNotes {
-		if note.SyncClass == notes.SyncClassSynced {
+		if isSyncedClass(note.SyncClass) {
 			syncedPaths[filepath.ToSlash(note.RelPath)] = true
 		}
 	}
