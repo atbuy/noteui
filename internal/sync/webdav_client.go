@@ -268,7 +268,9 @@ func (c WebDAVClient) PushNote(ctx context.Context, profile config.SyncProfile, 
 		oldURL := baseURL + "/" + escapePath(mapping.RelPath)
 		newURL := baseURL + "/" + escapePath(req.RelPath)
 		c.mkcolParents(ctx, profile, baseURL, newURL)
-		_ = c.moveFile(ctx, profile, oldURL, newURL)
+		if err := c.moveFile(ctx, profile, oldURL, newURL); err != nil {
+			return resp, fmt.Errorf("webdav push note move: %w", err)
+		}
 		mapping.RelPath = req.RelPath
 	}
 

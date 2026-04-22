@@ -426,6 +426,50 @@ func TestWebDAVPushNote(t *testing.T) {
 	require.Equal(t, "v2", fetched.Note.Content)
 }
 
+func TestWebDAVPushNoteReturnsMoveFailureWithoutWritingNewPath(t *testing.T) {
+	store := newMemWebDAV()
+	srv := httptest.NewServer(store)
+	defer srv.Close()
+
+	profile := testWebDAVProfile(srv.URL)
+	client := WebDAVClient{HTTP: srv.Client(), dirCache: newWebDAVDirCache()}
+	ctx := context.Background()
+
+	reg, err := client.RegisterNote(ctx, profile, RegisterNoteRequest{
+		RemoteRoot: "/noteui",
+		RelPath:    "old/path.md",
+		Content:    "v1",
+	})
+	require.NoError(t, err)
+
+	store.fail("MOVE", "/noteui/old/path.md", http.StatusInternalServerError)
+
+	_, err = client.PushNote(ctx, profile, PushNoteRequest{
+		RemoteRoot:       "/noteui",
+		NoteID:           reg.ID,
+		ExpectedRevision: reg.Revision,
+		RelPath:          "new/path.md",
+		Content:          "v2",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "webdav push note move")
+
+	fetched, err := client.FetchNote(ctx, profile, FetchNoteRequest{
+		RemoteRoot: "/noteui",
+		NoteID:     reg.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "old/path.md", fetched.Note.RelPath)
+	require.Equal(t, "v1", fetched.Note.Content)
+
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	_, oldExists := store.files["/noteui/old/path.md"]
+	_, newExists := store.files["/noteui/new/path.md"]
+	require.True(t, oldExists)
+	require.False(t, newExists)
+}
+
 func writeSecretsFile(t *testing.T, content string) string {
 	t.Helper()
 
