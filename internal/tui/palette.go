@@ -213,7 +213,7 @@ func paletteCommands(m Model) []paletteCommand {
 		{name: "Show Help", desc: "Open the help modal", category: "app", action: cmdShowHelp},
 		{name: "Show Pins", desc: "Toggle the pins view", category: "view", action: cmdShowPins},
 		{name: "Show Todos", desc: "Toggle the global open todos view", category: "view", action: cmdShowTodos},
-		{name: "Open Theme Picker", desc: "Open the live theme picker (esc to cancel, enter to save theme.name)", category: "app", action: cmdOpenThemePicker},
+		{name: "Open Theme Picker", desc: "Open the searchable live theme picker (/ or tab to filter, esc to cancel, enter to save theme.name)", category: "app", action: cmdOpenThemePicker},
 		{name: "Open Daily Note", desc: "Open or create today's daily note", category: "notes", action: cmdOpenDailyNote},
 	}
 

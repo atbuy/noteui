@@ -25,7 +25,7 @@ Defaults live in code. noteui does not rewrite your `config.toml` with every def
 
 Today, in-app writes are intentionally narrow:
 
-- the theme picker and `noteui +set-theme` update only `theme.name`
+- the theme picker and `noteui +set-theme` update only `theme.name`; any existing `theme.*_color` overrides remain in place
 - the in-app sync profile picker updates only `sync.default_profile`
 - the in-app editor command `:set rnu` / `:set nornu` updates only `preview.relative_line_numbers`
 
@@ -374,6 +374,8 @@ Default:
 name = "default"
 ```
 
+Use `ctrl+y` in the TUI to open the theme picker. Press `/` or `tab` there to filter themes by name, alias, or description before saving `theme.name`.
+
 Valid built-in theme names:
 
 - `default`
@@ -398,6 +400,19 @@ Valid built-in theme names:
 - `carbonfox`
 - `crimson`
 - `dusk`
+- `rose-pine`
+- `rosepine`
+- `rose_pine`
+- `monokai`
+- `solarized-dark`
+- `solarized`
+- `ayu-dark`
+- `ayu`
+- `material`
+- `material-dark`
+- `nightfox`
+- `monochrome`
+- `monochrome-light`
 
 ### Theme color overrides
 
@@ -420,6 +435,7 @@ Supported override fields:
 - `synced_note_color`
 - `unsynced_note_color`
 - `syncing_note_color`
+- `shared_note_color`
 - `marked_item_color`
 - `error_color`
 - `success_color`
@@ -428,6 +444,8 @@ Supported override fields:
 - `highlight_bg_color`
 
 These fields default to the selected built-in theme. Leave them unset unless you want to override a specific color.
+
+noteui keeps these overrides active when you change `theme.name` from the theme picker or via `noteui +set-theme`. If an override would make text too low-contrast against its background, noteui adjusts the final rendered color slightly so the interface stays readable.
 
 ### `theme.border_style`
 

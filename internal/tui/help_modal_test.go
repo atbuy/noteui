@@ -68,7 +68,7 @@ func TestHelpEntriesDescribeConfigWritesForThemeAndSyncProfile(t *testing.T) {
 		}
 	}
 
-	require.Equal(t, "Open theme picker (live preview; saves theme.name only)", themeDesc)
+	require.Equal(t, "Open theme picker (searchable live preview; / or tab filters; saves theme.name only)", themeDesc)
 	require.Equal(t, "Select default sync profile (updates sync.default_profile only)", syncProfileDesc)
 }
 

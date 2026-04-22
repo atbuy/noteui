@@ -460,6 +460,7 @@ type Model struct {
 	templatePickerCursor   int
 	templatePickerRelDir   string
 
+	themePickerInput        textinput.Model
 	showThemePicker         bool
 	themePickerCursor       int
 	themePickerScrollOffset int
@@ -578,6 +579,14 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 	helpInput.TextStyle = lipgloss.NewStyle().Foreground(modalTextColor).Background(modalBgColor)
 	helpInput.PlaceholderStyle = lipgloss.NewStyle().Foreground(modalMutedColor).Background(modalBgColor)
 
+	themePickerInput := textinput.New()
+	themePickerInput.Placeholder = "Name, alias, or description"
+	themePickerInput.Prompt = "Filter: "
+	themePickerInput.CharLimit = 200
+	themePickerInput.Width = 36
+	themePickerInput.TextStyle = lipgloss.NewStyle().Foreground(modalTextColor).Background(modalBgColor)
+	themePickerInput.PlaceholderStyle = lipgloss.NewStyle().Foreground(modalMutedColor).Background(modalBgColor)
+
 	todoInput := textinput.New()
 	todoInput.Placeholder = "Todo item text"
 	todoInput.Prompt = ""
@@ -637,6 +646,7 @@ func NewWithSession(root, startupError string, cfg config.Config, version string
 		renameInput:               renameInput,
 		tagInput:                  tagInput,
 		helpInput:                 helpInput,
+		themePickerInput:          themePickerInput,
 		todoInput:                 todoInput,
 		dueDateInput:              dueDateInput,
 		priorityInput:             priorityInput,
@@ -2915,17 +2925,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 
 		if m.showThemePicker {
-			switch {
-			case msg.String() == "esc":
-				m.cancelThemePicker()
-			case msg.Type == tea.KeyEnter:
-				m.confirmThemePicker()
-			case key.Matches(msg, keys.MoveUp):
-				m.moveThemePickerCursor(-1)
-			case key.Matches(msg, keys.MoveDown):
-				m.moveThemePickerCursor(1)
-			}
-			return m, nil
+			return m, m.updateThemePicker(msg)
 		}
 
 		if m.showCommandPalette {

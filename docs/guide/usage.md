@@ -185,6 +185,20 @@ Prefix a term with `#` to search by tag only: `#urgent` matches only notes whose
 
 Multi-term search requires all terms to match. For example, `config deploy` only shows notes that match both "config" and "deploy".
 
+## Themes
+
+Press `ctrl+y` to open the theme picker.
+
+The picker:
+
+- previews the hovered theme live across the whole UI
+- saves only `theme.name` when you press `enter`
+- restores the previous theme on `esc`
+- lets you press `/` or `tab` to filter by theme name, alias, or description
+- uses `up`/`down` to move between matching themes while the filter field is focused
+
+If you keep custom `theme.*_color` overrides in `config.toml`, the picker keeps those overrides active in its preview. noteui also auto-adjusts low-contrast theme combinations slightly so text remains readable.
+
 ## Creating notes and categories
 
 - `n`: create a note (shows a template picker if `.templates/` contains any template files; otherwise creates a blank note immediately)

@@ -412,7 +412,7 @@ func HelpEntries(m Map) []HelpEntry {
 		{Section: "Filter", Key: m.Search.Help().Key, Desc: "Search"},
 		{Section: "Filter", Key: "#tag", Desc: "Filter by tag in search"},
 		{Section: "Filter", Key: "esc", Desc: "Leave search, then clear on second press"},
-		{Section: "Global", Key: m.ShowThemePicker.Help().Key, Desc: "Open theme picker (live preview; saves theme.name only)"},
+		{Section: "Global", Key: m.ShowThemePicker.Help().Key, Desc: "Open theme picker (searchable live preview; / or tab filters; saves theme.name only)"},
 		{Section: "Global", Key: m.Focus.Help().Key, Desc: "Switch focused pane"},
 		{Section: "Global", Key: m.SortKey.Help().Key, Desc: "Sort menu (name / modified / created / size / reverse)"},
 		{Section: "Global", Key: m.Refresh.Help().Key, Desc: "Refresh"},

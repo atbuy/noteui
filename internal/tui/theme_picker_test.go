@@ -8,6 +8,14 @@ import (
 	"atbuy/noteui/internal/config"
 )
 
+func typeThemePickerFilter(t *testing.T, m Model, query string) Model {
+	t.Helper()
+	for _, r := range query {
+		m = updateModel(m, keyMsg(string(r)))
+	}
+	return m
+}
+
 func TestThemePickerOpensOnKey(t *testing.T) {
 	m := newTestModel(t)
 	m = updateModel(m, keyMsg("ctrl+y"))
@@ -155,6 +163,47 @@ func TestThemePickerDoesNotMutateOrigThemeOnCancel(t *testing.T) {
 		"cfg.Theme.Name must not change after cancel")
 }
 
+func TestThemePickerTabTogglesFilterFocus(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, keyMsg("ctrl+y"))
+	require.False(t, m.themePickerInput.Focused())
+
+	m = updateModel(m, keyMsg("tab"))
+	require.True(t, m.themePickerInput.Focused())
+
+	m = updateModel(m, keyMsg("tab"))
+	require.False(t, m.themePickerInput.Focused())
+}
+
+func TestThemePickerFilterMatchesAliases(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, keyMsg("ctrl+y"))
+	m = updateModel(m, keyMsg("tab"))
+	m = typeThemePickerFilter(t, m, "rosepine")
+
+	filtered := m.filteredThemePickerIndices()
+	require.Len(t, filtered, 1, "alias filter should narrow to a single theme")
+	require.Equal(t, "rose-pine", BuiltinThemes()[filtered[0]].Name)
+	require.Equal(t, filtered[0], m.themePickerCursor, "cursor should move to the first matching theme")
+}
+
+func TestThemePickerFocusedFilterUsesArrowKeysForNavigation(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, keyMsg("ctrl+y"))
+	start := m.themePickerCursor
+
+	m = updateModel(m, keyMsg("tab"))
+	require.True(t, m.themePickerInput.Focused())
+
+	m = updateModel(m, keyMsg("down"))
+	require.Equal(t, start+1, m.themePickerCursor, "down should navigate even while filter is focused")
+
+	current := m.themePickerCursor
+	m = updateModel(m, keyMsg("n"))
+	require.Equal(t, current, m.themePickerCursor, "typing should update the filter without treating the key as list navigation")
+	require.Equal(t, "n", m.themePickerInput.Value())
+}
+
 func TestThemePickerKeyBlockedWhenOpen(t *testing.T) {
 	m := newTestModel(t)
 	m = updateModel(m, keyMsg("ctrl+y"))
@@ -164,6 +213,17 @@ func TestThemePickerKeyBlockedWhenOpen(t *testing.T) {
 	m = updateModel(m, keyMsg("n"))
 	require.True(t, m.showThemePicker,
 		"unrelated keys should not close the theme picker or trigger actions")
+}
+
+func TestThemePickerEnterKeepsModalOpenWhenFilterHasNoMatches(t *testing.T) {
+	m := newTestModel(t)
+	m = updateModel(m, keyMsg("ctrl+y"))
+	m = updateModel(m, keyMsg("tab"))
+	m = typeThemePickerFilter(t, m, "zzzzzz")
+
+	m = updateModel(m, keyMsg("enter"))
+	require.True(t, m.showThemePicker, "enter should not close the picker when there are no matching themes")
+	require.Equal(t, "no matching themes", m.status)
 }
 
 func TestRenderThemePickerModalContainsThemeNames(t *testing.T) {
@@ -176,7 +236,19 @@ func TestRenderThemePickerModalContainsThemeNames(t *testing.T) {
 	require.Contains(t, rendered, "Theme Picker")
 	// The hovered theme name should appear in the header.
 	require.Contains(t, rendered, BuiltinThemes()[m.themePickerCursor].Name)
-	// Footer hint.
-	require.Contains(t, rendered, "enter: save theme.name")
-	require.Contains(t, rendered, "esc: cancel")
+	require.Contains(t, rendered, "Filter:")
+	require.Contains(t, rendered, "theme.name")
+}
+
+func TestRenderThemePickerModalShowsThemeGuardrails(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 40
+	m.cfg.Theme.TextColor = "#777777"
+	m.cfg.Theme.PanelBgColor = "#777777"
+	m = updateModel(m, keyMsg("ctrl+y"))
+
+	rendered := stripANSI(m.renderThemePickerModal())
+	require.Contains(t, rendered, "Preview keeps current theme color overrides")
+	require.Contains(t, rendered, "Low-contrast colors auto-adjusted for readability")
 }

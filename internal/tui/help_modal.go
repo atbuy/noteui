@@ -245,11 +245,11 @@ func isMouseEscapeFragment(msg tea.KeyMsg) bool {
 	return !msg.Paste && msg.Type == tea.KeyRunes && len(msg.Runes) > 1
 }
 
-func shouldUpdateHelpInput(msg tea.KeyMsg, input textinput.Model) bool {
+func shouldUpdateTextInput(msg tea.KeyMsg, input textinput.Model) bool {
 	if msg.Paste {
 		return true
 	}
-	if isHelpInputEditKey(msg, input) {
+	if isTextInputEditKey(msg, input) {
 		return true
 	}
 	if isMouseEscapeFragment(msg) {
@@ -269,7 +269,11 @@ func shouldUpdateHelpInput(msg tea.KeyMsg, input textinput.Model) bool {
 	return true
 }
 
-func isHelpInputEditKey(msg tea.KeyMsg, input textinput.Model) bool {
+func shouldUpdateHelpInput(msg tea.KeyMsg, input textinput.Model) bool {
+	return shouldUpdateTextInput(msg, input)
+}
+
+func isTextInputEditKey(msg tea.KeyMsg, input textinput.Model) bool {
 	km := input.KeyMap
 	return key.Matches(msg, km.CharacterForward) ||
 		key.Matches(msg, km.CharacterBackward) ||

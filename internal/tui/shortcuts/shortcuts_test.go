@@ -22,7 +22,7 @@ func TestDefaultMapAndHelpEntries(t *testing.T) {
 	require.Greater(t, len(entries), 20)
 	requireHelpEntry(t, entries, "Tree", m.CommandPalette.Help().Key, "Command palette: notes, actions, and workspace switch")
 	requireHelpEntry(t, entries, "Tree", m.EditInApp.Help().Key, "Edit current note in app")
-	requireHelpEntry(t, entries, "Global", m.ShowThemePicker.Help().Key, "Open theme picker (live preview; saves theme.name only)")
+	requireHelpEntry(t, entries, "Global", m.ShowThemePicker.Help().Key, "Open theme picker (searchable live preview; / or tab filters; saves theme.name only)")
 	requireHelpEntry(t, entries, "Preview", m.TodoKey.Help().Key+m.TodoPriority.Help().Key, "Set or clear current todo priority")
 }
 

@@ -118,7 +118,7 @@ The in-app editor shows the same rendered preview as the preview pane, with a cu
 
 ## Appearance
 
-- `ctrl+y`: open the theme picker; hover over themes to preview them live across the whole UI; `esc` restores the original theme, `enter` saves only `theme.name`
+- `ctrl+y`: open the theme picker; hover over themes to preview them live across the whole UI; press `/` or `tab` to filter by theme name, alias, or description; `esc` restores the original theme, `enter` saves only `theme.name`
 
 ## Customizing keybindings
 

@@ -83,7 +83,7 @@ This launches the UI against a bundled set of sample notes copied into a throwaw
 - promote, archive, and batch-process temporary notes
 - pin important notes and categories
 - automatic version history for every note, with an in-app rollback modal (`H`)
-- live theme picker with instant full-UI preview (`ctrl+y`), 20+ built-in themes
+- live theme picker with instant full-UI preview, filtering, and 20+ built-in themes (`ctrl+y`)
 - optional SSH and WebDAV sync for `sync: synced` notes with tree sync markers
 - per-workspace `sync_remote_root` keeps multiple workspaces isolated on the remote
 - encrypted note bodies, with atomic writes and history-based recovery
@@ -126,9 +126,11 @@ Notes are plain Markdown files. noteui adds no proprietary format - you can open
 
 noteui ships with 20+ built-in color themes. You can switch themes three ways:
 
-- **In-app theme picker** (`ctrl+y`): hover to preview the full UI live, `enter` to save `theme.name`, `esc` to cancel
+- **In-app theme picker** (`ctrl+y`): live-preview themes across the full UI, press `/` or `tab` to filter by name/alias/description, `enter` to save `theme.name`, `esc` to cancel
 - **CLI**: `noteui +set-theme <name>` switches the active theme without opening the UI and updates only `theme.name`
 - **Config**: set `theme.name` in `config.toml`
+
+If you keep custom `theme.*_color` overrides in `config.toml`, the picker preview keeps those overrides active and noteui may auto-adjust low-contrast combinations slightly for readability.
 
 To list all available themes with color swatches:
 

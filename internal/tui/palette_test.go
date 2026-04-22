@@ -58,7 +58,7 @@ func TestPaletteCommandsDescribeConfigWritesForThemeAndSyncProfile(t *testing.T)
 		}
 	}
 
-	require.Equal(t, "Open the live theme picker (esc to cancel, enter to save theme.name)", themeDesc)
+	require.Equal(t, "Open the searchable live theme picker (/ or tab to filter, esc to cancel, enter to save theme.name)", themeDesc)
 	require.Equal(t, "Choose the default sync profile (updates sync.default_profile only)", syncProfileDesc)
 }
 

@@ -91,59 +91,7 @@ func BuiltinThemes() []BuiltinThemeEntry    { return theme.BuiltinThemes() }
 func NormalizeThemeName(name string) string { return theme.NormalizeName(name) }
 
 func ApplyTheme(cfg config.Config) {
-	p := builtinTheme(cfg.Theme.Name)
-
-	override := func(current *string, value string) {
-		if strings.TrimSpace(value) != "" {
-			*current = value
-		}
-	}
-
-	override(&p.BgColor, cfg.Theme.BgColor)
-	override(&p.PanelBgColor, cfg.Theme.PanelBgColor)
-	override(&p.BorderColor, cfg.Theme.BorderColor)
-	override(&p.FocusBorderColor, cfg.Theme.FocusBorderColor)
-	override(&p.AccentColor, cfg.Theme.AccentColor)
-	override(&p.AccentSoftColor, cfg.Theme.AccentSoftColor)
-	override(&p.TextColor, cfg.Theme.TextColor)
-	override(&p.MutedColor, cfg.Theme.MutedColor)
-	override(&p.SubtleColor, cfg.Theme.SubtleColor)
-	override(&p.ChipBgColor, cfg.Theme.ChipBgColor)
-	override(&p.InlineCodeBgColor, cfg.Theme.InlineCodeBgColor)
-	override(&p.PinnedNoteColor, cfg.Theme.PinnedNoteColor)
-	override(&p.SyncedNoteColor, cfg.Theme.SyncedNoteColor)
-	override(&p.UnsyncedNoteColor, cfg.Theme.UnsyncedNoteColor)
-	override(&p.SyncingNoteColor, cfg.Theme.SyncingNoteColor)
-	override(&p.SharedNoteColor, cfg.Theme.SharedNoteColor)
-	override(&p.MarkedItemColor, cfg.Theme.MarkedItemColor)
-	override(&p.ErrorColor, cfg.Theme.ErrorColor)
-	override(&p.SuccessColor, cfg.Theme.SuccessColor)
-	override(&p.SelectedBgColor, cfg.Theme.SelectedBgColor)
-	override(&p.SelectedFgColor, cfg.Theme.SelectedFgColor)
-	override(&p.HighlightBgColor, cfg.Theme.HighlightBgColor)
-
-	p = normalizePaletteAccessibility(p)
-	if strings.TrimSpace(p.InlineCodeBgColor) == "" {
-		p.InlineCodeBgColor = deriveInlineCodeBgColor(p.PanelBgColor, p.ChipBgColor)
-	}
-	if strings.TrimSpace(p.PinnedNoteColor) == "" {
-		p.PinnedNoteColor = p.AccentSoftColor
-	}
-	if strings.TrimSpace(p.SyncedNoteColor) == "" {
-		p.SyncedNoteColor = p.SuccessColor
-	}
-	if strings.TrimSpace(p.UnsyncedNoteColor) == "" {
-		p.UnsyncedNoteColor = p.ErrorColor
-	}
-	if strings.TrimSpace(p.SyncingNoteColor) == "" {
-		p.SyncingNoteColor = "#F59E0B"
-	}
-	if strings.TrimSpace(p.SharedNoteColor) == "" {
-		p.SharedNoteColor = "#7C9EFF"
-	}
-	if strings.TrimSpace(p.MarkedItemColor) == "" {
-		p.MarkedItemColor = "#E5A524"
-	}
+	p := resolveThemePalette(cfg)
 
 	bgColor = lipgloss.Color(p.BgColor)
 	bgSoftColor = lipgloss.Color(p.PanelBgColor)
@@ -266,6 +214,95 @@ func ApplyTheme(cfg config.Config) {
 		Background(bgSoftColor)
 }
 
+func resolveThemePalette(cfg config.Config) themePalette {
+	p := resolveThemePaletteRaw(cfg)
+	p = normalizePaletteAccessibility(p)
+	if strings.TrimSpace(p.InlineCodeBgColor) == "" {
+		p.InlineCodeBgColor = deriveInlineCodeBgColor(p.PanelBgColor, p.ChipBgColor)
+	}
+	if strings.TrimSpace(p.PinnedNoteColor) == "" {
+		p.PinnedNoteColor = p.AccentSoftColor
+	}
+	if strings.TrimSpace(p.SyncedNoteColor) == "" {
+		p.SyncedNoteColor = p.SuccessColor
+	}
+	if strings.TrimSpace(p.UnsyncedNoteColor) == "" {
+		p.UnsyncedNoteColor = p.ErrorColor
+	}
+	if strings.TrimSpace(p.SyncingNoteColor) == "" {
+		p.SyncingNoteColor = "#F59E0B"
+	}
+	if strings.TrimSpace(p.SharedNoteColor) == "" {
+		p.SharedNoteColor = "#7C9EFF"
+	}
+	if strings.TrimSpace(p.MarkedItemColor) == "" {
+		p.MarkedItemColor = "#E5A524"
+	}
+	return p
+}
+
+func resolveThemePaletteRaw(cfg config.Config) themePalette {
+	p := builtinTheme(cfg.Theme.Name)
+	applyThemeColorOverrides(&p, cfg.Theme)
+	return p
+}
+
+func applyThemeColorOverrides(p *themePalette, themeCfg config.ThemeConfig) {
+	override := func(current *string, value string) {
+		if strings.TrimSpace(value) != "" {
+			*current = value
+		}
+	}
+
+	override(&p.BgColor, themeCfg.BgColor)
+	override(&p.PanelBgColor, themeCfg.PanelBgColor)
+	override(&p.BorderColor, themeCfg.BorderColor)
+	override(&p.FocusBorderColor, themeCfg.FocusBorderColor)
+	override(&p.AccentColor, themeCfg.AccentColor)
+	override(&p.AccentSoftColor, themeCfg.AccentSoftColor)
+	override(&p.TextColor, themeCfg.TextColor)
+	override(&p.MutedColor, themeCfg.MutedColor)
+	override(&p.SubtleColor, themeCfg.SubtleColor)
+	override(&p.ChipBgColor, themeCfg.ChipBgColor)
+	override(&p.InlineCodeBgColor, themeCfg.InlineCodeBgColor)
+	override(&p.PinnedNoteColor, themeCfg.PinnedNoteColor)
+	override(&p.SyncedNoteColor, themeCfg.SyncedNoteColor)
+	override(&p.UnsyncedNoteColor, themeCfg.UnsyncedNoteColor)
+	override(&p.SyncingNoteColor, themeCfg.SyncingNoteColor)
+	override(&p.SharedNoteColor, themeCfg.SharedNoteColor)
+	override(&p.MarkedItemColor, themeCfg.MarkedItemColor)
+	override(&p.ErrorColor, themeCfg.ErrorColor)
+	override(&p.SuccessColor, themeCfg.SuccessColor)
+	override(&p.SelectedBgColor, themeCfg.SelectedBgColor)
+	override(&p.SelectedFgColor, themeCfg.SelectedFgColor)
+	override(&p.HighlightBgColor, themeCfg.HighlightBgColor)
+}
+
+func themeHasColorOverrides(themeCfg config.ThemeConfig) bool {
+	return strings.TrimSpace(themeCfg.BgColor) != "" ||
+		strings.TrimSpace(themeCfg.PanelBgColor) != "" ||
+		strings.TrimSpace(themeCfg.BorderColor) != "" ||
+		strings.TrimSpace(themeCfg.FocusBorderColor) != "" ||
+		strings.TrimSpace(themeCfg.AccentColor) != "" ||
+		strings.TrimSpace(themeCfg.AccentSoftColor) != "" ||
+		strings.TrimSpace(themeCfg.TextColor) != "" ||
+		strings.TrimSpace(themeCfg.MutedColor) != "" ||
+		strings.TrimSpace(themeCfg.SubtleColor) != "" ||
+		strings.TrimSpace(themeCfg.ChipBgColor) != "" ||
+		strings.TrimSpace(themeCfg.InlineCodeBgColor) != "" ||
+		strings.TrimSpace(themeCfg.PinnedNoteColor) != "" ||
+		strings.TrimSpace(themeCfg.SyncedNoteColor) != "" ||
+		strings.TrimSpace(themeCfg.UnsyncedNoteColor) != "" ||
+		strings.TrimSpace(themeCfg.SyncingNoteColor) != "" ||
+		strings.TrimSpace(themeCfg.SharedNoteColor) != "" ||
+		strings.TrimSpace(themeCfg.MarkedItemColor) != "" ||
+		strings.TrimSpace(themeCfg.ErrorColor) != "" ||
+		strings.TrimSpace(themeCfg.SuccessColor) != "" ||
+		strings.TrimSpace(themeCfg.SelectedBgColor) != "" ||
+		strings.TrimSpace(themeCfg.SelectedFgColor) != "" ||
+		strings.TrimSpace(themeCfg.HighlightBgColor) != ""
+}
+
 func normalizePaletteAccessibility(p themePalette) themePalette {
 	p.TextColor = ensureContrast(p.TextColor, p.PanelBgColor, 7.0)
 	p.MutedColor = ensureContrast(p.MutedColor, p.PanelBgColor, 4.5)
@@ -274,6 +311,23 @@ func normalizePaletteAccessibility(p themePalette) themePalette {
 	p.MarkedItemColor = ensureContrast(p.MarkedItemColor, p.PanelBgColor, 4.5)
 	p.SelectedFgColor = ensureContrast(p.SelectedFgColor, p.SelectedBgColor, 4.5)
 	return p
+}
+
+func themePaletteAccessibilityAdjustments(p themePalette) []string {
+	var adjusted []string
+	addIfAdjusted := func(label, current, next string) {
+		if !sameHexColor(current, next) {
+			adjusted = append(adjusted, label)
+		}
+	}
+
+	addIfAdjusted("text", p.TextColor, ensureContrast(p.TextColor, p.PanelBgColor, 7.0))
+	addIfAdjusted("muted", p.MutedColor, ensureContrast(p.MutedColor, p.PanelBgColor, 4.5))
+	addIfAdjusted("accent soft", p.AccentSoftColor, ensureContrast(p.AccentSoftColor, p.PanelBgColor, 4.5))
+	addIfAdjusted("accent", p.AccentColor, ensureContrast(p.AccentColor, p.BgColor, 4.5))
+	addIfAdjusted("marked", p.MarkedItemColor, ensureContrast(p.MarkedItemColor, p.PanelBgColor, 4.5))
+	addIfAdjusted("selected text", p.SelectedFgColor, ensureContrast(p.SelectedFgColor, p.SelectedBgColor, 4.5))
+	return adjusted
 }
 
 func ensureContrast(fgHex, bgHex string, minRatio float64) string {
@@ -341,6 +395,15 @@ func parseHexColor(hex string) (rgbColor, bool) {
 
 func formatHexColor(c rgbColor) string {
 	return fmt.Sprintf("#%02X%02X%02X", clampChannel(c.r), clampChannel(c.g), clampChannel(c.b))
+}
+
+func sameHexColor(a, b string) bool {
+	parsedA, okA := parseHexColor(a)
+	parsedB, okB := parseHexColor(b)
+	if okA && okB {
+		return formatHexColor(parsedA) == formatHexColor(parsedB)
+	}
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 func clampChannel(v float64) int {
