@@ -37,6 +37,13 @@ config directory.
 
 Overrides the editor used to open notes.
 
+The value may be either a bare executable name such as `nvim` or a command
+string with arguments such as `code -w` or `hx --wait`. noteui splits the
+string into an executable plus arguments before appending the note path.
+
+This is not full shell execution. Shell aliases, shell functions, and other
+shell-only syntax are still not supported.
+
 Resolution order is:
 
 1. `NOTEUI_EDITOR`

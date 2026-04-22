@@ -13,7 +13,7 @@ noteui resolves the editor in this order:
 Check:
 
 - that the chosen editor command exists on your `PATH`
-- that `NOTEUI_EDITOR` or `EDITOR` does not point to a shell alias that only works in interactive shells
+- that `NOTEUI_EDITOR` or `EDITOR` is a real command string such as `code -w`, not a shell alias or shell function that only exists in interactive shells
 - that the editor command can be launched manually from the same terminal environment
 
 See [Environment variables](environment.md) for the full environment lookup behavior.
