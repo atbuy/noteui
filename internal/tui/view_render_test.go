@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"atbuy/noteui/internal/config"
 	"atbuy/noteui/internal/notes"
 	notesync "atbuy/noteui/internal/sync"
 )
@@ -23,6 +24,44 @@ func TestRenderStatusContainsMessage(t *testing.T) {
 	if !strings.Contains(plain, "hello test message") {
 		require.Failf(t, "assertion failed", "expected status to contain message, got %q", plain)
 	}
+}
+
+func TestRenderStatusShowsEffectiveSyncBinding(t *testing.T) {
+	m := newTestModel(t)
+	m.cfg.Sync = config.SyncConfig{
+		DefaultProfile: "homebox",
+		Profiles: map[string]config.SyncProfile{
+			"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/noteui", RemoteBin: "/usr/local/bin/noteui-sync"},
+		},
+	}
+	m.refreshSyncBinding()
+
+	plain := stripANSI(m.renderStatus())
+	require.Contains(t, plain, "sync: homebox @ /srv/noteui")
+}
+
+func TestRenderStatusShowsRootBoundProfileAndWorkspaceRemoteRoot(t *testing.T) {
+	m := newTestModel(t)
+	m.workspaceName = "work"
+	m.cfg.Sync = config.SyncConfig{
+		DefaultProfile: "homebox",
+		Profiles: map[string]config.SyncProfile{
+			"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/noteui", RemoteBin: "/usr/local/bin/noteui-sync"},
+			"office":  {SSHHost: "office-host", RemoteRoot: "/srv/office", RemoteBin: "/usr/local/bin/noteui-sync"},
+		},
+	}
+	m.cfg.Workspaces = map[string]config.WorkspaceConfig{
+		"work": {Root: m.rootDir, SyncRemoteRoot: "/srv/workspace-remote"},
+	}
+	require.NoError(t, notesync.SaveRootConfig(m.rootDir, notesync.RootConfig{
+		SchemaVersion: notesync.SchemaVersion,
+		ClientID:      notesync.NewClientID(),
+		Profile:       "office",
+	}))
+	m.refreshSyncBinding()
+
+	plain := stripANSI(m.renderStatus())
+	require.Contains(t, plain, "sync: office @ /srv/workspace-remote")
 }
 
 func TestRenderStatusUsesErrorStyleForSyncFailures(t *testing.T) {
@@ -325,6 +364,13 @@ func TestRenderSyncDebugModalContainsRawError(t *testing.T) {
 	m := newTestModel(t)
 	m.width = 120
 	m.height = 40
+	m.cfg.Sync = config.SyncConfig{
+		DefaultProfile: "homebox",
+		Profiles: map[string]config.SyncProfile{
+			"homebox": {SSHHost: "notes-prod", RemoteRoot: "/srv/noteui", RemoteBin: "/usr/local/bin/noteui-sync"},
+		},
+	}
+	m.refreshSyncBinding()
 	n := notes.Note{Path: m.rootDir + "/work/note.md", RelPath: "work/note.md", Name: "note.md", TitleText: "Note", SyncClass: notes.SyncClassSynced}
 	m.treeItems = []treeItem{{Kind: treeNote, RelPath: n.RelPath, Name: n.Title(), Note: &n}}
 	m.syncRecords = map[string]notesync.NoteRecord{
@@ -335,6 +381,10 @@ func TestRenderSyncDebugModalContainsRawError(t *testing.T) {
 	plain := stripANSI(rendered)
 	require.Contains(t, plain, "Sync details")
 	require.Contains(t, plain, "dial tcp timeout")
+	require.Contains(t, plain, "Sync profile")
+	require.Contains(t, plain, "homebox")
+	require.Contains(t, plain, "Remote root")
+	require.Contains(t, plain, "/srv/noteui")
 	require.Contains(t, plain, "Remote ID")
 	require.Contains(t, plain, "y copy detail")
 }

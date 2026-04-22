@@ -1095,6 +1095,9 @@ func (m Model) renderStatus() string {
 	if workspace := m.renderWorkspaceSegment(); workspace != "" {
 		parts = append(parts, workspace)
 	}
+	if syncBinding := m.renderSyncBindingSegment(); syncBinding != "" {
+		parts = append(parts, syncBinding)
+	}
 	parts = append(parts,
 		m.renderFocusSegment(),
 		m.renderSelectionSegment(),
@@ -1404,6 +1407,18 @@ func (m Model) renderPrivacySegment() string {
 	default:
 		return "privacy: off"
 	}
+}
+
+func (m Model) renderSyncBindingSegment() string {
+	profile := strings.TrimSpace(m.activeSyncProfileName)
+	if profile == "" {
+		return ""
+	}
+	root := strings.TrimSpace(m.activeSyncRemoteRoot)
+	if root == "" {
+		return "sync: " + profile
+	}
+	return "sync: " + profile + " @ " + root
 }
 
 func (m Model) renderHelpModal() string {

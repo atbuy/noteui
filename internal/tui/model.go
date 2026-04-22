@@ -435,6 +435,8 @@ type Model struct {
 	syncDebounceToken        int
 	syncRunning              bool
 	syncSpinnerFrame         int
+	activeSyncProfileName    string
+	activeSyncRemoteRoot     string
 	syncRecords              map[string]notesync.NoteRecord
 	syncInFlight             map[string]bool
 	startupSyncChecked       bool
@@ -692,6 +694,20 @@ func (m *Model) refreshSyncRecords() {
 		}
 		m.syncRecords[relPath] = rec
 	}
+}
+
+func (m *Model) refreshSyncBinding() {
+	m.activeSyncProfileName = ""
+	m.activeSyncRemoteRoot = ""
+	if !notesync.HasSyncProfile(m.cfg.Sync) || strings.TrimSpace(m.rootDir) == "" {
+		return
+	}
+	profile, name, err := notesync.ActiveProfile(m.cfg.Sync, m.rootDir)
+	if err != nil {
+		return
+	}
+	m.activeSyncProfileName = strings.TrimSpace(name)
+	m.activeSyncRemoteRoot = strings.TrimSpace(notesync.ResolvedRemoteRoot(profile, m.rootDir, m.activeWorkspaceSyncRemoteRoot()))
 }
 
 func (m Model) pendingSyncRelPaths() map[string]bool {
@@ -1366,6 +1382,7 @@ func (m Model) handleMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		m.cfg = msg.cfg
 		ApplyConfigKeys(m.cfg.Keys)
+		m.refreshSyncBinding()
 		status := "default sync profile set to " + msg.profile
 		if strings.TrimSpace(msg.showInfo) != "" {
 			status = fmt.Sprintf("default sync profile set to %s; current root stays on %s", msg.profile, msg.showInfo)

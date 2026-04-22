@@ -266,7 +266,7 @@ Press `s` to open the sort menu. The status bar shows the available sub-keys:
 - `r`: toggle ascending/descending order
 - `esc`: cancel without changing the sort
 
-The current sort method is shown in the footer. When reverse order is active, a `^` indicator appears next to the method name. Sort preference is stored per workspace in local state and persists across restarts.
+The current sort method is shown in the footer. When sync is configured, the footer also shows the active sync profile and effective remote root for the current workspace. When reverse order is active, a `^` indicator appears next to the method name. Sort preference is stored per workspace in local state and persists across restarts.
 
 Sort methods can also be applied from the command palette ("Sort by Name", "Sort by Modified", "Sort by Created", "Sort by Size", "Reverse Sort Order").
 

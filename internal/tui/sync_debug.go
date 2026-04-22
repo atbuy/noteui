@@ -32,6 +32,8 @@ type syncDebugDetails struct {
 	NoteTitle         string
 	RelPath           string
 	NoteID            string
+	SyncProfile       string
+	SyncRemoteRoot    string
 	FriendlyTitle     string
 	FriendlySummary   string
 	SuggestedAction   string
@@ -124,7 +126,13 @@ func (m Model) syncDebugDetailsForNote(note notes.Note) (*syncDebugDetails, bool
 	if !ok {
 		return nil, false
 	}
-	return buildSyncDebugDetails(note.Title(), relPath, rec)
+	details, ok := buildSyncDebugDetails(note.Title(), relPath, rec)
+	if !ok {
+		return nil, false
+	}
+	details.SyncProfile = strings.TrimSpace(m.activeSyncProfileName)
+	details.SyncRemoteRoot = strings.TrimSpace(m.activeSyncRemoteRoot)
+	return details, true
 }
 
 func (m Model) syncDebugDetailsForRelPath(relPath string) (*syncDebugDetails, bool) {
@@ -136,7 +144,13 @@ func (m Model) syncDebugDetailsForRelPath(relPath string) (*syncDebugDetails, bo
 	if !ok {
 		return nil, false
 	}
-	return buildSyncDebugDetails("", relPath, rec)
+	details, ok := buildSyncDebugDetails("", relPath, rec)
+	if !ok {
+		return nil, false
+	}
+	details.SyncProfile = strings.TrimSpace(m.activeSyncProfileName)
+	details.SyncRemoteRoot = strings.TrimSpace(m.activeSyncRemoteRoot)
+	return details, true
 }
 
 func buildSyncDebugDetails(noteTitle, relPath string, rec notesync.NoteRecord) (*syncDebugDetails, bool) {
@@ -372,6 +386,12 @@ func renderSyncDebugMetadata(details *syncDebugDetails) string {
 		lines = append(lines, "- Note: `"+details.NoteTitle+"`")
 	}
 	lines = append(lines, "- Path: `"+details.RelPath+"`")
+	if details.SyncProfile != "" {
+		lines = append(lines, "- Sync profile: `"+details.SyncProfile+"`")
+	}
+	if details.SyncRemoteRoot != "" {
+		lines = append(lines, "- Remote root: `"+details.SyncRemoteRoot+"`")
+	}
 	if details.NoteID != "" {
 		lines = append(lines, "- Remote ID: `"+details.NoteID+"`")
 	}

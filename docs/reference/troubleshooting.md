@@ -165,7 +165,7 @@ If imports are skipped, check whether a local file already exists at the target 
 
 Previously healthy synced notes start green from their saved local sync record. If they turn red after startup, the background sync found a real problem.
 
-Press `ctrl+e` on the affected note to open the sync details modal. It shows the exact issue category, how long ago the note was last successfully synced, and a suggested recovery step. From the modal you can press `r` to retry the sync immediately, or `u` to unlink the note locally if you want to stop syncing that note.
+Press `ctrl+e` on the affected note to open the sync details modal. It shows the exact issue category, the active sync profile and effective remote root, how long ago the note was last successfully synced, and a suggested recovery step. From the modal you can press `r` to retry the sync immediately, or `u` to unlink the note locally if you want to stop syncing that note.
 
 If the issue is "Remote copy missing", sync again first. noteui now recreates the remote copy when the local synced note still exists and the remote copy is gone.
 

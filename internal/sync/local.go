@@ -69,6 +69,10 @@ func resolvedRemoteRoot(profile config.SyncProfile, localRoot, remoteRootOverrid
 	return override
 }
 
+func ResolvedRemoteRoot(profile config.SyncProfile, localRoot, remoteRootOverride string) string {
+	return resolvedRemoteRoot(profile, localRoot, remoteRootOverride)
+}
+
 func EnsureRootConfig(root string, cfg config.SyncConfig) (RootConfig, error) {
 	existing, err := LoadRootConfig(root)
 	if err == nil {

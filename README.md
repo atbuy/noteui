@@ -45,7 +45,7 @@ By default, `noteui`:
 
 - uses `$HOME/notes` as the notes root unless a workspace profile or `NOTES_ROOT` override is active
 - stores temporary notes under `.tmp` inside the notes root
-- opens notes with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`
+- opens notes with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`; editor variables may include command arguments such as `code -w`
 - stores local UI state under `$HOME/.local/state/noteui/state.json`
 
 ## Jump to

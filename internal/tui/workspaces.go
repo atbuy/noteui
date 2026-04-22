@@ -137,6 +137,7 @@ func (m *Model) loadCurrentWorkspaceState() {
 			}
 		}
 	}
+	m.refreshSyncBinding()
 }
 
 func (m *Model) resetWorkspaceTransientState() {

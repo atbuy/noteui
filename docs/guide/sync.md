@@ -339,7 +339,7 @@ A sync conflict means noteui kept your local note unchanged and wrote the remote
 Use this workflow:
 
 1. Select the conflicted synced note.
-2. Press `ctrl+e` to open the sync details modal, which shows both copies side-by-side and displays when the conflict occurred.
+2. Press `ctrl+e` to open the sync details modal, which shows both copies side-by-side, the active sync profile and remote root, and when the conflict occurred.
 3. Use `h`/`l` or left/right to choose which version to keep, then press `Enter` to apply.
 4. Alternatively, press `O` to open the conflict copy in your editor for manual merging.
 
@@ -357,6 +357,7 @@ If you prefer to inspect the file directly, the conflict copy is written beside 
 When a synced note turns red, press `ctrl+e` to open the sync details modal. It shows:
 
 - a plain-English description of the issue
+- the active sync profile and effective remote root for the current workspace
 - how long ago the note was last successfully synced
 - for conflicts: how long ago the conflict occurred
 - a suggested next step
