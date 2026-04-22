@@ -29,7 +29,7 @@ You need:
 
 - a noteui binary from the [releases page](https://github.com/atbuy/noteui/releases)
 - a terminal
-- optionally, an editor set through `NOTEUI_EDITOR` or `EDITOR`
+- optionally, an editor set through `NOTEUI_EDITOR` or `EDITOR`; these can include command arguments such as `code -w`
 
 ## Default locations
 
@@ -71,6 +71,13 @@ noteui
 If you are launching the extracted binary directly, run that binary instead.
 
 On first launch, you will usually see an empty notes tree until you create your first note.
+
+If you create or edit `config.toml` before that first launch, you can validate
+it without starting the full UI:
+
+```bash
+noteui +check-config
+```
 
 ## First useful actions
 

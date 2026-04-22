@@ -48,6 +48,12 @@ By default, `noteui`:
 - opens notes with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`; editor variables may include command arguments such as `code -w`
 - stores local UI state under `$HOME/.local/state/noteui/state.json`
 
+If you edit `config.toml`, you can validate it without opening the TUI:
+
+```sh
+noteui +check-config
+```
+
 ## Jump to
 
 - [Try it in 30 seconds](#try-it-in-30-seconds)
@@ -109,7 +115,7 @@ Recommended entry points:
 Notes are plain Markdown files. noteui adds no proprietary format - you can open, edit, and move them with any tool.
 
 - **Tree view**: categories are directories; collapse and expand with `h`/`l`
-- **Editor**: opens with your `$EDITOR`; noteui resumes after you close it
+- **Editor**: opens with `NOTEUI_EDITOR`, then `EDITOR`, then `nvim`; editor variables may include command arguments such as `code -w`
 - **Search**: `/` filters by title, path, content, and tags; `#tag` to narrow by tag
 - **Pins**: `p` pins any note or category; `P` jumps to the pinned items view
 - **Version history**: `H` opens a rollback modal with every saved revision
@@ -161,6 +167,7 @@ Options:
 Theme management:
   +themes               List all available themes with color previews
   +set-theme <name>     Switch the active theme without opening the UI
+  +check-config         Validate config file and report errors
 
 Environment variables:
   NOTES_ROOT            Override the default notes root directory

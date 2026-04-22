@@ -27,6 +27,7 @@ Today, in-app writes are intentionally narrow:
 
 - the theme picker and `noteui +set-theme` update only `theme.name`
 - the in-app sync profile picker updates only `sync.default_profile`
+- the in-app editor command `:set rnu` / `:set nornu` updates only `preview.relative_line_numbers`
 
 When noteui writes one of those values, it patches that key in place and preserves the rest of the file where possible instead of reformatting the whole config.
 

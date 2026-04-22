@@ -41,6 +41,12 @@ The value may be either a bare executable name such as `nvim` or a command
 string with arguments such as `code -w` or `hx --wait`. noteui splits the
 string into an executable plus arguments before appending the note path.
 
+Examples:
+
+- `NOTEUI_EDITOR="nvim"`
+- `NOTEUI_EDITOR="code -w"`
+- `EDITOR="emacsclient -c --alternate-editor=\"\""`
+
 This is not full shell execution. Shell aliases, shell functions, and other
 shell-only syntax are still not supported.
 

@@ -24,6 +24,7 @@ It helps you browse, search, preview, organize, and edit notes without moving th
 - Install noteui and, if needed, the sync helper (`noteui-sync`): [Installation](tutorial/installation.md)
 - Learn the core workflow: [Getting started](tutorial/getting-started.md)
 - Customize appearance, preview, and keys: [Configuration reference](reference/configuration.md)
+- Validate `config.toml` without opening the TUI: run `noteui +check-config`
 - Set up sync with SSH or WebDAV: [Sync guide](guide/sync.md)
 - Isolate multiple workspaces from each other over sync: [Per-workspace sync isolation](guide/sync.md#per-workspace-sync-isolation)
 - Browse and restore note versions: [Note version history](guide/usage.md#note-version-history)

@@ -36,6 +36,12 @@ They are moved to the user trash.
 
 If `NOTEUI_CONFIG` is not set, noteui looks in your user config directory under `noteui/config.toml`.
 
+To validate the file without opening the TUI, run:
+
+```sh
+noteui +check-config
+```
+
 ## Where is the WebDAV credential fallback file?
 
 If you use `secrets.toml`, noteui looks for it in your user config directory
@@ -56,6 +62,10 @@ $HOME/.local/state/noteui/state.json
 ## How do I change the editor used to open notes?
 
 Set `NOTEUI_EDITOR`, or fall back to `EDITOR`.
+
+Both variables may include command arguments such as `code -w` or
+`hx --wait`. noteui splits the command string and then appends the note path.
+Shell aliases and shell functions are still not supported.
 
 ## Can I keep using my own editor and sync tools?
 

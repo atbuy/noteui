@@ -51,6 +51,7 @@ Check:
 - that the specific key written from the UI is the one you expect:
   - theme picker / `noteui +set-theme`: `theme.name`
   - sync profile picker: `sync.default_profile`
+  - in-app editor `:set rnu` / `:set nornu`: `preview.relative_line_numbers`
 
 ## Sync does not start
 
