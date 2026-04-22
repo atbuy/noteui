@@ -15,6 +15,12 @@ import (
 	notesync "atbuy/noteui/internal/sync"
 )
 
+var (
+	openURLGOOS        = runtime.GOOS
+	openURLExecCommand = exec.Command
+	openURLStart       = startDetachedProcess
+)
+
 func refreshAllCmd(root string, sessionToken int) tea.Cmd {
 	return func() tea.Msg {
 		n, err := notes.Discover(root)
@@ -493,17 +499,29 @@ type openURLMsg struct {
 	err error
 }
 
+func buildOpenURLCommand(goos, url string) *exec.Cmd {
+	switch goos {
+	case "darwin":
+		return openURLExecCommand("open", url)
+	case "windows":
+		return openURLExecCommand("cmd", "/c", "start", "", url)
+	default:
+		return openURLExecCommand("xdg-open", url)
+	}
+}
+
+func startDetachedProcess(cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if cmd.Process == nil {
+		return nil
+	}
+	return cmd.Process.Release()
+}
+
 func openURLCmd(url string) tea.Cmd {
 	return func() tea.Msg {
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "darwin":
-			cmd = exec.Command("open", url)
-		case "windows":
-			cmd = exec.Command("cmd", "/c", "start", url)
-		default:
-			cmd = exec.Command("xdg-open", url)
-		}
-		return openURLMsg{url: url, err: cmd.Start()}
+		return openURLMsg{url: url, err: openURLStart(buildOpenURLCommand(openURLGOOS, url))}
 	}
 }
