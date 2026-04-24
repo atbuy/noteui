@@ -478,6 +478,12 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 			case "u":
 				return e, func() tea.Msg { return editorURLPromptMsg{} }
 			}
+		case 'z':
+			e.pendingPrefix = 0
+			if key == "z" {
+				e.centerCursor()
+				return e, nil
+			}
 		}
 		e.pendingPrefix = 0
 	}
@@ -529,6 +535,8 @@ func (e EditorModel) updateNormal(msg tea.KeyMsg) (EditorModel, tea.Cmd) {
 		e.moveBottom()
 	case "g":
 		e.pendingPrefix = 'g'
+	case "z":
+		e.pendingPrefix = 'z'
 	case "t":
 		e.pendingT = true
 	case "i":
@@ -1073,6 +1081,18 @@ func (e *EditorModel) moveBottom() {
 	e.col = clamp(e.col, 0, e.normalMaxCol(e.row))
 	e.preferCol = e.col
 	e.ensureVisible()
+}
+
+// centerCursor scrolls the view so the cursor line sits in the middle of the
+// visible area, matching Vim's `zz`.
+func (e *EditorModel) centerCursor() {
+	half := e.contentHeight / 2
+	if e.renderMode {
+		vStart := e.rowToVisualStart(e.row)
+		e.renderViewTop = max(0, vStart-half)
+		return
+	}
+	e.viewTop = max(0, e.row-half)
 }
 
 func (e *EditorModel) moveInsertLeft() {

@@ -89,7 +89,7 @@ The in-app editor shows the same rendered preview as the preview pane, with a cu
 - `e`: open the selected note in the in-app editor
 - `enter` / `o`: keep using the external editor path (unchanged)
 - `ctrl+f`: toggle full-screen mode on and off (overrides the TOML default for the session)
-- Normal mode supports `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`; `ctrl+left`/`ctrl+right` jump to the previous/next word start; `home`/`end` jump to the start/end of the line; prefix `j`/`k` with a count to jump multiple lines (e.g. `13j`, `8k`)
+- Normal mode supports `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`; `ctrl+left`/`ctrl+right` jump to the previous/next word start; `home`/`end` jump to the start/end of the line; prefix `j`/`k` with a count to jump multiple lines (e.g. `13j`, `8k`); `zz` scrolls the view so the cursor line is centered
 - `j`/`k` moves one source line at a time (list items, headings, code lines, and paragraph lines each get their own cursor stop)
 - Insert and open commands: `i`, `a`, `I`, `A`, `o`, `O`; pressing `i` on a line shows that line as raw markdown with a text cursor; all other lines stay rendered
 - Insert mode editing: `backspace` deletes the previous character; `ctrl+w` deletes backward to the previous word boundary

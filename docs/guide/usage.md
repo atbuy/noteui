@@ -142,6 +142,7 @@ The external editor path is unchanged:
 The in-app editor supports a focused vim-style subset:
 
 - motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`
+- view: `zz` centers the cursor line in the visible area
 - insert and open: `i`, `a`, `I`, `A`, `o`, `O`
 - insert mode editing: `backspace` deletes the previous character, `ctrl+w` deletes backward to the previous word boundary
 - edit operators: `d`, `c`, `y`, `x`, `dd`, `cc`, `yy`, `p`, `P`

@@ -79,6 +79,69 @@ func TestEditorModelCtrlWDeletesPreviousWordInInsertMode(t *testing.T) {
 	require.True(t, e.dirty)
 }
 
+func TestEditorModelZZCentersCursorInRawMode(t *testing.T) {
+	body := ""
+	for i := 0; i < 40; i++ {
+		if i > 0 {
+			body += "\n"
+		}
+		body += "line"
+	}
+	e := NewEditorModel("", "note.txt", "", body, 80, 14, false, "", false)
+	e.renderMode = false
+	e.row = 20
+	e.preferCol = 0
+	e.col = 0
+	e.viewTop = 0
+
+	var cmd tea.Cmd
+	e, cmd = updateEditorModel(e, keyMsg("z"))
+	require.Nil(t, cmd)
+	require.Equal(t, rune('z'), e.pendingPrefix)
+
+	e, cmd = updateEditorModel(e, keyMsg("z"))
+	require.Nil(t, cmd)
+	require.Equal(t, rune(0), e.pendingPrefix)
+	require.Equal(t, 20, e.row)
+	require.Equal(t, e.row-e.contentHeight/2, e.viewTop)
+	require.GreaterOrEqual(t, e.row, e.viewTop)
+	require.Less(t, e.row, e.viewTop+e.contentHeight)
+}
+
+func TestEditorModelZZClampsAtTop(t *testing.T) {
+	e := NewEditorModel("", "note.txt", "", "a\nb\nc\nd\ne", 80, 14, false, "", false)
+	e.renderMode = false
+	e.row = 0
+	e.viewTop = 0
+
+	e, _ = updateEditorModel(e, keyMsg("z"))
+	e, _ = updateEditorModel(e, keyMsg("z"))
+
+	require.Equal(t, 0, e.viewTop)
+}
+
+func TestEditorModelZZCentersInRenderMode(t *testing.T) {
+	body := ""
+	for i := 0; i < 30; i++ {
+		if i > 0 {
+			body += "\n\n"
+		}
+		body += "paragraph line"
+	}
+	e := NewEditorModel("", "note.md", "", body, 80, 14, false, "", false)
+	if !e.renderMode || e.renderedDoc == nil {
+		t.Skip("rendered doc unavailable")
+	}
+	e.row = 30
+	e.renderViewTop = 0
+
+	e, _ = updateEditorModel(e, keyMsg("z"))
+	e, _ = updateEditorModel(e, keyMsg("z"))
+
+	vStart := e.rowToVisualStart(30)
+	require.Equal(t, max(0, vStart-e.contentHeight/2), e.renderViewTop)
+}
+
 func TestEditorModelCtrlWDeletesPreviousWordAndWhitespace(t *testing.T) {
 	e := NewEditorModel("", "note.md", "", "one   two", 80, 24, false, "", false)
 	e.markLoaded(editorHashContent(e.Content()), time.Now())
