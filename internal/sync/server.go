@@ -325,6 +325,7 @@ func titleFromContent(relPath, content string) string {
 }
 
 func remoteMetaPath(root, noteID string) string { return filepath.Join(root, "notes", noteID+".json") }
+
 func remoteContentPath(root, noteID string) string {
 	return filepath.Join(root, "content", noteID+".note")
 }

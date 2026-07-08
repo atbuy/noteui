@@ -87,6 +87,15 @@ func loadForMutation(path string) Config {
 		return cfg
 	}
 	_, _ = toml.Decode(string(data), &cfg)
+
+	includes, _ := resolveIncludes(path, cfg.Meta.Includes)
+	for _, includePath := range includes {
+		includeData, err := os.ReadFile(includePath)
+		if err != nil {
+			continue
+		}
+		_, _ = toml.Decode(string(includeData), &cfg)
+	}
 	return cfg
 }
 
@@ -169,7 +178,8 @@ func appendBoolSection(lines []string, section, key string, value bool, newline 
 	if value {
 		val = "true"
 	}
-	lines = append(lines,
+	lines = append(
+		lines,
 		"["+section+"]"+newline,
 		key+" = "+val+newline,
 	)
@@ -362,7 +372,8 @@ func appendSection(lines []string, section, key, value, newline string) []string
 			lines = append(lines, newline)
 		}
 	}
-	lines = append(lines,
+	lines = append(
+		lines,
 		"["+section+"]"+newline,
 		buildKeyLine("", key, value, "", newline),
 	)

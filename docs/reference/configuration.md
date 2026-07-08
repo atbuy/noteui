@@ -19,6 +19,33 @@ from the config file, and `NOTEUI_CONFIG` does not change its location. See
 [Environment variables](environment.md#webdav-credential-fallback-file) for the
 full lookup and file-format rules.
 
+## Splitting the config across files
+
+`config.toml` can pull in additional TOML files through the `[meta]` table:
+
+```toml
+[meta]
+includes = ["local.toml"]
+```
+
+Each entry is a path to another TOML file that uses the same keys as `config.toml`:
+
+- absolute paths are used as-is
+- paths starting with `~/` expand to your home directory
+- relative paths resolve against the directory of the main config file; by default that is `noteui/` inside the user config directory, and if `NOTEUI_CONFIG` points somewhere else, relative includes move with it
+
+noteui reads the main file first, then each include in the order it appears in `includes`. When the same key is set in more than one file, the last file to set it wins. Named tables such as `[workspaces.<name>]` and `[sync.profiles.<name>]` accumulate entries across files, so the main file and an include can each contribute their own workspaces and sync profiles.
+
+Rules and behavior:
+
+- A missing include file is a startup warning, not an error. A shared `config.toml` stays usable on a machine where the private include does not exist yet.
+- Duplicate and empty `includes` entries are skipped with a warning.
+- Only the main config file may contain `[meta]`. An included file with its own `[meta]` table is rejected, so includes cannot include further files.
+- Validation runs on the merged result, so a key in one file may reference something defined in another. Keep `sync.default_profile` in the same file as the profiles it names; otherwise the config fails validation on machines missing that include.
+- Errors in an included file (invalid TOML, unknown keys) are reported with that file's path.
+
+The common use is keeping private settings out of a shared dotfiles repo: commit `config.toml`, list a gitignored `local.toml` in `includes`, and keep `[sync]` profiles and private workspace roots there. See [Split config for dotfiles](../advanced/power-user-workflows.md#split-config-for-dotfiles) for a full walkthrough. `noteui +check-config` validates the merged result and prints include warnings.
+
 ## What noteui writes back
 
 Defaults live in code. noteui does not rewrite your `config.toml` with every default value.
@@ -30,6 +57,8 @@ Today, in-app writes are intentionally narrow:
 - the in-app editor command `:set rnu` / `:set nornu` updates only `preview.relative_line_numbers`
 
 When noteui writes one of those values, it patches that key in place and preserves the rest of the file where possible instead of reformatting the whole config.
+
+In-app writes always target the main `config.toml`, never included files. If an included file sets the same key, the include wins on the next launch and shadows the value noteui wrote. If you use these in-app features, avoid duplicating `theme.name`, `sync.default_profile`, or `preview.relative_line_numbers` into included files.
 
 ## Minimal example
 
@@ -146,6 +175,7 @@ sync_import = ["I"]
 - `dashboard`
 - `default_workspace`
 - `workspaces`
+- `meta`
 - `theme`
 - `typography`
 - `icons`
@@ -220,6 +250,19 @@ sync_remote_root = "/srv/noteui/personal"
 When `sync_remote_root` is set, the workspace picker shows it as a third line under the root path so you can confirm the mapping before switching.
 
 Workspace switching is available from the command palette when multiple workspaces are configured. Local UI state such as pins, collapsed folders, recent commands, and sort preference is stored separately per workspace.
+
+## `meta`
+
+Type: table
+
+Controls how the configuration itself is loaded. The only key is `includes`, a list of extra TOML files merged over the main config file. See [Splitting the config across files](#splitting-the-config-across-files) for resolution and precedence rules.
+
+```toml
+[meta]
+includes = ["local.toml", "~/dotfiles/noteui/keys.toml"]
+```
+
+`[meta]` is only allowed in the main config file, not in included files.
 
 ## `theme`
 

@@ -33,6 +33,51 @@ If you use noteui heavily in terminals, the preview section of the config is wor
 
 If you are already deeply used to Vim-style or other terminal workflows, remap noteui’s keys in the config so your most common actions fit your existing muscle memory.
 
+## Split config for dotfiles
+
+If you track your config in a dotfiles repo, you probably do not want your SSH hosts, remote paths, and private workspace roots in it. Split the config with `[meta] includes`: commit the shared part, keep the private part in a local file that never leaves the machine.
+
+Committed `~/.config/noteui/config.toml`:
+
+```toml
+dashboard = true
+
+[meta]
+includes = ["local.toml"]
+
+[theme]
+name = "nord"
+
+[preview]
+style = "auto"
+```
+
+Gitignored `~/.config/noteui/local.toml`:
+
+```toml
+default_workspace = "personal"
+
+[workspaces.personal]
+root = "/home/alice/notes"
+
+[sync]
+default_profile = "homebox"
+
+[sync.profiles.homebox]
+ssh_host = "notes-prod"
+remote_root = "/srv/noteui"
+remote_bin = "/usr/local/bin/noteui-sync"
+```
+
+The include is merged over the main file, and named tables accumulate, so both files can define workspaces and sync profiles. On a fresh machine where `local.toml` does not exist yet, noteui starts with a warning instead of failing. Keep `sync.default_profile` next to the profiles it names so a machine without the include still validates.
+
+Two related points:
+
+- actual credential values (WebDAV passwords, tokens) do not belong in either file; use environment variables or `secrets.toml`, see [Environment variables](../reference/environment.md#webdav-credential-fallback-file)
+- the theme picker and sync profile picker write to the main `config.toml` only, so do not duplicate `theme.name` or `sync.default_profile` into the include if you use those pickers
+
+Full resolution and precedence rules are in the [configuration reference](../reference/configuration.md#splitting-the-config-across-files). Run `noteui +check-config` to verify the merged result.
+
 ## Use note history as a safety net
 
 noteui automatically saves versions of every note as you edit them. If you ever need to recover an earlier draft or undo a destructive change:

@@ -54,6 +54,8 @@ If you edit `config.toml`, you can validate it without opening the TUI:
 noteui +check-config
 ```
 
+The config can also be split across files with `[meta] includes`, for example to keep private `[sync]` settings out of a shared dotfiles repo. See [docs/reference/configuration.md](docs/reference/configuration.md#splitting-the-config-across-files).
+
 ## Jump to
 
 - [Try it in 30 seconds](#try-it-in-30-seconds)

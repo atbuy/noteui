@@ -53,6 +53,15 @@ Check:
   - sync profile picker: `sync.default_profile`
   - in-app editor `:set rnu` / `:set nornu`: `preview.relative_line_numbers`
 
+If you split your config with `[meta] includes`, also check:
+
+- `noteui +check-config` output: a skipped include shows up as a warning with the resolved path
+- relative include paths resolve against the directory of the main config file, not the current directory
+- a later file wins when two files set the same key, so a value in an included file overrides the main file, including keys the UI writes such as `theme.name` and `sync.default_profile`
+- included files must not contain `[meta]`; nesting includes is an error
+
+See [Splitting the config across files](configuration.md#splitting-the-config-across-files).
+
 ## Sync does not start
 
 Sync remains disabled when `sync.default_profile` is empty.

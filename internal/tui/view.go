@@ -415,7 +415,8 @@ func (m Model) renderDashboardView() string {
 	if workspace := strings.TrimSpace(m.activeWorkspaceDisplay()); workspace != "" {
 		summaryLines = append(summaryLines, dashboardSummaryLine("Active:", workspace, innerWidth))
 	}
-	summaryLines = append(summaryLines,
+	summaryLines = append(
+		summaryLines,
 		dashboardSummaryLine("Notes:", fmt.Sprintf("%d", len(m.notes)), innerWidth),
 		dashboardSummaryLine("Temporary:", fmt.Sprintf("%d", len(m.tempNotes)), innerWidth),
 		dashboardSummaryLine(
@@ -1098,7 +1099,8 @@ func (m Model) renderStatus() string {
 	if syncBinding := m.renderSyncBindingSegment(); syncBinding != "" {
 		parts = append(parts, syncBinding)
 	}
-	parts = append(parts,
+	parts = append(
+		parts,
 		m.renderFocusSegment(),
 		m.renderSelectionSegment(),
 		m.renderPrivacySegment(),

@@ -20,6 +20,7 @@ type Config struct {
 	Dashboard        bool                       `toml:"dashboard"`
 	DefaultWorkspace string                     `toml:"default_workspace"`
 	Workspaces       map[string]WorkspaceConfig `toml:"workspaces"`
+	Meta             MetaConfig                 `toml:"meta"`
 	Theme            ThemeConfig                `toml:"theme"`
 	Typography       TypographyConfig           `toml:"typography"`
 	Icons            IconsConfig                `toml:"icons"`
@@ -29,6 +30,17 @@ type Config struct {
 	Keys             KeysConfig                 `toml:"keys"`
 	Sync             SyncConfig                 `toml:"sync"`
 	DailyNotes       DailyNotesConfig           `toml:"daily_notes"`
+
+	loadWarnings []string
+}
+
+// MetaConfig controls how the configuration itself is loaded. Includes lists
+// extra TOML files merged over the main config file in order: absolute paths
+// and ~/ paths are used as-is, relative paths resolve against the directory
+// of the main config file. Later files win on scalar keys; table maps such as
+// workspaces and sync profiles accumulate entries.
+type MetaConfig struct {
+	Includes []string `toml:"includes"`
 }
 
 type EditorConfig struct {
@@ -287,38 +299,40 @@ func Default() Config {
 func Load() (Config, error) {
 	cfg := Default()
 
-	path := os.Getenv("NOTEUI_CONFIG")
-	if strings.TrimSpace(path) == "" {
-		userCfgDir, err := os.UserConfigDir()
-		if err != nil {
-			return cfg, err
-		}
-		path = filepath.Join(userCfgDir, "noteui", "config.toml")
+	path, err := ResolvePath()
+	if err != nil {
+		return cfg, err
 	}
 
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
 		return cfg, nil
 	} else if err != nil {
 		return cfg, err
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return cfg, err
+	if err := decodeConfigInto(&cfg, data, path, false); err != nil {
+		return salvageConfig(nil, data), err
 	}
 
-	md, err := toml.Decode(string(data), &cfg)
-	if err != nil {
-		return decodeValidPrefixConfig(data), fmt.Errorf("config parse error: %w", err)
-	}
-
-	if undecoded := md.Undecoded(); len(undecoded) > 0 {
-		keys := make([]string, 0, len(undecoded))
-		for _, k := range undecoded {
-			keys = append(keys, k.String())
+	includes, warnings := resolveIncludes(path, cfg.Meta.Includes)
+	cfg.loadWarnings = warnings
+	merged := [][]byte{data}
+	for _, includePath := range includes {
+		includeData, err := os.ReadFile(includePath)
+		if errors.Is(err, os.ErrNotExist) {
+			cfg.loadWarnings = append(cfg.loadWarnings, fmt.Sprintf("config include %q not found; skipping", includePath))
+			continue
+		} else if err != nil {
+			return cfg, fmt.Errorf("config include %q: %w", includePath, err)
 		}
-		sort.Strings(keys)
-		return cfg, fmt.Errorf("unknown config key(s): %s", strings.Join(keys, ", "))
+
+		if err := decodeConfigInto(&cfg, includeData, includePath, true); err != nil {
+			salvaged := salvageConfig(merged, includeData)
+			salvaged.loadWarnings = cfg.loadWarnings
+			return salvaged, err
+		}
+		merged = append(merged, includeData)
 	}
 
 	if err := Validate(cfg); err != nil {
@@ -328,8 +342,82 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-func decodeValidPrefixConfig(raw []byte) Config {
-	best := Default()
+func decodeConfigInto(cfg *Config, data []byte, path string, isInclude bool) error {
+	md, err := toml.Decode(string(data), cfg)
+	if err != nil {
+		return fmt.Errorf("config parse error in %s: %w", path, err)
+	}
+
+	if isInclude && md.IsDefined("meta") {
+		return fmt.Errorf("config include %q must not contain [meta]; included files cannot include other files", path)
+	}
+
+	if undecoded := md.Undecoded(); len(undecoded) > 0 {
+		keys := make([]string, 0, len(undecoded))
+		for _, k := range undecoded {
+			keys = append(keys, k.String())
+		}
+		sort.Strings(keys)
+		return fmt.Errorf("unknown config key(s) in %s: %s", path, strings.Join(keys, ", "))
+	}
+
+	return nil
+}
+
+func resolveIncludes(mainPath string, includes []string) (paths, warnings []string) {
+	baseDir := filepath.Dir(mainPath)
+	seen := make(map[string]bool, len(includes))
+	for _, entry := range includes {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			warnings = append(warnings, "config include entry is empty; skipping")
+			continue
+		}
+		resolved, err := resolveIncludePath(baseDir, entry)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("config include %q: %v; skipping", entry, err))
+			continue
+		}
+		if seen[resolved] {
+			warnings = append(warnings, fmt.Sprintf("config include %q listed more than once; skipping duplicate", entry))
+			continue
+		}
+		seen[resolved] = true
+		paths = append(paths, resolved)
+	}
+	return paths, warnings
+}
+
+func resolveIncludePath(baseDir, entry string) (string, error) {
+	if entry == "~" || strings.HasPrefix(entry, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot expand ~: %w", err)
+		}
+		return filepath.Clean(filepath.Join(home, strings.TrimPrefix(entry, "~"))), nil
+	}
+	if filepath.IsAbs(entry) {
+		return filepath.Clean(entry), nil
+	}
+	return filepath.Clean(filepath.Join(baseDir, entry)), nil
+}
+
+// salvageConfig rebuilds the best-effort config after a decode failure: the
+// already merged files replayed over defaults, plus the longest valid prefix
+// of the failing file.
+func salvageConfig(merged [][]byte, failing []byte) Config {
+	base := func() Config {
+		cfg := Default()
+		for _, data := range merged {
+			_, _ = toml.Decode(string(data), &cfg)
+		}
+		return cfg
+	}
+	return decodeValidPrefixConfig(failing, base)
+}
+
+func decodeValidPrefixConfig(raw []byte, base func() Config) Config {
+	best := base()
 	lines := strings.SplitAfter(string(raw), "\n")
 	if len(lines) == 0 {
 		return best
@@ -339,7 +427,7 @@ func decodeValidPrefixConfig(raw []byte) Config {
 	for _, line := range lines {
 		prefix.WriteString(line)
 
-		cfg := Default()
+		cfg := base()
 		if _, err := toml.Decode(prefix.String(), &cfg); err == nil {
 			best = cfg
 		}
@@ -425,6 +513,7 @@ func Validate(cfg Config) error {
 // should print these to stderr on startup.
 func Warnings(cfg Config) []string {
 	var out []string
+	out = append(out, cfg.loadWarnings...)
 	for name, profile := range cfg.Sync.Profiles {
 		out = append(out, syncProfileWarnings(name, profile)...)
 	}

@@ -147,7 +147,8 @@ func printThemes(w io.Writer) {
 		p("\n")
 	}
 
-	p("%s  %s\n",
+	p(
+		"%s  %s\n",
 		accent.Render("Tip:"),
 		muted.Render("noteui +set-theme <name>   switch theme without editing config.toml"),
 	)
@@ -234,7 +235,8 @@ func printThemeChanged(w io.Writer, oldName, newName, configPath string, newPale
 	p := func(format string, args ...any) { _, _ = fmt.Fprintf(&sb, format, args...) }
 
 	p("%s\n", bold.Render("Theme switched"))
-	p("%s  %s  %s  %s\n",
+	p(
+		"%s  %s  %s  %s\n",
 		muted.Render(oldName),
 		subtle.Render("→"),
 		newAccent.Render(newName),

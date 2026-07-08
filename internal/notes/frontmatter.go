@@ -16,16 +16,20 @@ const (
 
 func ParseFrontMatter(raw string) (FrontMatter, string, error) { return meta.ParseFrontMatter(raw) }
 func FrontMatterBool(fm FrontMatter, key string) bool          { return meta.FrontMatterBool(fm, key) }
-func FrontMatterString(fm FrontMatter, key string) string      { return meta.FrontMatterString(fm, key) }
-func ParseSyncClass(fm FrontMatter) string                     { return meta.ParseSyncClass(fm) }
-func NoteIsEncrypted(raw string) bool                          { return meta.NoteIsEncrypted(raw) }
-func NoteIsPrivate(raw string) bool                            { return meta.NoteIsPrivate(raw) }
-func StripFrontMatter(raw string) string                       { return meta.StripFrontMatter(raw) }
-func ParseTags(fm FrontMatter) []string                        { return meta.ParseTags(fm) }
-func AddTagsToNote(path string, tags []string) error           { return meta.AddTagsToNote(path, tags) }
-func RemoveTagsFromNote(path string, tags []string) error      { return meta.RemoveTagsFromNote(path, tags) }
-func SetNoteSyncClass(path, syncClass string) error            { return meta.SetNoteSyncClass(path, syncClass) }
-func ToggleNoteSyncClass(path string) (string, error)          { return meta.ToggleNoteSyncClass(path) }
+
+func FrontMatterString(fm FrontMatter, key string) string { return meta.FrontMatterString(fm, key) }
+func ParseSyncClass(fm FrontMatter) string                { return meta.ParseSyncClass(fm) }
+func NoteIsEncrypted(raw string) bool                     { return meta.NoteIsEncrypted(raw) }
+func NoteIsPrivate(raw string) bool                       { return meta.NoteIsPrivate(raw) }
+func StripFrontMatter(raw string) string                  { return meta.StripFrontMatter(raw) }
+func ParseTags(fm FrontMatter) []string                   { return meta.ParseTags(fm) }
+func AddTagsToNote(path string, tags []string) error      { return meta.AddTagsToNote(path, tags) }
+
+func RemoveTagsFromNote(path string, tags []string) error { return meta.RemoveTagsFromNote(path, tags) }
+
+func SetNoteSyncClass(path, syncClass string) error { return meta.SetNoteSyncClass(path, syncClass) }
+
+func ToggleNoteSyncClass(path string) (string, error) { return meta.ToggleNoteSyncClass(path) }
 
 func mergeTags(existing, incoming []string) []string {
 	out := make([]string, 0, len(existing)+len(incoming))

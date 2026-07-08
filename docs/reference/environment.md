@@ -33,6 +33,12 @@ This only changes `config.toml` lookup. It does not move the WebDAV credential
 fallback file; that still lives under `noteui/secrets.toml` inside the user
 config directory.
 
+Relative paths in `[meta] includes` resolve against the directory of the main
+config file, so they follow `NOTEUI_CONFIG`: point it at
+`/tmp/test/config.toml` and an include of `local.toml` is read from
+`/tmp/test/local.toml`. See
+[Splitting the config across files](configuration.md#splitting-the-config-across-files).
+
 ## `NOTEUI_EDITOR`
 
 Overrides the editor used to open notes.

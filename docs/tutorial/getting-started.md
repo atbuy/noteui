@@ -79,6 +79,11 @@ it without starting the full UI:
 noteui +check-config
 ```
 
+The config can stay a single file, or be split into several with
+`[meta] includes`, for example to keep sync settings out of a shared dotfiles
+repo. See
+[Splitting the config across files](../reference/configuration.md#splitting-the-config-across-files).
+
 ## First useful actions
 
 Start with these keys:

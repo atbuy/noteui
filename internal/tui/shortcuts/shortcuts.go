@@ -287,7 +287,8 @@ func ValidateCollisions(m Map) []string {
 			collisions = append(collisions, fmt.Sprintf("key %q is bound to multiple actions: %s", k, strings.Join(names, ", ")))
 		}
 	}
-	collisions = append(collisions,
+	collisions = append(
+		collisions,
 		validateSequenceFamily(
 			"sort menu key",
 			[]namedBinding{
@@ -299,7 +300,8 @@ func ValidateCollisions(m Map) []string {
 			},
 		)...,
 	)
-	collisions = append(collisions,
+	collisions = append(
+		collisions,
 		validateSequenceFamily(
 			"preview bracket chord second key",
 			[]namedBinding{
@@ -309,7 +311,8 @@ func ValidateCollisions(m Map) []string {
 			},
 		)...,
 	)
-	collisions = append(collisions,
+	collisions = append(
+		collisions,
 		validateSequenceFamily(
 			"todo chord second key",
 			[]namedBinding{

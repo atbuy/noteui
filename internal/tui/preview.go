@@ -216,7 +216,8 @@ func (m *Model) refreshPreview() {
 		if m.hasRemoteOnlyPathDuplicate(item.RemoteNote.RelPath) {
 			lines = append(lines, "- Remote ID: `"+item.RemoteNote.ID+"`")
 		}
-		lines = append(lines,
+		lines = append(
+			lines,
 			"",
 			"Press `i` to import this note or `I` to import all missing synced notes.",
 		)

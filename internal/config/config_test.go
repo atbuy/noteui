@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -111,7 +112,7 @@ func TestLoadReturnsDefaultWhenConfigMissing(t *testing.T) {
 
 	cfg, err := Load()
 	require.NoError(t, err)
-	require.Empty(t, cmp.Diff(Default(), cfg))
+	require.Empty(t, cmp.Diff(Default(), cfg, cmp.AllowUnexported(Config{})))
 }
 
 func TestLoadAppliesOverridesFromConfigFile(t *testing.T) {
@@ -390,7 +391,7 @@ func TestLoadPreservesDecodedValuesOnUnknownKeys(t *testing.T) {
 
 	cfg, err := Load()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unknown config key(s): theme.unexpected")
+	require.Contains(t, err.Error(), "unknown config key(s) in "+path+": theme.unexpected")
 	require.Equal(t, "nord", cfg.Theme.Name)
 }
 
@@ -415,6 +416,348 @@ func TestLoadPreservesDecodedValuesOnValidationError(t *testing.T) {
 	require.False(t, cfg.Dashboard)
 	require.Equal(t, "nord", cfg.Theme.Name)
 	require.Equal(t, "sepia", cfg.Preview.Style)
+}
+
+func writeTOML(t *testing.T, path string, lines ...string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o644))
+}
+
+func TestLoadMergesIncludedFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"dashboard = false",
+		"",
+		"[meta]",
+		`includes = ["private.toml"]`,
+		"",
+		"[theme]",
+		`name = "nord"`,
+		"",
+		"[workspaces.work]",
+		`root = "/tmp/work"`,
+		"",
+		"[sync.profiles.public]",
+		`ssh_host = "public-host"`,
+		`remote_root = "/srv/notes"`,
+		`remote_bin = "/usr/local/bin/noteui-sync"`,
+	)
+	writeTOML(
+		t, filepath.Join(dir, "private.toml"),
+		"[theme]",
+		`name = "dracula"`,
+		"",
+		"[workspaces.home]",
+		`root = "/tmp/home"`,
+		"",
+		"[sync]",
+		`default_profile = "private"`,
+		"",
+		"[sync.profiles.private]",
+		`ssh_host = "10.0.0.5"`,
+		`remote_root = "/home/user/notes"`,
+		`remote_bin = "/usr/local/bin/noteui-sync"`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.False(t, cfg.Dashboard)
+	require.Equal(t, "dracula", cfg.Theme.Name)
+	require.Len(t, cfg.Workspaces, 2)
+	require.Equal(t, "/tmp/work", cfg.Workspaces["work"].Root)
+	require.Equal(t, "/tmp/home", cfg.Workspaces["home"].Root)
+	require.Len(t, cfg.Sync.Profiles, 2)
+	require.Equal(t, "public-host", cfg.Sync.Profiles["public"].SSHHost)
+	require.Equal(t, "10.0.0.5", cfg.Sync.Profiles["private"].SSHHost)
+	require.Equal(t, "private", cfg.Sync.DefaultProfile)
+	require.Empty(t, Warnings(cfg))
+}
+
+func TestLoadIncludeOrderLastWins(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["a.toml", "b.toml"]`,
+		"",
+		"[preview]",
+		"mouse_scroll_step = 5",
+	)
+	writeTOML(
+		t, filepath.Join(dir, "a.toml"),
+		"dashboard = false",
+		"",
+		"[preview]",
+		"mouse_scroll_step = 7",
+	)
+	writeTOML(
+		t, filepath.Join(dir, "b.toml"),
+		"[preview]",
+		"mouse_scroll_step = 9",
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, 9, cfg.Preview.MouseScrollStep)
+	require.False(t, cfg.Dashboard)
+}
+
+func TestLoadIncludeResolvesSubdirAndAbsolutePaths(t *testing.T) {
+	dir := t.TempDir()
+	other := t.TempDir()
+	absInclude := filepath.Join(other, "abs.toml")
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["sub/extra.toml", `+strconv.Quote(absInclude)+`]`,
+	)
+	writeTOML(
+		t, filepath.Join(dir, "sub", "extra.toml"),
+		"[icons]",
+		`note = "x"`,
+	)
+	writeTOML(
+		t, absInclude,
+		"[preview]",
+		"line_numbers = false",
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "x", cfg.Icons.Note)
+	require.False(t, cfg.Preview.LineNumbers)
+}
+
+func TestLoadIncludeExpandsTilde(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeTOML(
+		t, filepath.Join(home, "noteui-extra.toml"),
+		"dashboard = false",
+	)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["~/noteui-extra.toml"]`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.False(t, cfg.Dashboard)
+}
+
+func TestLoadMissingIncludeWarnsAndContinues(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["missing.toml"]`,
+		"",
+		"[theme]",
+		`name = "nord"`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "nord", cfg.Theme.Name)
+
+	warnings := Warnings(cfg)
+	require.Len(t, warnings, 1)
+	require.Contains(t, warnings[0], filepath.Join(dir, "missing.toml"))
+	require.Contains(t, warnings[0], "not found")
+}
+
+func TestLoadDuplicateAndEmptyIncludeEntriesWarn(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["extra.toml", "extra.toml", ""]`,
+	)
+	writeTOML(
+		t, filepath.Join(dir, "extra.toml"),
+		"dashboard = false",
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.False(t, cfg.Dashboard)
+
+	warnings := Warnings(cfg)
+	require.Len(t, warnings, 2)
+	require.Contains(t, warnings[0], "listed more than once")
+	require.Contains(t, warnings[1], "empty")
+}
+
+func TestLoadRejectsMetaInsideInclude(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	includePath := filepath.Join(dir, "extra.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["extra.toml"]`,
+	)
+	writeTOML(
+		t, includePath,
+		"[meta]",
+		`includes = ["nested.toml"]`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	_, err := Load()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), includePath)
+	require.Contains(t, err.Error(), "must not contain [meta]")
+}
+
+func TestLoadIncludeUnknownKeyNamesFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	includePath := filepath.Join(dir, "extra.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["extra.toml"]`,
+	)
+	writeTOML(
+		t, includePath,
+		"[theme]",
+		`unexpected = "value"`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	_, err := Load()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unknown config key(s) in "+includePath+": theme.unexpected")
+}
+
+func TestLoadIncludeParseErrorSalvagesMergedConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	includePath := filepath.Join(dir, "extra.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["extra.toml"]`,
+		"",
+		"[theme]",
+		`name = "nord"`,
+	)
+	writeTOML(
+		t, includePath,
+		"dashboard = false",
+		"",
+		"[preview",
+		`style = "light"`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "config parse error in "+includePath)
+	require.Equal(t, "nord", cfg.Theme.Name)
+	require.False(t, cfg.Dashboard)
+}
+
+func TestLoadValidatesMergedConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["private.toml"]`,
+		"",
+		"[sync]",
+		`default_profile = "home"`,
+	)
+	writeTOML(
+		t, filepath.Join(dir, "private.toml"),
+		"[sync.profiles.home]",
+		`ssh_host = "10.0.0.5"`,
+		`remote_root = "/srv/notes"`,
+		`remote_bin = "/usr/local/bin/noteui-sync"`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "home", cfg.Sync.DefaultProfile)
+	require.Contains(t, cfg.Sync.Profiles, "home")
+}
+
+func TestSaveDefaultSyncProfileSeesIncludedProfiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	includePath := filepath.Join(dir, "private.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["private.toml"]`,
+	)
+	includeContent := strings.Join([]string{
+		"[sync.profiles.home]",
+		`ssh_host = "10.0.0.5"`,
+		`remote_root = "/srv/notes"`,
+		`remote_bin = "/usr/local/bin/noteui-sync"`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(includePath, []byte(includeContent), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	cfg, writtenPath, err := SaveDefaultSyncProfile("home")
+	require.NoError(t, err)
+	require.Equal(t, path, writtenPath)
+	require.Equal(t, "home", cfg.Sync.DefaultProfile)
+	require.Contains(t, cfg.Sync.Profiles, "home")
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `default_profile = "home"`)
+
+	rawInclude, err := os.ReadFile(includePath)
+	require.NoError(t, err)
+	require.Equal(t, includeContent, string(rawInclude))
+}
+
+func TestSaveThemeReturnsOldNameFromInclude(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	writeTOML(
+		t, path,
+		"[meta]",
+		`includes = ["private.toml"]`,
+	)
+	writeTOML(
+		t, filepath.Join(dir, "private.toml"),
+		"[theme]",
+		`name = "nord"`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	oldName, writtenPath, err := SaveTheme("dracula")
+	require.NoError(t, err)
+	require.Equal(t, "nord", oldName)
+	require.Equal(t, path, writtenPath)
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `name = "dracula"`)
 }
 
 func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {

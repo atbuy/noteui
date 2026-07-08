@@ -395,7 +395,8 @@ func renderSyncDebugMetadata(details *syncDebugDetails) string {
 	if details.NoteID != "" {
 		lines = append(lines, "- Remote ID: `"+details.NoteID+"`")
 	}
-	lines = append(lines,
+	lines = append(
+		lines,
 		"- Last attempt: "+formatRelativeTime(details.LastSyncAttemptAt)+" (`"+formatSyncTimestamp(details.LastSyncAttemptAt)+"`) ",
 		"- Last success: "+formatRelativeTime(details.LastSyncAt)+" (`"+formatSyncTimestamp(details.LastSyncAt)+"`)",
 	)

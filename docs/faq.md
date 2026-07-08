@@ -42,6 +42,21 @@ To validate the file without opening the TUI, run:
 noteui +check-config
 ```
 
+## Can I share my config but keep sync settings private?
+
+Yes. `config.toml` can include other TOML files:
+
+```toml
+[meta]
+includes = ["local.toml"]
+```
+
+Commit `config.toml` to your dotfiles and keep `[sync]` profiles and private
+workspace roots in a gitignored `local.toml` next to it. Included files are
+merged over the main file, and a missing include is only a startup warning, so
+the shared config still works on a machine without the private file. See
+[Splitting the config across files](reference/configuration.md#splitting-the-config-across-files).
+
 ## Where is the WebDAV credential fallback file?
 
 If you use `secrets.toml`, noteui looks for it in your user config directory

@@ -229,6 +229,7 @@ func TestWebDAVPullIndexRequiresConfiguredEnvValues(t *testing.T) {
 	srv := httptest.NewServer(store)
 	defer srv.Close()
 
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("NOTEUI_NEXTCLOUD_USERNAME", "")
 	t.Setenv("NOTEUI_NEXTCLOUD_PASSWORD", "")
 
@@ -925,7 +926,8 @@ func TestWebDAVErrorIncludesResponseBodySnippet(t *testing.T) {
 			"<?xml version=\"1.0\"?>\n" +
 				"<d:error xmlns:d=\"DAV:\">\n" +
 				"  <d:message>Strict cookie nc_session_id not found</d:message>\n" +
-				"</d:error>\n"))
+				"</d:error>\n",
+		))
 	})
 	srv := httptest.NewServer(handler)
 	defer srv.Close()

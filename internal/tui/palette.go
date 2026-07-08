@@ -524,7 +524,8 @@ func (m Model) paletteNoteScore(n notes.Note, query string) (int, bool) {
 	tagText := strings.Join(n.Tags, " ")
 	blob := strings.Join([]string{n.Title(), n.Name, n.RelPath, tagText, previewText}, " ")
 	matched := m.noteMatches(n, q)
-	score := paletteCompositeScore(q,
+	score := paletteCompositeScore(
+		q,
 		paletteSearchField{text: n.Title(), weight: 100},
 		paletteSearchField{text: n.RelPath, weight: 88},
 		paletteSearchField{text: n.Name, weight: 75},
@@ -550,7 +551,8 @@ func (m Model) paletteCommandScore(cmd paletteCommand, query string) (int, bool)
 		return 0, true
 	}
 	blob := strings.Join([]string{cmd.name, cmd.desc, cmd.category}, " ")
-	score := paletteCompositeScore(q,
+	score := paletteCompositeScore(
+		q,
 		paletteSearchField{text: cmd.name, weight: 100},
 		paletteSearchField{text: cmd.desc, weight: 72},
 		paletteSearchField{text: cmd.category, weight: 58},
