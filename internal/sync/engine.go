@@ -19,6 +19,39 @@ func isSyncedClass(syncClass string) bool {
 	return syncClass == notes.SyncClassSynced || syncClass == notes.SyncClassShared
 }
 
+// validRemoteRelPath validates an untrusted, remote-supplied note path and
+// returns it in cleaned slash form. It rejects empty paths, ".", absolute
+// paths, and any path that would escape the notes root via "..". A remote (a
+// malicious or compromised server, or another device sharing the remote)
+// controls both the rel_path and the note body, so an unchecked rel_path such
+// as "a/../../../.bashrc" would let a pull overwrite arbitrary files outside
+// the notes root.
+func validRemoteRelPath(relPath string) (string, bool) {
+	rel := strings.TrimSpace(filepath.ToSlash(relPath))
+	if rel == "" {
+		return "", false
+	}
+	if filepath.IsAbs(filepath.FromSlash(rel)) {
+		return "", false
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(rel)))
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return "", false
+	}
+	return cleaned, true
+}
+
+// safeJoin joins an untrusted remote relative path onto root, guaranteeing the
+// result stays within root. It is the required way to turn a remote-supplied
+// rel_path into a local filesystem path before reading or writing it.
+func safeJoin(root, relPath string) (string, error) {
+	cleaned, ok := validRemoteRelPath(relPath)
+	if !ok {
+		return "", fmt.Errorf("unsafe remote note path %q", relPath)
+	}
+	return filepath.Join(root, filepath.FromSlash(cleaned)), nil
+}
+
 func SyncRoot(ctx context.Context, root, remoteRootOverride string, cfg config.SyncConfig, localPinnedNotes []string, localPinnedCats []string, client Client) (SyncResult, error) {
 	var result SyncResult
 	if !HasSyncProfile(cfg) {
@@ -358,7 +391,10 @@ func applyRemoteNote(ctx context.Context, client Client, profile config.SyncProf
 	if err != nil {
 		return err
 	}
-	targetPath := filepath.Join(root, filepath.FromSlash(meta.RelPath))
+	targetPath, err := safeJoin(root, meta.RelPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
 		return err
 	}
@@ -366,8 +402,7 @@ func applyRemoteNote(ctx context.Context, client Client, profile config.SyncProf
 		return err
 	}
 	if filepath.ToSlash(rec.RelPath) != filepath.ToSlash(meta.RelPath) && strings.TrimSpace(rec.RelPath) != "" {
-		oldPath := filepath.Join(root, filepath.FromSlash(rec.RelPath))
-		if oldPath != targetPath {
+		if oldPath, err := safeJoin(root, rec.RelPath); err == nil && oldPath != targetPath {
 			_ = os.Remove(oldPath)
 		}
 	}
@@ -400,7 +435,10 @@ func createConflict(ctx context.Context, client Client, profile config.SyncProfi
 		ext = ".md"
 	}
 	conflictRelPath := fmt.Sprintf("%s.conflict-%s%s", base, time.Now().UTC().Format("20060102-150405"), ext)
-	conflictPath := filepath.Join(root, filepath.FromSlash(conflictRelPath))
+	conflictPath, err := safeJoin(root, conflictRelPath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(conflictPath), 0o755); err != nil {
 		return err
 	}
@@ -419,8 +457,14 @@ func createConflict(ctx context.Context, client Client, profile config.SyncProfi
 }
 
 func moveLocalFile(root, oldRelPath, newRelPath string) error {
-	oldPath := filepath.Join(root, filepath.FromSlash(oldRelPath))
-	newPath := filepath.Join(root, filepath.FromSlash(newRelPath))
+	oldPath, err := safeJoin(root, oldRelPath)
+	if err != nil {
+		return err
+	}
+	newPath, err := safeJoin(root, newRelPath)
+	if err != nil {
+		return err
+	}
 	if oldPath == newPath {
 		return nil
 	}

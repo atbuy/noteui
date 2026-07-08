@@ -21,13 +21,19 @@ func ResolveConflictKeepRemote(root string, rec NoteRecord) error {
 	if conflictRelPath == "" {
 		return errors.New("conflict copy path is missing")
 	}
-	conflictPath := filepath.Join(root, filepath.FromSlash(conflictRelPath))
+	conflictPath, err := safeJoin(root, conflictRelPath)
+	if err != nil {
+		return err
+	}
 	raw, err := os.ReadFile(conflictPath)
 	if err != nil {
 		return err
 	}
 
-	notePath := filepath.Join(root, filepath.FromSlash(strings.TrimSpace(rec.RelPath)))
+	notePath, err := safeJoin(root, strings.TrimSpace(rec.RelPath))
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(notePath), 0o755); err != nil {
 		return err
 	}
@@ -112,9 +118,10 @@ func ResolveConflictKeepLocal(ctx context.Context, root, notePath, remoteRootOve
 		return err
 	}
 	if conflictRelPath != "" {
-		conflictPath := filepath.Join(root, filepath.FromSlash(conflictRelPath))
-		if err := os.Remove(conflictPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+		if conflictPath, err := safeJoin(root, conflictRelPath); err == nil {
+			if err := os.Remove(conflictPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
 		}
 	}
 	return nil

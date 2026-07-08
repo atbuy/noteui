@@ -58,8 +58,8 @@ func importRemoteNotes(ctx context.Context, root, remoteRootOverride string, cfg
 			continue
 		}
 		foundTarget = true
-		relPath := filepath.ToSlash(strings.TrimSpace(meta.RelPath))
-		if relPath == "" || relPath == "." || strings.HasPrefix(relPath, "../") {
+		relPath, valid := validRemoteRelPath(meta.RelPath)
+		if !valid {
 			return result, fmt.Errorf("invalid remote note path: %q", meta.RelPath)
 		}
 
@@ -68,7 +68,10 @@ func importRemoteNotes(ctx context.Context, root, remoteRootOverride string, cfg
 			result.SkippedImports++
 			continue
 		}
-		targetPath := filepath.Join(root, filepath.FromSlash(importRelPath))
+		targetPath, err := safeJoin(root, importRelPath)
+		if err != nil {
+			return result, err
+		}
 		rec, hasRecord := records[meta.ID]
 		if hasRecord {
 			currentRelPath := filepath.ToSlash(strings.TrimSpace(rec.RelPath))

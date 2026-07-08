@@ -444,6 +444,12 @@ sync_remote_root = "/Notes/personal"
 
 The workspace picker displays the effective remote path under each workspace entry so you can confirm the isolation before switching.
 
+## Path safety during sync
+
+noteui treats every note path that arrives from a remote as untrusted. A note whose stored path would resolve outside your notes root (for example a path containing `..` segments) is refused rather than written, on both pull and import, and the SSH remote also refuses to register or update such a path. This keeps a misbehaving, misconfigured, or compromised server, or another device sharing the same remote, from writing files outside your notes root during a normal sync.
+
+If a sync stops with an error mentioning an "unsafe" or "invalid" remote note path, a note on the remote has a path that escapes the root. Fix or remove that note on the server, then sync again.
+
 ## How sync interacts with encrypted notes
 
 Encrypted notes can still be synced, but sync should be thought of as transport for the note file and sync metadata.
@@ -461,5 +467,6 @@ For the encryption workflow itself, see [Encrypted notes](../advanced/encryption
 - If SSH works manually but sync still fails, confirm the remote user can write to `remote_root`.
 - If notes appear as remote-only placeholders, import them with `i` or `I`.
 - If a note shows "Remote copy missing", sync again to recreate the remote copy. Use `ctrl+e` and then `u` only when you want to stop syncing that note and keep it local-only.
+- If sync fails with an "unsafe" or "invalid" remote note path, a note on the server has a path that escapes the notes root; fix or remove that note on the server. See [Path safety during sync](#path-safety-during-sync).
 
 For more debugging steps, see [Troubleshooting](../reference/troubleshooting.md).

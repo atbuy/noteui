@@ -52,8 +52,12 @@ func (Server) FetchNote(req FetchNoteRequest) (FetchNoteResponse, error) {
 }
 
 func (Server) RegisterNote(req RegisterNoteRequest) (RegisterNoteResponse, error) {
+	relPath, ok := validRemoteRelPath(req.RelPath)
+	if !ok {
+		return RegisterNoteResponse{}, &RPCError{Code: ErrCodeInvalid, Message: "invalid rel_path"}
+	}
 	id := "n_" + strings.ReplaceAll(NewClientID(), "client-", "")
-	note := remoteNoteFile{ID: id, RelPath: filepath.Clean(req.RelPath), Title: titleFromContent(req.RelPath, req.Content), Revision: 1, Encrypted: req.Encrypted}
+	note := remoteNoteFile{ID: id, RelPath: relPath, Title: titleFromContent(relPath, req.Content), Revision: 1, Encrypted: req.Encrypted}
 	if err := saveRemoteNote(req.RemoteRoot, note, req.Content); err != nil {
 		return RegisterNoteResponse{}, err
 	}
@@ -68,8 +72,12 @@ func (Server) PushNote(req PushNoteRequest) (PushNoteResponse, error) {
 	if strconv.Itoa(note.Revision) != strings.TrimSpace(req.ExpectedRevision) {
 		return PushNoteResponse{}, &RPCError{Code: ErrCodeConflict, Message: "revision mismatch"}
 	}
-	note.RelPath = filepath.Clean(req.RelPath)
-	note.Title = titleFromContent(req.RelPath, req.Content)
+	relPath, ok := validRemoteRelPath(req.RelPath)
+	if !ok {
+		return PushNoteResponse{}, &RPCError{Code: ErrCodeInvalid, Message: "invalid rel_path"}
+	}
+	note.RelPath = relPath
+	note.Title = titleFromContent(relPath, req.Content)
 	note.Revision++
 	note.Encrypted = req.Encrypted
 	if err := saveRemoteNote(req.RemoteRoot, note, req.Content); err != nil {
@@ -86,7 +94,11 @@ func (Server) UpdateNotePath(req UpdateNotePathRequest) (UpdateNotePathResponse,
 	if strconv.Itoa(note.Revision) != strings.TrimSpace(req.ExpectedRevision) {
 		return UpdateNotePathResponse{}, &RPCError{Code: ErrCodeConflict, Message: "revision mismatch"}
 	}
-	note.RelPath = filepath.Clean(req.RelPath)
+	relPath, ok := validRemoteRelPath(req.RelPath)
+	if !ok {
+		return UpdateNotePathResponse{}, &RPCError{Code: ErrCodeInvalid, Message: "invalid rel_path"}
+	}
+	note.RelPath = relPath
 	note.Revision++
 	content, err := os.ReadFile(remoteContentPath(req.RemoteRoot, req.NoteID))
 	if err != nil {
