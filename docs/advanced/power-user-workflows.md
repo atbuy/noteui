@@ -74,7 +74,7 @@ The include is merged over the main file, and named tables accumulate, so both f
 Two related points:
 
 - actual credential values (WebDAV passwords, tokens) do not belong in either file; use environment variables or `secrets.toml`, see [Environment variables](../reference/environment.md#webdav-credential-fallback-file)
-- the theme picker and sync profile picker write to the main `config.toml` only, so do not duplicate `theme.name` or `sync.default_profile` into the include if you use those pickers
+- in-app writes such as the theme picker and sync profile picker follow the key to the file that defines it, so if you keep `theme.name` or `sync.default_profile` in the include, noteui updates the include; if that include is committed, the change shows up there in git
 
 Full resolution and precedence rules are in the [configuration reference](../reference/configuration.md#splitting-the-config-across-files). Run `noteui +check-config` to verify the merged result.
 

@@ -50,10 +50,11 @@ func SaveTheme(name string) (oldName, configPath string, err error) {
 	if oldName == "" {
 		oldName = Default().Theme.Name
 	}
-	if err := updateConfigString(path, "theme", "name", name, Default().Theme.Name); err != nil {
+	written, err := writeConfigKeyString(path, "theme", "name", name, Default().Theme.Name)
+	if err != nil {
 		return "", "", err
 	}
-	return oldName, path, nil
+	return oldName, written, nil
 }
 
 func SaveDefaultSyncProfile(profile string) (Config, string, error) {
@@ -66,10 +67,11 @@ func SaveDefaultSyncProfile(profile string) (Config, string, error) {
 
 	cfg := loadForMutation(path)
 	cfg.Sync.DefaultProfile = profile
-	if err := updateConfigString(path, "sync", "default_profile", profile, Default().Sync.DefaultProfile); err != nil {
+	written, err := writeConfigKeyString(path, "sync", "default_profile", profile, Default().Sync.DefaultProfile)
+	if err != nil {
 		return Config{}, "", err
 	}
-	return cfg, path, nil
+	return cfg, written, nil
 }
 
 func SaveRelativeLineNumbers(enabled bool) error {
@@ -77,7 +79,98 @@ func SaveRelativeLineNumbers(enabled bool) error {
 	if err != nil {
 		return err
 	}
-	return updateConfigBool(path, "preview", "relative_line_numbers", enabled, Default().Preview.RelativeLineNumbers)
+	_, err = writeConfigKeyBool(path, "preview", "relative_line_numbers", enabled, Default().Preview.RelativeLineNumbers)
+	return err
+}
+
+// writeConfigKeyString patches [section].key to value, targeting the file whose
+// value currently wins: the last include that defines the key, or the main
+// config file when none does. See writeConfigKey for the reversion behavior.
+func writeConfigKeyString(mainPath, section, key, value, defaultValue string) (string, error) {
+	isDefault := strings.TrimSpace(value) == strings.TrimSpace(defaultValue)
+	return writeConfigKey(mainPath, section, key, isDefault, func(p string) error {
+		return updateConfigString(p, section, key, value, defaultValue)
+	})
+}
+
+// writeConfigKeyBool is the boolean counterpart of writeConfigKeyString.
+func writeConfigKeyBool(mainPath, section, key string, value, defaultValue bool) (string, error) {
+	return writeConfigKey(mainPath, section, key, value == defaultValue, func(p string) error {
+		return updateConfigBool(p, section, key, value, defaultValue)
+	})
+}
+
+// writeConfigKey applies an in-place edit for [section].key across the config
+// file set (the main config.toml plus its [meta] includes). It targets the file
+// whose value currently wins, so an in-app change to a key a user defined in an
+// included file updates that file instead of being shadowed by it. When the new
+// value equals the default the key is instead removed from every file that
+// defines it, so the built-in default takes effect rather than an earlier
+// definition winning.
+func writeConfigKey(mainPath, section, key string, isDefault bool, apply func(string) error) (string, error) {
+	target, definers := configFilesDefiningKey(mainPath, section, key)
+	if !isDefault {
+		return target, apply(target)
+	}
+	if len(definers) == 0 {
+		return mainPath, apply(mainPath)
+	}
+	for _, path := range definers {
+		if err := apply(path); err != nil {
+			return "", err
+		}
+	}
+	return target, nil
+}
+
+// configFilesDefiningKey returns the file that should receive a write for
+// [section].key (the last file in merge order that defines it, or mainPath when
+// none does) together with every file that currently defines it.
+func configFilesDefiningKey(mainPath, section, key string) (target string, definers []string) {
+	for _, path := range configMergeFiles(mainPath) {
+		if fileDefinesKey(path, section, key) {
+			definers = append(definers, path)
+		}
+	}
+	if len(definers) == 0 {
+		return mainPath, nil
+	}
+	return definers[len(definers)-1], definers
+}
+
+// configMergeFiles returns the config files that participate in the merge, the
+// main file first followed by existing [meta] includes in declared order.
+func configMergeFiles(mainPath string) []string {
+	files := []string{mainPath}
+	data, err := os.ReadFile(mainPath)
+	if err != nil {
+		return files
+	}
+	var cfg Config
+	if _, err := toml.Decode(string(data), &cfg); err != nil {
+		return files
+	}
+	includes, _ := resolveIncludes(mainPath, cfg.Meta.Includes)
+	for _, include := range includes {
+		if _, err := os.Stat(include); err == nil {
+			files = append(files, include)
+		}
+	}
+	return files
+}
+
+// fileDefinesKey reports whether the TOML file at path defines [section].key.
+func fileDefinesKey(path, section, key string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var cfg Config
+	md, err := toml.Decode(string(data), &cfg)
+	if err != nil {
+		return false
+	}
+	return md.IsDefined(section, key)
 }
 
 func loadForMutation(path string) Config {

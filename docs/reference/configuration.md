@@ -58,7 +58,9 @@ Today, in-app writes are intentionally narrow:
 
 When noteui writes one of those values, it patches that key in place and preserves the rest of the file where possible instead of reformatting the whole config.
 
-In-app writes always target the main `config.toml`, never included files. If an included file sets the same key, the include wins on the next launch and shadows the value noteui wrote. If you use these in-app features, avoid duplicating `theme.name`, `sync.default_profile`, or `preview.relative_line_numbers` into included files.
+When the config is split with `[meta] includes`, an in-app write targets the file whose value currently wins: if you defined the key in an included file, noteui updates that included file rather than the main `config.toml`, so the change is not shadowed on the next launch. If no file defines the key yet, the new value is written to the main `config.toml`. When you reset a value to its default (for example switch back to the default theme), noteui removes the key from every file that defined it, so the built-in default takes effect instead of an earlier definition winning.
+
+Included files that live outside the config directory (absolute or `~/` paths) are edited in place too, so a key you keep in a git-tracked dotfiles include will show up as a change in that file after an in-app edit.
 
 ## Minimal example
 

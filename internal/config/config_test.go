@@ -735,29 +735,137 @@ func TestSaveDefaultSyncProfileSeesIncludedProfiles(t *testing.T) {
 	require.Equal(t, includeContent, string(rawInclude))
 }
 
-func TestSaveThemeReturnsOldNameFromInclude(t *testing.T) {
+func TestSaveThemeWritesToIncludeThatDefinesKey(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	writeTOML(
-		t, path,
-		"[meta]",
-		`includes = ["private.toml"]`,
-	)
-	writeTOML(
-		t, filepath.Join(dir, "private.toml"),
-		"[theme]",
-		`name = "nord"`,
-	)
+	includePath := filepath.Join(dir, "private.toml")
+	writeTOML(t, path, "[meta]", `includes = ["private.toml"]`)
+	writeTOML(t, includePath, "[theme]", `name = "nord"`)
 	t.Setenv("NOTEUI_CONFIG", path)
 
 	oldName, writtenPath, err := SaveTheme("dracula")
 	require.NoError(t, err)
 	require.Equal(t, "nord", oldName)
+	// The key lives in the include, so the write targets the include, not the
+	// main config file that only declares the include.
+	require.Equal(t, includePath, writtenPath)
+
+	rawInclude, err := os.ReadFile(includePath)
+	require.NoError(t, err)
+	require.Contains(t, string(rawInclude), `name = "dracula"`)
+
+	rawMain, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(rawMain), "theme")
+
+	reloaded, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, "dracula", reloaded.Theme.Name)
+}
+
+func TestSaveThemeWritesNewKeyToMainWhenNoIncludeDefinesIt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	includePath := filepath.Join(dir, "private.toml")
+	writeTOML(t, path, "[meta]", `includes = ["private.toml"]`)
+	includeContent := strings.Join([]string{"[workspaces.home]", `root = "/tmp/home"`}, "\n")
+	require.NoError(t, os.WriteFile(includePath, []byte(includeContent), 0o644))
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	_, writtenPath, err := SaveTheme("dracula")
+	require.NoError(t, err)
 	require.Equal(t, path, writtenPath)
 
-	raw, err := os.ReadFile(path)
+	rawMain, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.Contains(t, string(raw), `name = "dracula"`)
+	require.Contains(t, string(rawMain), `name = "dracula"`)
+
+	rawInclude, err := os.ReadFile(includePath)
+	require.NoError(t, err)
+	require.Equal(t, includeContent, string(rawInclude))
+}
+
+func TestSaveThemeWritesToLastIncludeThatDefinesKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	firstInclude := filepath.Join(dir, "a.toml")
+	lastInclude := filepath.Join(dir, "b.toml")
+	writeTOML(t, path, "[meta]", `includes = ["a.toml", "b.toml"]`)
+	writeTOML(t, firstInclude, "[theme]", `name = "nord"`)
+	writeTOML(t, lastInclude, "[theme]", `name = "gruvbox"`)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	_, writtenPath, err := SaveTheme("dracula")
+	require.NoError(t, err)
+	require.Equal(t, lastInclude, writtenPath)
+
+	rawLast, err := os.ReadFile(lastInclude)
+	require.NoError(t, err)
+	require.Contains(t, string(rawLast), `name = "dracula"`)
+
+	rawFirst, err := os.ReadFile(firstInclude)
+	require.NoError(t, err)
+	require.Contains(t, string(rawFirst), `name = "nord"`)
+}
+
+func TestSaveRelativeLineNumbersRemovesKeyFromEveryDefiner(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	includePath := filepath.Join(dir, "private.toml")
+	writeTOML(t, path, "[meta]", `includes = ["private.toml"]`, "", "[preview]", "relative_line_numbers = true")
+	writeTOML(t, includePath, "[preview]", "relative_line_numbers = true")
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	// Reverting to the default (false) must clear the key everywhere; otherwise
+	// an earlier definition would keep it enabled after the merge.
+	require.NoError(t, SaveRelativeLineNumbers(false))
+
+	rawMain, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(rawMain), "relative_line_numbers")
+
+	rawInclude, err := os.ReadFile(includePath)
+	require.NoError(t, err)
+	require.NotContains(t, string(rawInclude), "relative_line_numbers")
+
+	reloaded, err := Load()
+	require.NoError(t, err)
+	require.False(t, reloaded.Preview.RelativeLineNumbers)
+}
+
+func TestSaveDefaultSyncProfileWritesToIncludeThatDefinesKey(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	includePath := filepath.Join(dir, "private.toml")
+	writeTOML(t, path, "[meta]", `includes = ["private.toml"]`)
+	writeTOML(
+		t, includePath,
+		"[sync]",
+		`default_profile = "home"`,
+		"",
+		"[sync.profiles.home]",
+		`ssh_host = "10.0.0.5"`,
+		`remote_root = "/srv/notes"`,
+		`remote_bin = "/usr/local/bin/noteui-sync"`,
+		"",
+		"[sync.profiles.work]",
+		`ssh_host = "10.0.0.6"`,
+		`remote_root = "/srv/work"`,
+		`remote_bin = "/usr/local/bin/noteui-sync"`,
+	)
+	t.Setenv("NOTEUI_CONFIG", path)
+
+	_, writtenPath, err := SaveDefaultSyncProfile("work")
+	require.NoError(t, err)
+	require.Equal(t, includePath, writtenPath)
+
+	rawInclude, err := os.ReadFile(includePath)
+	require.NoError(t, err)
+	require.Contains(t, string(rawInclude), `default_profile = "work"`)
+
+	rawMain, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.NotContains(t, string(rawMain), "default_profile")
 }
 
 func TestSaveDefaultSyncProfileWritesConfig(t *testing.T) {
