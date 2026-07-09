@@ -1461,3 +1461,29 @@ func TestSyncRootCallsPinsPutAtMostOncePerRun(t *testing.T) {
 	require.NoError(t, err)
 	require.LessOrEqual(t, cc.calls, 1, "PinsPut called more than once in a single sync run")
 }
+
+func TestUniqueConflictRelPathAvoidsCollision(t *testing.T) {
+	root := t.TempDir()
+	when := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+
+	first := uniqueConflictRelPath(root, "work/plan.md", when)
+	require.Equal(t, "work/plan.conflict-20260709-120000.md", first)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "work"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, filepath.FromSlash(first)), []byte("x"), 0o644))
+
+	// Same note, same second: must not reuse the taken name.
+	second := uniqueConflictRelPath(root, "work/plan.md", when)
+	require.Equal(t, "work/plan.conflict-20260709-120000-2.md", second)
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, filepath.FromSlash(second)), []byte("y"), 0o644))
+	third := uniqueConflictRelPath(root, "work/plan.md", when)
+	require.Equal(t, "work/plan.conflict-20260709-120000-3.md", third)
+}
+
+func TestUniqueConflictRelPathDefaultsExtension(t *testing.T) {
+	root := t.TempDir()
+	when := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+	got := uniqueConflictRelPath(root, "notes/scratch", when)
+	require.Equal(t, "notes/scratch.conflict-20260709-120000.md", got)
+}

@@ -429,12 +429,7 @@ func createConflict(ctx context.Context, client Client, profile config.SyncProfi
 	if err != nil {
 		return err
 	}
-	ext := filepath.Ext(rec.RelPath)
-	base := strings.TrimSuffix(rec.RelPath, ext)
-	if ext == "" {
-		ext = ".md"
-	}
-	conflictRelPath := fmt.Sprintf("%s.conflict-%s%s", base, time.Now().UTC().Format("20060102-150405"), ext)
+	conflictRelPath := uniqueConflictRelPath(root, rec.RelPath, time.Now())
 	conflictPath, err := safeJoin(root, conflictRelPath)
 	if err != nil {
 		return err
@@ -454,6 +449,25 @@ func createConflict(ctx context.Context, client Client, profile config.SyncProfi
 		return err
 	}
 	return SaveConflictRecord(root, ConflictRecord{NoteID: rec.ID, LocalPath: filepath.ToSlash(rec.RelPath), RemoteRev: meta.Revision, LocalHash: localHash, ConflictPath: filepath.ToSlash(conflictRelPath), OccurredAt: time.Now().UTC()})
+}
+
+// uniqueConflictRelPath builds the relative path for a conflict copy of relPath.
+// The timestamp is only second-precision, so two conflicts on the same note in
+// the same second would otherwise produce the same name and overwrite each
+// other. When the timestamped name is already taken, a numeric suffix is added
+// until a free path is found.
+func uniqueConflictRelPath(root, relPath string, when time.Time) string {
+	ext := filepath.Ext(relPath)
+	base := strings.TrimSuffix(relPath, ext)
+	if ext == "" {
+		ext = ".md"
+	}
+	stamp := when.UTC().Format("20060102-150405")
+	candidate := fmt.Sprintf("%s.conflict-%s%s", base, stamp, ext)
+	for i := 2; fileExists(filepath.Join(root, filepath.FromSlash(candidate))); i++ {
+		candidate = fmt.Sprintf("%s.conflict-%s-%d%s", base, stamp, i, ext)
+	}
+	return candidate
 }
 
 func moveLocalFile(root, oldRelPath, newRelPath string) error {

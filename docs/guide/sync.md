@@ -352,7 +352,7 @@ Important details:
 - the conflict state clears only after a later successful sync of the original note
 - the conflict copy is left on disk intentionally as a safety file
 
-If you prefer to inspect the file directly, the conflict copy is written beside the original note with a timestamped name such as `note.conflict-YYYYMMDD-HHMMSS.md`.
+If you prefer to inspect the file directly, the conflict copy is written beside the original note with a timestamped name such as `note.conflict-YYYYMMDD-HHMMSS.md`. If more than one conflict occurs on the same note within the same second, a numeric suffix (`-2`, `-3`, ...) is appended so no earlier conflict copy is overwritten.
 
 ## Diagnosing unhealthy sync states
 
