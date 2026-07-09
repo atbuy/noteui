@@ -35,6 +35,10 @@ When you open an encrypted note through noteui:
 
 Outside noteui, encrypted notes remain ordinary files that contain encrypted bodies. You can move, rename, or sync them with normal file tools, but editing the encrypted payload directly in another editor is usually not useful.
 
+### Decrypted editing temp file
+
+While an encrypted note is open in your external editor, its decrypted plaintext lives in a temporary file (named `noteui-*.md`) in your system temp directory, readable only by your user (`0600`). noteui removes it as soon as the note is re-encrypted. If noteui or the machine crashes mid-edit, that file can be left behind; noteui sweeps stale `noteui-*.md` temp files older than a day on the next startup, so leftover plaintext does not linger indefinitely. If your temp directory is on disk rather than a RAM-backed filesystem and this matters to you, point `TMPDIR` at a `tmpfs` mount before launching noteui.
+
 ### Atomic writes
 
 Noteui writes the encrypted file back using an atomic rename: the new content is written to a sibling temporary file first, then the original path is replaced in a single filesystem operation. This means the original file remains intact if the process is interrupted mid-write. You will never end up with a half-written, unreadable encrypted blob from a crash or a full disk.

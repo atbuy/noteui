@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -125,6 +126,11 @@ func main() {
 	for _, w := range config.Warnings(cfg) {
 		fmt.Fprintf(os.Stderr, "config warning: %s\n", w)
 	}
+
+	// Remove decrypted-note editing temp files orphaned by an earlier crash.
+	// Only files older than a day are swept, so a note still open for editing
+	// in another running instance is left alone.
+	notes.SweepStaleEditTempFiles(24 * time.Hour)
 
 	startup := config.ResolveStartupWorkspace(cfg, os.Getenv("NOTES_ROOT"), fallbackRoot)
 

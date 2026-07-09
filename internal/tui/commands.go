@@ -439,7 +439,7 @@ func saveNoteVersionAndOpenEncryptedCmd(root, path, passphrase string) tea.Cmd {
 		if err != nil {
 			return openEncryptedNoteReadyMsg{origPath: path, err: err}
 		}
-		tmpFile, err := os.CreateTemp("", "noteui-*.md")
+		tmpFile, err := os.CreateTemp("", notes.EditTempFilePattern)
 		if err != nil {
 			return openEncryptedNoteReadyMsg{origPath: path, err: err}
 		}

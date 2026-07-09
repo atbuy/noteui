@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -23,6 +24,48 @@ const (
 	argonMem     = 32 * 1024
 	argonThreads = 2
 )
+
+// EditTempFilePattern is the os.CreateTemp pattern used when an encrypted note
+// is opened for editing: its decrypted plaintext is written to a file of this
+// shape in the system temp directory while the external editor runs, then
+// removed once the note is re-encrypted. Callers that create these files must
+// use this pattern so SweepStaleEditTempFiles can recognize leftovers.
+const EditTempFilePattern = "noteui-*.md"
+
+// SweepStaleEditTempFiles removes decrypted-note editing temp files (see
+// EditTempFilePattern) left in the system temp directory by a previous run that
+// exited before re-encrypting, for example after a crash. Only files whose
+// modification time is older than maxAge are removed, so a note still open for
+// editing in another running noteui process is never clobbered. It is best
+// effort: unreadable entries and failed removals are skipped. Returns the
+// number of files removed.
+func SweepStaleEditTempFiles(maxAge time.Duration) int {
+	dir := os.TempDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	prefix, suffix, _ := strings.Cut(EditTempFilePattern, "*")
+	cutoff := time.Now().Add(-maxAge)
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		if os.Remove(filepath.Join(dir, name)) == nil {
+			removed++
+		}
+	}
+	return removed
+}
 
 func deriveKey(passphrase string, salt []byte) []byte {
 	return argon2.IDKey([]byte(passphrase), salt, argonTime, argonMem, argonThreads, keyLen)

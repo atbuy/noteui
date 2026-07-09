@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -198,4 +199,53 @@ func TestUniqueTrashNameAndBuildTrashInfo(t *testing.T) {
 	if !strings.Contains(info, "DeletionDate=") {
 		require.Failf(t, "assertion failed", "expected deletion date, got %q", info)
 	}
+}
+
+func writeTempFileWithAge(t *testing.T, dir, name string, age time.Duration) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	require.NoError(t, os.WriteFile(path, []byte("decrypted plaintext"), 0o600))
+	mod := time.Now().Add(-age)
+	require.NoError(t, os.Chtimes(path, mod, mod))
+	return path
+}
+
+func TestSweepStaleEditTempFilesRemovesOnlyOldMatches(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir)
+	require.Equal(t, dir, os.TempDir())
+
+	oldMatch := writeTempFileWithAge(t, dir, "noteui-abc123.md", 48*time.Hour)
+	recentMatch := writeTempFileWithAge(t, dir, "noteui-def456.md", 5*time.Minute)
+	wrongSuffix := writeTempFileWithAge(t, dir, "noteui-ghi789.txt", 48*time.Hour)
+	wrongPrefix := writeTempFileWithAge(t, dir, "other-jkl012.md", 48*time.Hour)
+
+	removed := SweepStaleEditTempFiles(24 * time.Hour)
+	require.Equal(t, 1, removed)
+
+	require.NoFileExists(t, oldMatch)
+	require.FileExists(t, recentMatch)
+	require.FileExists(t, wrongSuffix)
+	require.FileExists(t, wrongPrefix)
+}
+
+func TestSweepStaleEditTempFilesMatchesCreatedPattern(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMPDIR", dir)
+
+	f, err := os.CreateTemp("", EditTempFilePattern)
+	require.NoError(t, err)
+	path := f.Name()
+	require.NoError(t, f.Close())
+	require.Equal(t, dir, filepath.Dir(path))
+
+	// Fresh file is left alone.
+	require.Equal(t, 0, SweepStaleEditTempFiles(24*time.Hour))
+	require.FileExists(t, path)
+
+	// Backdated past the threshold, it is swept.
+	old := time.Now().Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(path, old, old))
+	require.Equal(t, 1, SweepStaleEditTempFiles(24*time.Hour))
+	require.NoFileExists(t, path)
 }
