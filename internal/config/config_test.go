@@ -1271,14 +1271,44 @@ func TestWarningsWebDAVProfileNoSpuriousWarnings(t *testing.T) {
 	cfg := Default()
 	cfg.Sync.Profiles = map[string]SyncProfile{
 		"cloud": {
-			Kind:                  SyncKindWebDAV,
-			WebDAVURL:             "https://cloud.example.com/dav",
-			Auth:                  SyncAuthNone,
-			ForceIPv4:             true,
-			InsecureSkipTLSVerify: true,
+			Kind:      SyncKindWebDAV,
+			WebDAVURL: "https://cloud.example.com/dav",
+			Auth:      SyncAuthNone,
+			ForceIPv4: true, // effective on WebDAV, must not warn
 		},
 	}
 	require.Empty(t, Warnings(cfg))
+}
+
+func TestWarningsWebDAVInsecureTLSVerifyOverHTTPS(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:                  SyncKindWebDAV,
+			WebDAVURL:             "https://cloud.example.com/dav",
+			Auth:                  SyncAuthNone,
+			InsecureSkipTLSVerify: true,
+		},
+	}
+	warns := Warnings(cfg)
+	require.Len(t, warns, 1)
+	require.Contains(t, warns[0], "insecure_skip_tls_verify is enabled")
+	require.Contains(t, warns[0], "man-in-the-middle")
+}
+
+func TestWarningsWebDAVInsecureTLSVerifyOverHTTPHasNoEffect(t *testing.T) {
+	cfg := Default()
+	cfg.Sync.Profiles = map[string]SyncProfile{
+		"cloud": {
+			Kind:                  SyncKindWebDAV,
+			WebDAVURL:             "http://192.168.1.50/dav",
+			Auth:                  SyncAuthNone,
+			InsecureSkipTLSVerify: true,
+		},
+	}
+	warns := Warnings(cfg)
+	require.Len(t, warns, 1)
+	require.Contains(t, warns[0], "no effect on http:// URLs")
 }
 
 func TestWarningsCleanConfigProducesNoWarnings(t *testing.T) {

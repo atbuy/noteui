@@ -521,9 +521,17 @@ func Warnings(cfg Config) []string {
 }
 
 func syncProfileWarnings(name string, p SyncProfile) []string {
-	if ResolvedKind(p) != SyncKindSSH {
+	switch ResolvedKind(p) {
+	case SyncKindSSH:
+		return sshProfileWarnings(name, p)
+	case SyncKindWebDAV:
+		return webDAVProfileWarnings(name, p)
+	default:
 		return nil
 	}
+}
+
+func sshProfileWarnings(name string, p SyncProfile) []string {
 	var out []string
 	if p.ForceIPv4 {
 		out = append(out, fmt.Sprintf("sync profile %q: force_ipv4 has no effect on SSH profiles", name))
@@ -535,6 +543,21 @@ func syncProfileWarnings(name string, p SyncProfile) []string {
 		out = append(out, fmt.Sprintf("sync profile %q: ca_cert has no effect on SSH profiles", name))
 	}
 	return out
+}
+
+func webDAVProfileWarnings(name string, p SyncProfile) []string {
+	if !p.InsecureSkipTLSVerify {
+		return nil
+	}
+	// insecure_skip_tls_verify only relaxes anything over TLS; on plain http://
+	// there is no certificate to verify, so the flag does nothing there.
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(p.WebDAVURL)), "https://") {
+		return []string{fmt.Sprintf(
+			"sync profile %q: insecure_skip_tls_verify is enabled; TLS certificate verification is disabled and this connection is vulnerable to man-in-the-middle attacks",
+			name,
+		)}
+	}
+	return []string{fmt.Sprintf("sync profile %q: insecure_skip_tls_verify has no effect on http:// URLs", name)}
 }
 
 func SortedWorkspaceNames(cfg Config) []string {

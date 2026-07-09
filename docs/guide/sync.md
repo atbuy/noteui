@@ -245,6 +245,8 @@ insecure_skip_tls_verify = true
 
 Symptom that suggests this is needed: `tls: failed to verify certificate: x509: certificate signed by unknown authority` or `tls: failed to verify certificate for <IP> because it doesn't contain any IP SANs`.
 
+While this is enabled on an `https://` profile, noteui prints a startup warning that TLS verification is off and the connection is exposed to man-in-the-middle attacks. Prefer pointing `ca_cert` at the server's CA so verification stays on; reach for `insecure_skip_tls_verify` only as a last resort. On an `http://` URL the flag does nothing (there is no certificate to verify), and noteui says so.
+
 ### WebDAV performance note
 
 WebDAV is more request-heavy than SSH sync. A single sync run may need multiple HTTP requests for remote indexing, note content, metadata, and directory creation.
