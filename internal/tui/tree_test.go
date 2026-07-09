@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -299,5 +302,180 @@ func TestFilterAndScoreNotesEmptyQuery(t *testing.T) {
 	// order preserved when no query
 	if result[0].RelPath != "a.md" {
 		t.Errorf("expected original order preserved for empty query")
+	}
+}
+
+// treeItemSummary is the comparable projection of a treeItem used to assert the
+// new single-pass build produces the same tree as the reference logic.
+type treeItemSummary struct {
+	Kind      treeItemKind
+	Name      string
+	RelPath   string
+	Depth     int
+	Expanded  bool
+	MatchHint string
+}
+
+func summarizeTree(items []treeItem) []treeItemSummary {
+	out := make([]treeItemSummary, len(items))
+	for i, it := range items {
+		out[i] = treeItemSummary{it.Kind, it.Name, it.RelPath, it.Depth, it.Expanded, it.MatchHint}
+	}
+	return out
+}
+
+// referenceTree reproduces the pre-optimization buildTree using the retained
+// directChild*/categorySubtreeMatches/filterAndScoreNotes helpers, so the
+// optimized build can be checked against it.
+func referenceTree(m *Model, query string) []treeItem {
+	var out []treeItem
+	var walk func(parent string, depth int)
+	walk = func(parent string, depth int) {
+		effectiveExpanded := func(rel string) bool {
+			if rel == "" || query != "" {
+				return true
+			}
+			return m.expanded[rel]
+		}
+		if parent == "" && depth == 0 {
+			out = append(out, treeItem{Kind: treeCategory, Name: "/", RelPath: "", Depth: 0, Expanded: true})
+			depth = 1
+		}
+		for _, cat := range m.directChildCategories(parent) {
+			include := query == "" || m.categoryMatches(cat, query) || m.categorySubtreeMatches(cat.RelPath, query)
+			if !include {
+				continue
+			}
+			catCopy := cat
+			item := treeItem{Kind: treeCategory, Name: cat.Name, RelPath: cat.RelPath, Depth: depth, Expanded: effectiveExpanded(cat.RelPath), Category: &catCopy}
+			out = append(out, item)
+			if item.Expanded {
+				walk(cat.RelPath, depth+1)
+			}
+		}
+		childNotes := m.directChildNotes(parent)
+		if query != "" {
+			childNotes = filterAndScoreNotes(childNotes, query)
+		}
+		for _, n := range childNotes {
+			noteCopy := n
+			hint := ""
+			if query != "" {
+				hint = findMatchExcerpt(noteCopy, query)
+			}
+			out = append(out, treeItem{Kind: treeNote, Name: n.Title(), RelPath: n.RelPath, Depth: depth, Note: &noteCopy, MatchHint: hint})
+		}
+		for _, n := range m.directChildRemoteNotes(parent) {
+			if query != "" && !m.remoteNoteMatches(n, query) {
+				continue
+			}
+			remoteCopy := n
+			out = append(out, treeItem{Kind: treeRemoteNote, Name: m.remoteOnlyDisplayTitle(n), RelPath: n.RelPath, Depth: depth, RemoteNote: &remoteCopy})
+		}
+	}
+	walk("", 0)
+	return out
+}
+
+func TestBuildTreeMatchesReferenceAcrossQueries(t *testing.T) {
+	ns := []notes.Note{
+		{RelPath: "work/projects/alpha.md", Name: "alpha.md", TitleText: "Alpha Plan", Preview: "roadmap details", Tags: []string{"urgent"}},
+		{RelPath: "work/projects/beta.md", Name: "beta.md", TitleText: "Beta", Preview: "planning notes"},
+		{RelPath: "work/meeting.md", Name: "meeting.md", TitleText: "Meeting", Preview: "agenda"},
+		{RelPath: "personal/journal.md", Name: "journal.md", TitleText: "Journal", Preview: "today"},
+		{RelPath: "inbox.md", Name: "inbox.md", TitleText: "Inbox", Preview: "capture"},
+		{RelPath: "secret.md", Name: "secret.md", TitleText: "Secret", Preview: "", Encrypted: true},
+	}
+	cats := []notes.Category{
+		{Name: "work", RelPath: "work"},
+		{Name: "projects", RelPath: "work/projects"},
+		{Name: "personal", RelPath: "personal"},
+	}
+	remote := []notesync.RemoteNoteMeta{
+		{ID: "r1", RelPath: "work/remote-only.md", Title: "Remote Plan"},
+	}
+	queries := []string{"", "alpha", "plan", "work", "#urgent", "#missing", "beta plan", "zzz", "encrypted", "meet"}
+
+	for _, q := range queries {
+		m := newTestModel(t)
+		m.notes = ns
+		m.categories = cats
+		m.remoteOnlyNotes = remote
+		m.expanded = map[string]bool{}
+		m.searchInput.SetValue(q)
+		m.rebuildTree()
+
+		ql := strings.TrimSpace(strings.ToLower(q))
+		want := summarizeTree(referenceTree(&m, ql))
+		got := summarizeTree(m.treeItems)
+		require.Equalf(t, want, got, "tree mismatch for query %q", q)
+	}
+}
+
+func treeHasNote(items []treeItem, relPath string) bool {
+	for _, it := range items {
+		if it.Kind == treeNote && it.RelPath == relPath {
+			return true
+		}
+	}
+	return false
+}
+
+func TestRebuildTreeReflectsNoteContentChange(t *testing.T) {
+	m := newTestModel(t)
+	m.expanded = map[string]bool{}
+	t1 := time.Unix(1000, 0)
+	m.notes = []notes.Note{{RelPath: "a.md", Name: "a.md", TitleText: "Apple", ModTime: t1}}
+
+	m.searchInput.SetValue("banana")
+	m.rebuildTree()
+	require.False(t, treeHasNote(m.treeItems, "a.md"), "apple note should not match banana")
+
+	// Simulate the note being edited: same path, new title, newer modtime. The
+	// cached search doc must refresh so search reflects the new content.
+	m.notes = []notes.Note{{RelPath: "a.md", Name: "a.md", TitleText: "Banana", ModTime: time.Unix(2000, 0)}}
+	m.rebuildTree()
+	require.True(t, treeHasNote(m.treeItems, "a.md"), "edited note should match its new title")
+}
+
+func largeVaultModel() Model {
+	m := Model{expanded: map[string]bool{}}
+	var ns []notes.Note
+	var cats []notes.Category
+	for c := 0; c < 200; c++ {
+		cat := fmt.Sprintf("cat%03d", c)
+		cats = append(cats, notes.Category{Name: cat, RelPath: cat})
+		for i := 0; i < 20; i++ {
+			ns = append(ns, notes.Note{
+				RelPath:   fmt.Sprintf("%s/note%03d.md", cat, i),
+				Name:      fmt.Sprintf("note%03d.md", i),
+				TitleText: fmt.Sprintf("Note %d %d", c, i),
+				Preview:   "some body text about topics and other things worth indexing",
+			})
+		}
+	}
+	m.notes = ns
+	m.categories = cats
+	return m
+}
+
+func BenchmarkRebuildTreeLargeVault(b *testing.B) {
+	m := largeVaultModel()
+	m.searchInput.SetValue("beta") // selective query, matches nothing
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m.rebuildTree()
+	}
+}
+
+// BenchmarkRebuildTreeReferenceLargeVault exercises the pre-optimization
+// per-category rescan logic on the same vault, for a before/after comparison.
+func BenchmarkRebuildTreeReferenceLargeVault(b *testing.B) {
+	m := largeVaultModel()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = referenceTree(&m, "beta")
 	}
 }

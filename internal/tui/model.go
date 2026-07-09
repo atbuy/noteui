@@ -276,6 +276,7 @@ type Model struct {
 	remoteOnlyNotes  []notesync.RemoteNoteMeta
 	remoteCategories []notes.Category
 	expanded         map[string]bool
+	docCache         map[string]cachedNoteDoc
 	tempNotes        []notes.Note
 	tempCursor       int
 	pinsCursor       int

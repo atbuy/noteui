@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -20,7 +21,8 @@ func (m *Model) rebuildTree() {
 	}
 
 	var out []treeItem
-	m.buildTree("", 0, &out)
+	ctx := m.buildTreeContext()
+	m.buildTree("", 0, &ctx, &out)
 	m.treeItems = out
 
 	if len(m.treeItems) == 0 {
@@ -57,8 +59,110 @@ func (m *Model) rebuildTree() {
 	m.syncSelectedNote()
 }
 
-func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
+// treeBuildContext holds the query-dependent work computed once per tree
+// rebuild: the parent -> children groupings (so the tree is assembled without
+// rescanning every note per category), the matched note scores for display,
+// and the set of categories that must be shown because they or something in
+// their subtree matches. This turns a rebuild from O(categories x notes) into a
+// single pass over the collection.
+type treeBuildContext struct {
+	query          string
+	notesByParent  map[string][]int
+	remoteByParent map[string][]int
+	catsByParent   map[string][]notes.Category
+	noteScoreByRel map[string]int
+	visibleCats    map[string]bool
+}
+
+func (m *Model) buildTreeContext() treeBuildContext {
 	query := strings.TrimSpace(strings.ToLower(m.searchInput.Value()))
+	ctx := treeBuildContext{
+		query:          query,
+		notesByParent:  make(map[string][]int),
+		remoteByParent: make(map[string][]int),
+		catsByParent:   make(map[string][]notes.Category),
+	}
+
+	for i := range m.notes {
+		parent := parentKey(m.notes[i].RelPath)
+		ctx.notesByParent[parent] = append(ctx.notesByParent[parent], i)
+	}
+	for i := range m.remoteOnlyNotes {
+		parent := parentKey(m.remoteOnlyNotes[i].RelPath)
+		ctx.remoteByParent[parent] = append(ctx.remoteByParent[parent], i)
+	}
+	seen := make(map[string]bool)
+	for _, source := range [][]notes.Category{m.categories, m.remoteCategories} {
+		for _, c := range source {
+			if c.RelPath == "" || seen[c.RelPath] {
+				continue
+			}
+			seen[c.RelPath] = true
+			parent := parentKey(c.RelPath)
+			ctx.catsByParent[parent] = append(ctx.catsByParent[parent], c)
+		}
+	}
+
+	if query == "" {
+		return ctx
+	}
+
+	ctx.noteScoreByRel = make(map[string]int)
+	ctx.visibleCats = make(map[string]bool)
+
+	for i := range m.notes {
+		doc := m.docFor(m.notes[i])
+		// Display eligibility mirrors filterAndScoreNotes (no tag prefix).
+		if score := noteScoreDoc(doc, query); score >= 0 {
+			ctx.noteScoreByRel[m.notes[i].RelPath] = score
+		}
+		// Subtree visibility mirrors categorySubtreeMatches, which uses
+		// noteMatches and therefore honors the "#tag" prefix.
+		if noteMatchesDoc(doc, query) {
+			markAncestors(ctx.visibleCats, parentKey(m.notes[i].RelPath))
+		}
+	}
+	for i := range m.remoteOnlyNotes {
+		if m.remoteNoteMatches(m.remoteOnlyNotes[i], query) {
+			markAncestors(ctx.visibleCats, parentKey(m.remoteOnlyNotes[i].RelPath))
+		}
+	}
+	for _, cats := range ctx.catsByParent {
+		for _, c := range cats {
+			if m.categoryMatches(c, query) {
+				markAncestors(ctx.visibleCats, parentKey(c.RelPath))
+			}
+		}
+	}
+
+	return ctx
+}
+
+// markAncestors marks dir and each of its parent directories as visible, so a
+// matching note or category surfaces every category on the path to the root.
+func markAncestors(visible map[string]bool, dir string) {
+	for dir != "" && dir != "." {
+		visible[dir] = true
+		parent := filepath.Dir(dir)
+		if parent == "." {
+			parent = ""
+		}
+		dir = parent
+	}
+}
+
+// parentKey returns the parent directory of a relPath in the same normalized
+// form the tree groups by ("" for the root).
+func parentKey(relPath string) string {
+	dir := filepath.Dir(relPath)
+	if dir == "." {
+		return ""
+	}
+	return dir
+}
+
+func (m *Model) buildTree(parent string, depth int, ctx *treeBuildContext, out *[]treeItem) {
+	query := ctx.query
 
 	effectiveExpanded := func(rel string) bool {
 		if rel == "" {
@@ -85,9 +189,8 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 		depth = 1
 	}
 
-	for _, cat := range m.directChildCategories(parent) {
-		include := query == "" || m.categoryMatches(cat, query) ||
-			m.categorySubtreeMatches(cat.RelPath, query)
+	for _, cat := range m.sortedChildCategories(ctx.catsByParent[parent]) {
+		include := query == "" || m.categoryMatches(cat, query) || ctx.visibleCats[cat.RelPath]
 		if !include {
 			continue
 		}
@@ -103,13 +206,13 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 		*out = append(*out, item)
 
 		if item.Expanded {
-			m.buildTree(cat.RelPath, depth+1, out)
+			m.buildTree(cat.RelPath, depth+1, ctx, out)
 		}
 	}
 
-	childNotes := m.directChildNotes(parent)
+	childNotes := m.sortedChildNotes(ctx.notesByParent[parent])
 	if query != "" {
-		childNotes = filterAndScoreNotes(childNotes, query)
+		childNotes = filterByPrecomputedScore(childNotes, ctx.noteScoreByRel)
 	}
 	for _, n := range childNotes {
 		noteCopy := n
@@ -127,7 +230,7 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 		})
 	}
 
-	for _, n := range m.directChildRemoteNotes(parent) {
+	for _, n := range m.sortedChildRemoteNotes(ctx.remoteByParent[parent]) {
 		if query != "" && !m.remoteNoteMatches(n, query) {
 			continue
 		}
@@ -140,6 +243,31 @@ func (m *Model) buildTree(parent string, depth int, out *[]treeItem) {
 			RemoteNote: &remoteCopy,
 		})
 	}
+}
+
+// filterByPrecomputedScore keeps the notes whose relpath scored >= 0 (present
+// in scores) and orders them by descending score, matching
+// filterAndScoreNotes. The stable sort preserves the incoming sort order for
+// ties.
+func filterByPrecomputedScore(ns []notes.Note, scores map[string]int) []notes.Note {
+	type scored struct {
+		note  notes.Note
+		score int
+	}
+	matched := make([]scored, 0, len(ns))
+	for _, n := range ns {
+		if score, ok := scores[n.RelPath]; ok {
+			matched = append(matched, scored{n, score})
+		}
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return matched[i].score > matched[j].score
+	})
+	out := make([]notes.Note, len(matched))
+	for i, sm := range matched {
+		out[i] = sm.note
+	}
+	return out
 }
 
 func (m Model) directChildNotes(parent string) []notes.Note {
@@ -195,13 +323,56 @@ func (m Model) directChildRemoteNotes(parent string) []notesync.RemoteNoteMeta {
 			out = append(out, n)
 		}
 	}
+	sortRemoteNotes(out)
+	return out
+}
+
+// sortedChildNotes gathers the notes at the given indices into m.notes and
+// sorts them exactly like directChildNotes. It is the hot-path equivalent used
+// with the precomputed parent groupings.
+func (m Model) sortedChildNotes(idxs []int) []notes.Note {
+	out := make([]notes.Note, 0, len(idxs))
+	for _, i := range idxs {
+		out = append(out, m.notes[i])
+	}
+	sortNotes(out, m.sortMethod, m.sortReverse, m.isPinnedNote)
+	return out
+}
+
+func (m Model) sortedChildRemoteNotes(idxs []int) []notesync.RemoteNoteMeta {
+	out := make([]notesync.RemoteNoteMeta, 0, len(idxs))
+	for _, i := range idxs {
+		out = append(out, m.remoteOnlyNotes[i])
+	}
+	sortRemoteNotes(out)
+	return out
+}
+
+func (m Model) sortedChildCategories(cats []notes.Category) []notes.Category {
+	out := make([]notes.Category, len(cats))
+	copy(out, cats)
+	sortCategories(out, m.isPinnedCategory)
+	return out
+}
+
+func sortRemoteNotes(out []notesync.RemoteNoteMeta) {
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].RelPath == out[j].RelPath {
 			return out[i].ID < out[j].ID
 		}
 		return out[i].RelPath < out[j].RelPath
 	})
-	return out
+}
+
+func sortCategories(out []notes.Category, isPinned func(string) bool) {
+	sort.SliceStable(out, func(i, j int) bool {
+		pi := isPinned(out[i].RelPath)
+		pj := isPinned(out[j].RelPath)
+		if pi != pj {
+			return pi
+		}
+		return out[i].RelPath < out[j].RelPath
+	})
 }
 
 func (m Model) remoteNoteMatches(n notesync.RemoteNoteMeta, query string) bool {
@@ -236,14 +407,7 @@ func (m Model) directChildCategories(parent string) []notes.Category {
 		}
 	}
 
-	sort.SliceStable(out, func(i, j int) bool {
-		pi := m.isPinnedCategory(out[i].RelPath)
-		pj := m.isPinnedCategory(out[j].RelPath)
-		if pi != pj {
-			return pi
-		}
-		return out[i].RelPath < out[j].RelPath
-	})
+	sortCategories(out, m.isPinnedCategory)
 
 	return out
 }
@@ -268,66 +432,125 @@ func fuzzySequenceMatch(pattern, target string) bool {
 	return false
 }
 
-// termScore returns a relevance score (≥ 0) for a single lower-cased search
-// term against a note, or -1 when the term does not match at all.
-// Higher scores indicate a better match.
-func termScore(term string, n notes.Note) int {
-	title := strings.ToLower(n.Title())
-	name := strings.ToLower(n.Name)
-	rel := strings.ToLower(n.RelPath)
+// noteSearchDoc holds a note's search fields pre-lowercased, so scoring a note
+// against a query does not repeat the same strings.ToLower work on every term,
+// every keystroke, and every ancestor category.
+type noteSearchDoc struct {
+	title string
+	name  string
+	rel   string
+	body  string
+	tags  []string
+}
 
-	// Exact matches on metadata (highest priority).
-	if strings.Contains(title, term) {
+type cachedNoteDoc struct {
+	doc     noteSearchDoc
+	modTime time.Time
+}
+
+func buildNoteDoc(n notes.Note) noteSearchDoc {
+	// Encrypted notes keep the "<encrypted>" placeholder as their body so the
+	// literal word "encrypted" still matches; this mirrors the previous scorer.
+	body := "<encrypted>"
+	if !n.Encrypted {
+		body = strings.ToLower(notes.StripFrontMatter(n.Preview))
+	}
+	var tags []string
+	if len(n.Tags) > 0 {
+		tags = make([]string, len(n.Tags))
+		for i, t := range n.Tags {
+			tags[i] = strings.ToLower(t)
+		}
+	}
+	return noteSearchDoc{
+		title: strings.ToLower(n.Title()),
+		name:  strings.ToLower(n.Name),
+		rel:   strings.ToLower(n.RelPath),
+		body:  body,
+		tags:  tags,
+	}
+}
+
+// docFor returns the cached search doc for a note, rebuilding it only when the
+// note is new or its modification time changed. The cache persists across
+// keystrokes and is refreshed lazily whenever the notes collection changes.
+func (m *Model) docFor(n notes.Note) noteSearchDoc {
+	if m.docCache == nil {
+		m.docCache = make(map[string]cachedNoteDoc)
+	} else if len(m.docCache) > 2*len(m.notes)+16 {
+		// Bound growth from renames/deletions leaving stale entries behind.
+		m.docCache = make(map[string]cachedNoteDoc, len(m.notes))
+	}
+	if cached, ok := m.docCache[n.RelPath]; ok && cached.modTime.Equal(n.ModTime) {
+		return cached.doc
+	}
+	doc := buildNoteDoc(n)
+	m.docCache[n.RelPath] = cachedNoteDoc{doc: doc, modTime: n.ModTime}
+	return doc
+}
+
+// scoreTermDoc returns a relevance score (>= 0) for a single lower-cased search
+// term against a pre-lowercased doc, or -1 when the term does not match.
+// Higher scores indicate a better match.
+func scoreTermDoc(term string, d noteSearchDoc) int {
+	if strings.Contains(d.title, term) {
 		return 1000
 	}
-	if strings.Contains(name, term) {
+	if strings.Contains(d.name, term) {
 		return 800
 	}
-	if strings.Contains(rel, term) {
+	if strings.Contains(d.rel, term) {
 		return 600
 	}
-
-	// Tag exact match.
-	if matchesAnyTag(n.Tags, term) {
-		return 500
-	}
-
-	// Body search: preserve the "<encrypted>" placeholder so that the
-	// literal word "encrypted" still matches encrypted notes.
-	if n.Encrypted {
-		if strings.Contains("<encrypted>", term) {
-			return 400
-		}
-	} else {
-		body := strings.ToLower(notes.StripFrontMatter(n.Preview))
-		if strings.Contains(body, term) {
-			return 400
+	for _, t := range d.tags {
+		if strings.Contains(t, term) {
+			return 500
 		}
 	}
-
-	// Fuzzy subsequence match on title and path.
-	if fuzzySequenceMatch(term, title) {
+	if strings.Contains(d.body, term) {
+		return 400
+	}
+	if fuzzySequenceMatch(term, d.title) {
 		return 200
 	}
-	if fuzzySequenceMatch(term, rel) {
+	if fuzzySequenceMatch(term, d.rel) {
 		return 100
 	}
-
 	return -1
 }
 
-// noteScore returns the total relevance score for a note against a query.
-// Returns -1 if any term does not match.
-func noteScore(n notes.Note, query string) int {
+// noteScoreDoc returns the total relevance score for a doc against a query, or
+// -1 if any term does not match.
+func noteScoreDoc(d noteSearchDoc, query string) int {
 	total := 0
 	for term := range strings.FieldsSeq(query) {
-		s := termScore(term, n)
+		s := scoreTermDoc(term, d)
 		if s < 0 {
 			return -1
 		}
 		total += s
 	}
 	return total
+}
+
+// noteMatchesDoc reports whether a doc matches the query, honoring the "#tag"
+// prefix that restricts matching to tags.
+func noteMatchesDoc(d noteSearchDoc, query string) bool {
+	if query == "" {
+		return true
+	}
+	if after, ok := strings.CutPrefix(query, "#"); ok {
+		if after == "" {
+			return true
+		}
+		for _, t := range d.tags {
+			if strings.Contains(t, after) {
+				return true
+			}
+		}
+		return false
+	}
+	return noteScoreDoc(d, query) >= 0
 }
 
 // filterAndScoreNotes returns the subset of ns that match query, sorted by
@@ -344,8 +567,7 @@ func filterAndScoreNotes(ns []notes.Note, query string) []notes.Note {
 	}
 	matched := make([]scored, 0, len(ns))
 	for _, n := range ns {
-		s := noteScore(n, q)
-		if s >= 0 {
+		if s := noteScoreDoc(buildNoteDoc(n), q); s >= 0 {
 			matched = append(matched, scored{n, s})
 		}
 	}
@@ -361,33 +583,7 @@ func filterAndScoreNotes(ns []notes.Note, query string) []notes.Note {
 
 func (m Model) noteMatches(n notes.Note, query string) bool {
 	q := strings.ToLower(strings.TrimSpace(query))
-	if q == "" {
-		return true
-	}
-
-	if after, ok := strings.CutPrefix(q, "#"); ok {
-		tag := after
-		if tag == "" {
-			return true
-		}
-		for _, t := range n.Tags {
-			if strings.Contains(strings.ToLower(t), tag) {
-				return true
-			}
-		}
-		return false
-	}
-
-	return noteScore(n, q) >= 0
-}
-
-func matchesAnyTag(tags []string, term string) bool {
-	for _, t := range tags {
-		if strings.Contains(strings.ToLower(t), term) {
-			return true
-		}
-	}
-	return false
+	return noteMatchesDoc(buildNoteDoc(n), q)
 }
 
 func (m Model) categoryMatches(c notes.Category, query string) bool {
